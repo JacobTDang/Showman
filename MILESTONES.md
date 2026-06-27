@@ -56,14 +56,19 @@ the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a ty
 - [x] **M2.2 — Async job lifecycle** — `POST /jobs` → `jobId` (202) → `GET /jobs/:id` → `result.video`. `JobRunner` + pluggable `JobStore` (in-memory now, Postgres in M3).
 - [x] **M2.3 — Preview-frame capability** — `POST /preview` → inline PNG (or base64 via `?format=json`).
 
-## M3 — Go control plane + distributed rendering
+## M3 — control plane + distributed rendering  ✅
 
-- [ ] **M3.1 — JSON message contracts** — shard task / shard result / progress event.
-- [ ] **M3.2 — Gateway (Go)** — validate, preview, submit, status, result.
-- [ ] **M3.3 — Coordinator + Redis queue** — sharding, enqueue, Postgres job state, retries.
-- [ ] **M3.4 — Worker dequeue mode** — work-stealing pulls; segments → object storage.
-- [ ] **M3.5 — Assembler + fan-in barrier** — wait for all shards, concat + audio mux.
-- [ ] **M3.6 — Idempotent retry + progress** — killed shard re-runs to identical bytes.
+> Implemented with a **Go gateway** at the edge and the coordinator/workers/assembler
+> in TypeScript, meeting at JSON seams (the plan's risk note: the JSON boundary keeps
+> a Go port non-breaking). Queue + JobStore + storage are interfaces — in-memory/local
+> by default, Redis/Postgres/MinIO adapters for scale.
+
+- [x] **M3.1 — JSON message contracts** — `src/distributed/messages.ts`: ShardTask / ShardResult / ProgressEvent.
+- [x] **M3.2 — Gateway (Go)** — `control-plane/gateway`: capability API + edge policy (auth, quota, spec bounds); proxies to worker + coordinator. `go test` green (7), builds a static binary. (Also satisfies M6.1.)
+- [x] **M3.3 — Coordinator + queue** — `src/distributed/{coordinator,queue,coordinatorService}.ts`: sharding, enqueue, job state, lease-based queue. Postgres/Redis adapters slot behind the interfaces.
+- [x] **M3.4 — Worker dequeue mode** — `src/distributed/shardWorker.ts`: work-stealing **pull** from the lease queue; segments (gzipped raw frames) → object storage.
+- [x] **M3.5 — Assembler + fan-in barrier** — coordinator waits for *all* shards, then `assembleSegments` concatenates through one FFmpeg pass.
+- [x] **M3.6 — Idempotent retry + progress** — lease expiry/nack requeues a dead worker's shard; a retried shard produces **byte-identical** output. **Proven: a sharded render equals a monolithic render byte-for-byte.** Progress events observable; poison shards dead-lettered.
 
 ## M4 — Agent-native interface (MCP) + authoring loop
 

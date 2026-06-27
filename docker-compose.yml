@@ -1,0 +1,86 @@
+# Local Showman cluster (M3).
+#
+#   gateway (Go)  ── capability API + edge policy
+#      ├── worker (TS)        validate / preview / schema / sync render
+#      └── coordinator (TS)   submit -> shard -> fan-in assemble, internal worker pool
+#
+# The worker and coordinator share a volume as the object store (segments + videos).
+# `docker compose up --build` then POST to http://localhost:8080/v1/jobs.
+#
+# Scale-up (the `scale` profile) brings up Redis / Postgres / MinIO; swapping the
+# in-memory Queue + JobStore + LocalObjectStorage for their adapters lets many
+# standalone worker containers pull from a shared queue. Those adapters implement
+# the same interfaces (src/distributed/queue.ts, src/service/jobs.ts, src/service/storage.ts).
+
+services:
+  worker:
+    build: .
+    image: showman:dev
+    command: ["node", "dist/service/worker.js"]
+    environment:
+      PORT: "8080"
+      SHOWMAN_DATA_DIR: /data
+      SHOWMAN_PUBLIC_URL: http://localhost:8080
+    volumes:
+      - showman-data:/data
+
+  coordinator:
+    image: showman:dev
+    command: ["node", "dist/distributed/coordinatorMain.js"]
+    environment:
+      PORT: "8090"
+      SHOWMAN_DATA_DIR: /data
+      SHOWMAN_WORKERS: "8"
+    volumes:
+      - showman-data:/data
+    depends_on:
+      - worker
+
+  gateway:
+    build:
+      context: ./control-plane
+    image: showman-gateway:dev
+    environment:
+      PORT: "8080"
+      SHOWMAN_WORKER_URL: http://worker:8080
+      SHOWMAN_COORDINATOR_URL: http://coordinator:8090
+      # SHOWMAN_API_KEYS: "demo-key:demo-user"   # enable auth
+      SHOWMAN_MAX_JOBS_PER_USER: "100"
+      SHOWMAN_MAX_WIDTH: "3840"
+      SHOWMAN_MAX_HEIGHT: "2160"
+      SHOWMAN_MAX_DURATION: "600"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - worker
+      - coordinator
+
+  # ---- scale-up infra (opt-in: `docker compose --profile scale up`) ----
+  redis:
+    image: redis:7-alpine
+    profiles: ["scale"]
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["scale"]
+    environment:
+      POSTGRES_PASSWORD: showman
+      POSTGRES_DB: showman
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio
+    profiles: ["scale"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: showman
+      MINIO_ROOT_PASSWORD: showman123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+volumes:
+  showman-data:

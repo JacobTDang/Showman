@@ -16,6 +16,7 @@ import type { SceneSpec } from "../spec/types.js";
 import { totalFrames } from "../spec/schema.js";
 import { renderFrame } from "../engine/render.js";
 import { FramePool } from "../render/framePool.js";
+import { buildEncodeArgs } from "./ffmpegArgs.js";
 
 export interface EncodeOptions {
   /** Output file path (…/clip.mp4). */
@@ -70,34 +71,7 @@ export async function encodeSceneToFile(spec: SceneSpec, options: EncodeOptions)
     onProgress,
   } = options;
 
-  const args = [
-    "-y",
-    "-f", "rawvideo",
-    "-pix_fmt", "rgba",
-    "-s", `${width}x${height}`,
-    "-r", String(fps),
-    "-i", "pipe:0",
-    "-an",
-    "-c:v", "libx264",
-    "-preset", preset,
-    "-crf", String(crf),
-    "-pix_fmt", pixelFormat,
-    "-movflags", "+faststart",
-  ];
-  if (deterministic) {
-    // Single-threaded x264 (frame-thread order is otherwise a source of variance) and
-    // bitexact muxing so no creation-time / encoder-version metadata leaks into the
-    // container. Together these make two runs produce byte-identical mp4s.
-    args.push(
-      "-threads", "1",
-      "-x264-params", "threads=1:sliced-threads=0",
-      "-bitexact",
-      "-fflags", "+bitexact",
-      "-flags:v", "+bitexact",
-      "-map_metadata", "-1",
-    );
-  }
-  args.push(outPath);
+  const args = buildEncodeArgs({ width, height, fps, crf, preset, pixelFormat, deterministic, outPath });
 
   const proc = spawn(ffmpegPath, args, { stdio: ["pipe", "ignore", "pipe"] });
 

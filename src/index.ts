@@ -78,3 +78,24 @@ export { startWorker } from "./service/worker.js";
 // Async jobs (M2.2)
 export { InMemoryJobStore, JobRunner, toJobView } from "./service/jobs.js";
 export type { Job, JobView, JobStatus, JobStore, JobResult, JobProgress, JobRunnerOptions } from "./service/jobs.js";
+
+// Distributed rendering (M3)
+export { Coordinator } from "./distributed/coordinator.js";
+export type { JobStatusView, CoordinatorOptions } from "./distributed/coordinator.js";
+export { ShardWorker } from "./distributed/shardWorker.js";
+export type { ShardWorkerOptions, StepOutcome } from "./distributed/shardWorker.js";
+export { InMemoryLeaseQueue } from "./distributed/queue.js";
+export type { Queue, LeasedMessage, InMemoryQueueOptions } from "./distributed/queue.js";
+export { renderDistributed } from "./distributed/cluster.js";
+export type { ClusterOptions, DistributedResult } from "./distributed/cluster.js";
+export { renderSegment, decodeSegment, assembleSegments } from "./distributed/segment.js";
+export { CoordinatorService, createCoordinatorServer, listenCoordinator } from "./distributed/coordinatorService.js";
+export type { CoordinatorServiceOptions } from "./distributed/coordinatorService.js";
+export type {
+  ShardTask,
+  ShardResult,
+  ProgressEvent,
+  JobState,
+  DistributedRenderOptions,
+} from "./distributed/messages.js";
+export { buildEncodeArgs } from "./encode/ffmpegArgs.js";
