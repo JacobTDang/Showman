@@ -53,6 +53,28 @@ describe("easing", () => {
     expect(applyEasing("notReal" as EasingName, 0.4)).toBeCloseTo(0.4, 9);
   });
 
+  it("easeOutBounce has the expected bounce structure in its interior", () => {
+    // Rises fast, then settles with diminishing bounces; should overshoot toward 1
+    // near the end and never exceed 1.
+    const samples = Array.from({ length: 101 }, (_, i) => applyEasing("easeOutBounce", i / 100));
+    expect(Math.max(...samples)).toBeLessThanOrEqual(1 + 1e-9);
+    expect(applyEasing("easeOutBounce", 0.5)).toBeGreaterThan(0.5); // past halfway in value by midpoint
+    expect(applyEasing("easeOutBounce", 0.95)).toBeGreaterThan(0.95);
+  });
+
+  it("easeOutElastic oscillates around 1 before settling", () => {
+    const interior = Array.from({ length: 99 }, (_, i) => applyEasing("easeOutElastic", (i + 1) / 100));
+    expect(Math.max(...interior)).toBeGreaterThan(1); // overshoots
+    expect(Math.min(...interior)).toBeLessThan(1); // and dips back
+  });
+
+  it("easeInOutCubic is symmetric about its midpoint", () => {
+    for (const t of [0.1, 0.25, 0.4]) {
+      expect(applyEasing("easeInOutCubic", t)).toBeCloseTo(1 - applyEasing("easeInOutCubic", 1 - t), 6);
+    }
+    expect(applyEasing("easeInOutCubic", 0.5)).toBeCloseTo(0.5, 6);
+  });
+
   describe("cubicBezier", () => {
     it("a linear bezier equals identity", () => {
       for (const t of [0, 0.2, 0.5, 0.8, 1]) {

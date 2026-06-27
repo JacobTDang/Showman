@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:golden": "vitest run test/golden",
-    "golden:update": "tsx scripts/update-golden.ts"
+    "golden:update": "tsx scripts/update-golden.ts",
+    "demo": "tsx scripts/render-lesson.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.65"

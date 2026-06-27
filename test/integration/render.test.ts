@@ -208,3 +208,98 @@ describe("renderFrame — end to end", () => {
     expect(() => renderFrame(spec, 1.5)).toThrow();
   });
 });
+
+describe("render regressions (from adversarial review)", () => {
+  const MINT = { r: 152, g: 255, b: 152 };
+  const CREAM = { r: 253, g: 246, b: 227 };
+
+  it("paints static engine-named colors (incl. custom 'mint'/'cream') instead of silently ignoring them", () => {
+    // Regression: these are not CSS names, so passing them raw made the canvas keep
+    // the previous fill. The engine now normalizes every color before drawing.
+    const spec: SceneSpec = {
+      specVersion: 1,
+      width: 60,
+      height: 60,
+      fps: 1,
+      duration: 1,
+      background: "cream",
+      nodes: [{ id: "r", type: "rect", x: 20, y: 20, width: 20, height: 20, fill: "mint" }],
+    };
+    expect(validateScene(spec).valid).toBe(true);
+    const f = renderFrame(spec, 0);
+    expect(isColorNear(samplePixel(f, 30, 30), MINT)).toBe(true); // rect is actually mint
+    expect(isColorNear(samplePixel(f, 3, 3), CREAM)).toBe(true); // background is actually cream
+  });
+
+  it("renders a stroke with no fill", () => {
+    const spec: SceneSpec = {
+      specVersion: 1,
+      width: 100,
+      height: 100,
+      fps: 1,
+      duration: 1,
+      background: "#ffffff",
+      nodes: [{ id: "r", type: "rect", x: 20, y: 20, width: 60, height: 60, fill: "transparent", stroke: "blue", strokeWidth: 10 }],
+    };
+    const f = renderFrame(spec, 0);
+    expect(isColorNear(samplePixel(f, 20, 50), { r: 0, g: 0, b: 255 })).toBe(true); // on the left stroke edge
+    expect(isColorNear(samplePixel(f, 50, 50), WHITE)).toBe(true); // interior is unfilled
+  });
+
+  it("rounds rectangle corners (corner pixel is background, center is fill)", () => {
+    const spec: SceneSpec = {
+      specVersion: 1,
+      width: 100,
+      height: 100,
+      fps: 1,
+      duration: 1,
+      background: "#ffffff",
+      nodes: [{ id: "r", type: "rect", x: 0, y: 0, width: 100, height: 100, radius: 40, fill: "red" }],
+    };
+    const f = renderFrame(spec, 0);
+    expect(isColorNear(samplePixel(f, 1, 1), WHITE)).toBe(true); // clipped corner
+    expect(isColorNear(samplePixel(f, 50, 50), RED)).toBe(true); // center filled
+  });
+
+  it("rotates around an anchor (a pixel filled only after a 90° rotation)", () => {
+    const spec: SceneSpec = {
+      specVersion: 1,
+      width: 200,
+      height: 200,
+      fps: 1,
+      duration: 1,
+      background: "#ffffff",
+      nodes: [
+        { id: "bar", type: "rect", x: 100, y: 100, width: 80, height: 8, fill: "red", anchor: { x: 40, y: 4 }, rotation: 90 },
+      ],
+    };
+    const f = renderFrame(spec, 0);
+    // The horizontal bar becomes vertical about its center (140,104).
+    expect(isColorNear(samplePixel(f, 140, 70), RED)).toBe(true); // only covered after rotation
+    expect(isColorNear(samplePixel(f, 170, 104), WHITE)).toBe(true); // covered before, empty after
+  });
+
+  it("clamps animated geometry that samples negative (no throw, nothing drawn)", () => {
+    const spec: SceneSpec = {
+      specVersion: 1,
+      width: 60,
+      height: 60,
+      fps: 2,
+      duration: 1,
+      background: "#ffffff",
+      nodes: [
+        {
+          id: "r",
+          type: "rect",
+          x: 10,
+          y: 10,
+          fill: "red",
+          tracks: [{ property: "width", keyframes: [{ t: 0, value: 40 }, { t: 1, value: -40 }] }],
+        },
+      ],
+    };
+    // At t=0.5 the width track samples 0; nothing should be drawn and it must not throw.
+    const f = renderFrame(spec, 1);
+    expect(isColorNear(samplePixel(f, 30, 30), WHITE)).toBe(true);
+  });
+});

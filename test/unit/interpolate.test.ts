@@ -10,9 +10,21 @@ describe("interpolate", () => {
     expect(lerp(-10, 10, 0.25)).toBe(-5);
   });
 
-  it("lerpColor interpolates channels and rounds rgb", () => {
+  it("lerpColor interpolates two opaque colors per-channel", () => {
+    const c = lerpColor({ r: 255, g: 0, b: 0, a: 1 }, { r: 0, g: 0, b: 255, a: 1 }, 0.5);
+    expect(c).toEqual({ r: 128, g: 0, b: 128, a: 1 });
+  });
+
+  it("lerpColor uses premultiplied alpha so fades from transparent don't darken the hue", () => {
+    // transparent -> opaque red at 0.5 should be half-opaque RED, not dark red.
     const c = lerpColor({ r: 0, g: 0, b: 0, a: 0 }, { r: 255, g: 100, b: 50, a: 1 }, 0.5);
-    expect(c).toEqual({ r: 128, g: 50, b: 25, a: 0.5 });
+    expect(c).toEqual({ r: 255, g: 100, b: 50, a: 0.5 });
+    // opaque red -> transparent at 0.5 keeps red, just halves alpha.
+    expect(lerpColor({ r: 255, g: 0, b: 0, a: 1 }, { r: 0, g: 0, b: 0, a: 0 }, 0.5)).toEqual({ r: 255, g: 0, b: 0, a: 0.5 });
+  });
+
+  it("lerpColor collapses to transparent black when alpha reaches 0", () => {
+    expect(lerpColor({ r: 255, g: 0, b: 0, a: 0 }, { r: 0, g: 255, b: 0, a: 0 }, 0.5)).toEqual({ r: 0, g: 0, b: 0, a: 0 });
   });
 
   describe("sampleNumberTrack", () => {

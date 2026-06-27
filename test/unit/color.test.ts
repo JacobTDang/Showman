@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseColor, rgbaToString, isParseableColor } from "../../src/index.js";
+import { parseColor, rgbaToString, isParseableColor, normalizeColor } from "../../src/index.js";
 
 describe("parseColor", () => {
   it("parses 6-digit hex", () => {
@@ -39,12 +39,44 @@ describe("parseColor", () => {
     expect(parseColor("cream")).toEqual({ r: 253, g: 246, b: 227, a: 1 });
   });
 
+  it("parses hsl() and hsla()", () => {
+    expect(parseColor("hsl(0, 100%, 50%)")).toEqual({ r: 255, g: 0, b: 0, a: 1 });
+    expect(parseColor("hsl(120, 100%, 50%)")).toEqual({ r: 0, g: 255, b: 0, a: 1 });
+    expect(parseColor("hsl(0, 0%, 100%)")).toEqual({ r: 255, g: 255, b: 255, a: 1 });
+    const c = parseColor("hsla(240, 100%, 50%, 0.5)");
+    expect(c).toEqual({ r: 0, g: 0, b: 255, a: 0.5 });
+  });
+
   it("returns null for unparseable input", () => {
     expect(parseColor("not-a-color")).toBeNull();
     expect(parseColor("#12")).toBeNull();
     expect(parseColor("rgb(1,2)")).toBeNull();
     expect(parseColor("")).toBeNull();
-    expect(parseColor("hsl(0,100%,50%)")).toBeNull(); // unsupported in M0
+    expect(parseColor("chartreuse-ish")).toBeNull();
+  });
+
+  it("does not match Object.prototype members (prototype-pollution safety)", () => {
+    expect(parseColor("constructor")).toBeNull();
+    expect(parseColor("toString")).toBeNull();
+    expect(parseColor("__proto__")).toBeNull();
+    expect(parseColor("hasOwnProperty")).toBeNull();
+  });
+
+  it("rejects malformed hex instead of silently truncating", () => {
+    expect(parseColor("#1g0000")).toBeNull(); // 'g' is not hex
+    expect(parseColor("#12345g")).toBeNull();
+    expect(parseColor("#1234567")).toBeNull(); // 7 digits is not a valid length
+  });
+
+  it("rejects rgb() with empty or whitespace components", () => {
+    expect(parseColor("rgb(,,)")).toBeNull();
+    expect(parseColor("rgb(1,,3)")).toBeNull();
+    expect(parseColor("rgb(1, 2, )")).toBeNull();
+  });
+
+  it("renders the child-friendly aliases cream and mint to their engine values", () => {
+    expect(parseColor("cream")).toEqual({ r: 253, g: 246, b: 227, a: 1 });
+    expect(parseColor("mint")).toEqual({ r: 152, g: 255, b: 152, a: 1 });
   });
 
   it("isParseableColor mirrors parseColor", () => {
@@ -55,5 +87,21 @@ describe("parseColor", () => {
   it("round-trips through rgbaToString into a canvas-ready string", () => {
     expect(rgbaToString({ r: 10, g: 20, b: 30, a: 0.5 })).toBe("rgba(10, 20, 30, 0.5)");
     expect(rgbaToString({ r: 300, g: -1, b: 128, a: 2 })).toBe("rgba(255, 0, 128, 1)");
+  });
+
+  describe("normalizeColor", () => {
+    it("converts engine names (incl. custom) to a canvas-safe rgba() string", () => {
+      expect(normalizeColor("cream")).toBe("rgba(253, 246, 227, 1)");
+      expect(normalizeColor("mint")).toBe("rgba(152, 255, 152, 1)");
+      expect(normalizeColor("#ff0000")).toBe("rgba(255, 0, 0, 1)");
+    });
+
+    it("is idempotent on an already-normalized rgba() string", () => {
+      expect(normalizeColor("rgba(128, 128, 128, 1)")).toBe("rgba(128, 128, 128, 1)");
+    });
+
+    it("passes through an unparseable string unchanged (validator catches it upstream)", () => {
+      expect(normalizeColor("definitely-not-a-color")).toBe("definitely-not-a-color");
+    });
   });
 });

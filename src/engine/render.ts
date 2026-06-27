@@ -11,7 +11,8 @@
 import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
 import type { Node, SceneSpec } from "../spec/types.js";
 import { LIMITS, SCENE_DEFAULTS, SHAPE_DEFAULTS } from "../spec/schema.js";
-import { ensureFontsRegistered, DEFAULT_FONT_FAMILY } from "./fonts.js";
+import { ensureFontsRegistered, DEFAULT_FONT_FAMILY, isRegisteredFamily } from "./fonts.js";
+import { normalizeColor } from "./color.js";
 import { makeRng, type Rng } from "./rng.js";
 import { NodeResolver, resolveTransform } from "./resolve.js";
 
@@ -64,7 +65,7 @@ export function renderFrame(spec: SceneSpec, frameIndex: number): RenderResult {
   // Background.
   const bg = spec.background ?? SCENE_DEFAULTS.background;
   if (bg !== "transparent") {
-    ctx.fillStyle = bg;
+    ctx.fillStyle = normalizeColor(bg);
     ctx.fillRect(0, 0, width, height);
   }
 
@@ -124,6 +125,12 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
         drawNode(rc, child, t, depth + 1);
       }
       break;
+    default: {
+      // Exhaustiveness guard: a node type added to the spec but not handled here
+      // must fail loudly, not silently render nothing.
+      const unhandled: never = node;
+      throw new Error(`render: unsupported node type "${(unhandled as Node).type}"`);
+    }
   }
 
   ctx.restore();
@@ -136,23 +143,25 @@ function applyFillAndStroke(
   strokeWidth: number,
 ): void {
   if (fill !== undefined && fill !== "transparent") {
-    ctx.fillStyle = fill;
+    ctx.fillStyle = normalizeColor(fill);
     ctx.fill();
   }
   if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
-    ctx.strokeStyle = stroke;
+    ctx.strokeStyle = normalizeColor(stroke);
     ctx.lineWidth = strokeWidth;
     ctx.stroke();
   }
 }
 
 function drawRect(ctx: SKRSContext2D, res: NodeResolver): void {
-  const width = res.num("width", SHAPE_DEFAULTS.width);
-  const height = res.num("height", SHAPE_DEFAULTS.height);
+  // Clamp geometry: animated tracks can sample negative values that static
+  // validation can't catch, and negative width/height is meaningless.
+  const width = Math.max(0, res.num("width", SHAPE_DEFAULTS.width));
+  const height = Math.max(0, res.num("height", SHAPE_DEFAULTS.height));
   const radius = Math.max(0, Math.min(res.num("radius", SHAPE_DEFAULTS.radius), Math.min(width, height) / 2));
   const fill = res.color("fill") ?? SHAPE_DEFAULTS.fill;
   const stroke = res.color("stroke");
-  const strokeWidth = res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth);
+  const strokeWidth = Math.max(0, res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth));
 
   ctx.beginPath();
   if (radius > 0) {
@@ -164,11 +173,11 @@ function drawRect(ctx: SKRSContext2D, res: NodeResolver): void {
 }
 
 function drawEllipse(ctx: SKRSContext2D, res: NodeResolver): void {
-  const width = res.num("width", SHAPE_DEFAULTS.width);
-  const height = res.num("height", SHAPE_DEFAULTS.height);
+  const width = Math.max(0, res.num("width", SHAPE_DEFAULTS.width));
+  const height = Math.max(0, res.num("height", SHAPE_DEFAULTS.height));
   const fill = res.color("fill") ?? SHAPE_DEFAULTS.fill;
   const stroke = res.color("stroke");
-  const strokeWidth = res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth);
+  const strokeWidth = Math.max(0, res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth));
 
   ctx.beginPath();
   ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
@@ -178,24 +187,28 @@ function drawEllipse(ctx: SKRSContext2D, res: NodeResolver): void {
 function drawText(ctx: SKRSContext2D, res: NodeResolver): void {
   const text = res.str("text") ?? "";
   if (text.length === 0) return;
-  const fontSize = res.num("fontSize", SHAPE_DEFAULTS.fontSize);
-  const family = res.str("fontFamily") ?? DEFAULT_FONT_FAMILY;
+  const fontSize = Math.max(0, res.num("fontSize", SHAPE_DEFAULTS.fontSize));
+  // Only render with a pinned family; fall back to the default otherwise so an
+  // unregistered family can never silently pull in a host font. (The validator
+  // already rejects unregistered families; this is defense in depth.)
+  const requested = res.str("fontFamily") ?? DEFAULT_FONT_FAMILY;
+  const family = isRegisteredFamily(requested) ? requested : DEFAULT_FONT_FAMILY;
   const weightRaw = res.raw("fontWeight");
   const weight = typeof weightRaw === "number" || typeof weightRaw === "string" ? weightRaw : SHAPE_DEFAULTS.fontWeight;
   const fill = res.color("fill") ?? SHAPE_DEFAULTS.fill;
   const stroke = res.color("stroke");
-  const strokeWidth = res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth);
+  const strokeWidth = Math.max(0, res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth));
 
   ctx.font = `${weight} ${fontSize}px "${family}"`;
   ctx.textAlign = (res.str("align") as TextAlign) ?? "left";
   ctx.textBaseline = (res.str("baseline") as TextBaseline) ?? "top";
 
   if (fill !== undefined && fill !== "transparent") {
-    ctx.fillStyle = fill;
+    ctx.fillStyle = normalizeColor(fill);
     ctx.fillText(text, 0, 0);
   }
   if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
-    ctx.strokeStyle = stroke;
+    ctx.strokeStyle = normalizeColor(stroke);
     ctx.lineWidth = strokeWidth;
     ctx.strokeText(text, 0, 0);
   }

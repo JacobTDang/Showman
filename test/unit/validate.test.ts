@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateScene, assertValidScene, SPEC_VERSION } from "../../src/index.js";
+import { validateScene, assertValidScene, SPEC_VERSION, VALIDATION_CODES } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
 function baseScene(overrides: Partial<SceneSpec> = {}): SceneSpec {
@@ -178,6 +178,65 @@ describe("validateScene", () => {
 
   it("requires group children to be an array", () => {
     expect(codes(baseScene({ nodes: [{ id: "g", type: "group" } as never] }))).toContain("MISSING_FIELD");
+  });
+
+  it("accepts the pinned font family but rejects unregistered ones", () => {
+    const ok = baseScene({ nodes: [{ id: "t", type: "text", text: "hi", fontFamily: "Nunito" }] });
+    expect(validateScene(ok).valid).toBe(true);
+
+    const bad = baseScene({ nodes: [{ id: "t", type: "text", text: "hi", fontFamily: "Arial" }] });
+    const e = validateScene(bad).errors.find((x) => x.property === "fontFamily");
+    expect(e).toBeDefined();
+    expect(e!.code).toBe("INVALID_VALUE");
+    expect(e!.message).toContain("Nunito");
+  });
+
+  it("flags an unknown field on a track object", () => {
+    const spec = baseScene({
+      nodes: [
+        { id: "n", type: "rect", tracks: [{ property: "x", keyframes: [{ t: 0, value: 0 }], duration: 5 } as never] },
+      ],
+    });
+    const e = validateScene(spec).errors.find((x) => x.code === "UNKNOWN_PROPERTY" && x.property === "duration");
+    expect(e).toBeDefined();
+  });
+
+  it("flags a misspelled keyframe field (e.g. easeing) instead of silently dropping it", () => {
+    const spec = baseScene({
+      nodes: [
+        {
+          id: "n",
+          type: "rect",
+          tracks: [{ property: "x", keyframes: [{ t: 0, value: 0 }, { t: 1, value: 1, easeing: "linear" } as never] }],
+        },
+      ],
+    });
+    const e = validateScene(spec).errors.find((x) => x.code === "UNKNOWN_PROPERTY" && x.property === "easeing");
+    expect(e).toBeDefined();
+    expect(e!.message).toContain('Did you mean "easing"');
+  });
+
+  it("every emitted error code is in the exported VALIDATION_CODES contract", () => {
+    const messySpec = {
+      specVersion: 2,
+      width: -1,
+      height: 10.5,
+      fps: 0,
+      duration: 9999,
+      background: "nope",
+      extra: 1,
+      nodes: [
+        { id: "", type: "blob", colour: "#fff" },
+        { id: "g", type: "group" },
+        { id: "g", type: "rect", opacity: 5, width: -2, fill: "banana", tracks: [{ property: "zzz", keyframes: [] }] },
+        { id: "t", type: "text", fontFamily: "Arial", tracks: [{ property: "x", keyframes: [{ t: 1, value: 0 }, { t: 0, value: 1, easing: "wat" }] }] },
+      ],
+    };
+    const { errors } = validateScene(messySpec);
+    expect(errors.length).toBeGreaterThan(5);
+    for (const e of errors) {
+      expect(VALIDATION_CODES).toContain(e.code);
+    }
   });
 
   describe("assertValidScene", () => {

@@ -10,10 +10,27 @@ describe("rng", () => {
     expect(seqA).toEqual(seqB);
   });
 
-  it("produces different streams for different seeds", () => {
+  it("produces different streams for different seeds (compared over many samples)", () => {
     const a = makeRng(1);
     const b = makeRng(2);
-    expect(a.next()).not.toBe(b.next());
+    const sa = Array.from({ length: 50 }, () => a.next());
+    const sb = Array.from({ length: 50 }, () => b.next());
+    expect(sa).not.toEqual(sb);
+    // And they shouldn't merely be offset by one — every position differs in practice.
+    const sharedPositions = sa.filter((v, i) => v === sb[i]).length;
+    expect(sharedPositions).toBe(0);
+  });
+
+  it("pins the exact algorithm output (cross-version determinism guard)", () => {
+    // These are the values mulberry32(hashSeed(seed)) MUST produce. If the RNG
+    // algorithm ever changes, this fails — a deliberate tripwire, because a silent
+    // change would break determinism for every spec that uses randomness.
+    const r = makeRng(42);
+    const seq = Array.from({ length: 5 }, () => Number(r.next().toFixed(12)));
+    expect(seq).toEqual([0.103759810561, 0.187375028385, 0.759574954631, 0.727832687786, 0.149155169493]);
+    expect(hashSeed(0)).toBe(1268118805);
+    expect(hashSeed(1, 2, 3)).toBe(2034659765);
+    expect(hashSeed(123, 1)).toBe(1583617679);
   });
 
   it("next() stays within [0, 1)", () => {

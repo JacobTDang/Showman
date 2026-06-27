@@ -16,9 +16,37 @@ import {
   EASING_NAMES,
   LIMITS,
   NODE_TYPES,
+  REGISTERED_FONT_FAMILIES,
   SPEC_VERSION,
 } from "../spec/schema.js";
 import { isParseableColor } from "../engine/color.js";
+
+/**
+ * The closed set of machine-readable validation codes. Exported so agent-side
+ * self-correction (M4) can switch on a stable contract instead of matching free
+ * text. Adding a code here is the only way to introduce a new one.
+ */
+export const VALIDATION_CODES = [
+  "INVALID_TYPE",
+  "OUT_OF_RANGE",
+  "UNSUPPORTED_VERSION",
+  "INVALID_COLOR",
+  "UNKNOWN_PROPERTY",
+  "MISSING_FIELD",
+  "DUPLICATE_ID",
+  "UNKNOWN_TYPE",
+  "INVALID_VALUE",
+  "INVALID_PROPERTY",
+  "EMPTY",
+  "NOT_ASCENDING",
+  "INVALID_EASING",
+  "LIMIT_EXCEEDED",
+] as const;
+
+export type ValidationCode = (typeof VALIDATION_CODES)[number];
+
+const ALLOWED_TRACK_KEYS = ["property", "keyframes"];
+const ALLOWED_KEYFRAME_KEYS = ["t", "value", "easing"];
 
 export interface ValidationError {
   /** JSON-path-like location, e.g. `nodes[2].tracks[0].keyframes[1].t`. */
@@ -27,8 +55,8 @@ export interface ValidationError {
   nodeId?: string;
   /** The offending property name, when applicable. */
   property?: string;
-  /** Machine-readable code (e.g. `INVALID_TYPE`, `OUT_OF_RANGE`, `UNKNOWN_PROPERTY`). */
-  code: string;
+  /** Machine-readable code from the closed {@link VALIDATION_CODES} set. */
+  code: ValidationCode;
   /** Human-readable, actionable explanation. */
   message: string;
 }
@@ -419,14 +447,19 @@ class Validator {
       nonNegNum("strokeWidth");
       colorProp("fill");
       colorProp("stroke");
-      if (node.fontFamily !== undefined && typeof node.fontFamily !== "string") {
-        this.err({
-          path: `${path}.fontFamily`,
-          ...(nodeId ? { nodeId } : {}),
-          property: "fontFamily",
-          code: "INVALID_TYPE",
-          message: `fontFamily must be a string.`,
-        });
+      if (node.fontFamily !== undefined) {
+        const fam = node.fontFamily;
+        if (typeof fam !== "string" || !(REGISTERED_FONT_FAMILIES as readonly string[]).includes(fam)) {
+          this.err({
+            path: `${path}.fontFamily`,
+            ...(nodeId ? { nodeId } : {}),
+            property: "fontFamily",
+            code: "INVALID_VALUE",
+            message: `fontFamily must be one of the engine's pinned families (${REGISTERED_FONT_FAMILIES.join(
+              ", ",
+            )}); got ${JSON.stringify(fam)}. A non-pinned font would fall back to host system fonts and break cross-machine determinism.`,
+          });
+        }
       }
       if (node.fontWeight !== undefined) {
         const w = node.fontWeight;
@@ -471,6 +504,18 @@ class Validator {
         this.err({ path: tp, ...(nodeId ? { nodeId } : {}), code: "INVALID_TYPE", message: `Track must be an object.` });
         return;
       }
+      for (const key of Object.keys(track)) {
+        if (!ALLOWED_TRACK_KEYS.includes(key)) {
+          const hint = suggest(key, ALLOWED_TRACK_KEYS);
+          this.err({
+            path: `${tp}.${key}`,
+            ...(nodeId ? { nodeId } : {}),
+            property: key,
+            code: "UNKNOWN_PROPERTY",
+            message: `Unknown track field "${key}".${hint ? ` Did you mean "${hint}"?` : ""}`,
+          });
+        }
+      }
       const property = track.property;
       if (typeof property !== "string") {
         this.err({
@@ -513,6 +558,18 @@ class Validator {
         if (!isObject(kf)) {
           this.err({ path: kp, ...(nodeId ? { nodeId } : {}), code: "INVALID_TYPE", message: `Keyframe must be an object.` });
           return;
+        }
+        for (const key of Object.keys(kf)) {
+          if (!ALLOWED_KEYFRAME_KEYS.includes(key)) {
+            const hint = suggest(key, ALLOWED_KEYFRAME_KEYS);
+            this.err({
+              path: `${kp}.${key}`,
+              ...(nodeId ? { nodeId } : {}),
+              property: key,
+              code: "UNKNOWN_PROPERTY",
+              message: `Unknown keyframe field "${key}".${hint ? ` Did you mean "${hint}"?` : ""}`,
+            });
+          }
         }
         if (!isFiniteNumber(kf.t) || kf.t < 0) {
           this.err({

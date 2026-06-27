@@ -37,12 +37,16 @@ export {
 } from "./spec/schema.js";
 
 // Validation
-export { validateScene, assertValidScene } from "./validator/validate.js";
-export type { ValidationError, ValidationResult } from "./validator/validate.js";
+export { validateScene, assertValidScene, VALIDATION_CODES } from "./validator/validate.js";
+export type { ValidationError, ValidationResult, ValidationCode } from "./validator/validate.js";
 
 // Rendering
 export { renderFrame } from "./engine/render.js";
 export type { RenderResult } from "./engine/render.js";
+
+// Encoding (M1: spec -> mp4)
+export { encodeSceneToFile } from "./encode/encodeVideo.js";
+export type { EncodeOptions, EncodeResult } from "./encode/encodeVideo.js";
 
 // Lower-level building blocks (useful for tests, tooling, and future milestones)
 export { makeRng, hashSeed } from "./engine/rng.js";
@@ -51,4 +55,6 @@ export { parseColor, rgbaToString, isParseableColor } from "./engine/color.js";
 export type { Rgba } from "./engine/color.js";
 export { applyEasing, resolveEasing, cubicBezier } from "./engine/easing.js";
 export { lerp, lerpColor, sampleNumberTrack, sampleColorTrack, sampleTrack } from "./engine/interpolate.js";
-export { ensureFontsRegistered, assetsDir, DEFAULT_FONT_FAMILY } from "./engine/fonts.js";
+export { normalizeColor } from "./engine/color.js";
+export { ensureFontsRegistered, assetsDir, DEFAULT_FONT_FAMILY, isRegisteredFamily } from "./engine/fonts.js";
+export { REGISTERED_FONT_FAMILIES } from "./spec/schema.js";

@@ -12,6 +12,14 @@ import type { NodeType } from "./types.js";
 /** The schema version this engine speaks. A spec's `specVersion` must equal this. */
 export const SPEC_VERSION = 1 as const;
 
+/**
+ * The font families the engine ships and pins. A spec may only use these for
+ * `fontFamily`; anything else would fall back to host system fonts and break
+ * cross-machine determinism, so the validator rejects it. `engine/fonts.ts` maps
+ * these names to the bundled font files and registers exactly them.
+ */
+export const REGISTERED_FONT_FAMILIES = ["Nunito"] as const;
+
 /** Every supported node type. */
 export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "text", "group"];
 

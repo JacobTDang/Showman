@@ -24,9 +24,16 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started
 - [x] **M0.5 — Golden-frame determinism harness** — `test/golden/`. Render-twice
       byte-equality + committed golden PNGs + `npm run golden:update`.
 
-**Status:** 86 tests pass (unit + integration + golden + purity). `npm test` is green.
+**Status:** 116 tests pass (unit + integration + golden + purity + encode). `npm test` is green.
 **Reserved seam:** `narration` is in the schema (ignored until M5) so the contract
 won't break when audio lands.
+**Hardening:** an adversarial multi-agent review (6 lenses → per-finding skeptic
+verification) surfaced 19 confirmed issues; all fixed with regression tests —
+notably the font-family pinning contract (unregistered families are now rejected,
+not silently host-substituted), static engine-named colors that the canvas was
+silently ignoring (now normalized), prototype-pollution / loose-hex / empty-rgb in
+the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a typed
+`ValidationCode` contract, and a pinned-value RNG tripwire.
 
 **Carry-forward TODO (deferred, noted so they aren't forgotten):**
 - [ ] Publish a JSON Schema document derived from the registry (needed by M4's
@@ -36,10 +43,10 @@ won't break when audio lands.
 
 ---
 
-## M1 — Single render container (spec → mp4)
+## M1 — Single render container (spec → mp4)  🚧 (encoder landed)
 
-- [ ] **M1.1 — Frame pool** — worker-thread/process pool sized to cores. *Done: pool saturates all cores.*
-- [ ] **M1.2 — FFmpeg pipe** — engine frames → FFmpeg stdin (no disk hop) → mp4. *Done: no intermediate files.*
+- [ ] **M1.1 — Frame pool** — worker-thread/process pool sized to cores. *Done: pool saturates all cores.* (encoder is sequential today)
+- [x] **M1.2 — FFmpeg pipe** — `src/encode/encodeVideo.ts`: engine frames → FFmpeg stdin (no disk hop) → mp4. Deterministic (bitexact) mode byte-identical across runs; verified with ffprobe. `npm run demo` renders the counting lesson to `out/lesson.mp4`.
 - [ ] **M1.3 — HTTP surface** — `POST {spec, options}` → stored video reference. *Done: POST a spec, get an mp4.*
 - [ ] **M1.4 — Worker image** — pinned fonts + FFmpeg + engine version baked in; stateless. *Done: identical mp4 across machines.*
 
