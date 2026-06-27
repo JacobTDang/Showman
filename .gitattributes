@@ -1,0 +1,12 @@
+# Normalize all text files to LF so Prettier (endOfLine: lf) and CI are consistent
+# across Windows/macOS/Linux regardless of core.autocrlf.
+* text=auto eol=lf
+
+# Binary assets — never touch line endings.
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+*.mp4 binary
+*.gz binary
+*.db binary
