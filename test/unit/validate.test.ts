@@ -32,9 +32,27 @@ describe("validateScene", () => {
           type: "rect",
           fill: "#e63946",
           tracks: [
-            { property: "x", keyframes: [{ t: 0, value: 0 }, { t: 1, value: 100, easing: "easeOutBack" }] },
-            { property: "fill", keyframes: [{ t: 0, value: "#e63946" }, { t: 1, value: "#457b9d" }] },
-            { property: "opacity", keyframes: [{ t: 0, value: 0 }, { t: 0.5, value: 1, easing: [0.42, 0, 0.58, 1] }] },
+            {
+              property: "x",
+              keyframes: [
+                { t: 0, value: 0 },
+                { t: 1, value: 100, easing: "easeOutBack" },
+              ],
+            },
+            {
+              property: "fill",
+              keyframes: [
+                { t: 0, value: "#e63946" },
+                { t: 1, value: "#457b9d" },
+              ],
+            },
+            {
+              property: "opacity",
+              keyframes: [
+                { t: 0, value: 0 },
+                { t: 0.5, value: 1, easing: [0.42, 0, 0.58, 1] },
+              ],
+            },
           ],
         },
       ],
@@ -145,7 +163,21 @@ describe("validateScene", () => {
 
   it("requires strictly ascending keyframe times", () => {
     const spec = baseScene({
-      nodes: [{ id: "n", type: "rect", tracks: [{ property: "x", keyframes: [{ t: 1, value: 0 }, { t: 1, value: 5 }] }] }],
+      nodes: [
+        {
+          id: "n",
+          type: "rect",
+          tracks: [
+            {
+              property: "x",
+              keyframes: [
+                { t: 1, value: 0 },
+                { t: 1, value: 5 },
+              ],
+            },
+          ],
+        },
+      ],
     });
     expect(codes(spec)).toContain("NOT_ASCENDING");
   });
@@ -157,7 +189,21 @@ describe("validateScene", () => {
 
   it("rejects an unknown easing with a suggestion", () => {
     const spec = baseScene({
-      nodes: [{ id: "n", type: "rect", tracks: [{ property: "x", keyframes: [{ t: 0, value: 0 }, { t: 1, value: 1, easing: "easeOutBak" as never }] }] }],
+      nodes: [
+        {
+          id: "n",
+          type: "rect",
+          tracks: [
+            {
+              property: "x",
+              keyframes: [
+                { t: 0, value: 0 },
+                { t: 1, value: 1, easing: "easeOutBak" as never },
+              ],
+            },
+          ],
+        },
+      ],
     });
     const e = validateScene(spec).errors.find((x) => x.code === "INVALID_EASING");
     expect(e).toBeDefined();
@@ -198,9 +244,7 @@ describe("validateScene", () => {
 
   it("flags an unknown field on a track object", () => {
     const spec = baseScene({
-      nodes: [
-        { id: "n", type: "rect", tracks: [{ property: "x", keyframes: [{ t: 0, value: 0 }], duration: 5 } as never] },
-      ],
+      nodes: [{ id: "n", type: "rect", tracks: [{ property: "x", keyframes: [{ t: 0, value: 0 }], duration: 5 } as never] }],
     });
     const e = validateScene(spec).errors.find((x) => x.code === "UNKNOWN_PROPERTY" && x.property === "duration");
     expect(e).toBeDefined();
@@ -234,7 +278,20 @@ describe("validateScene", () => {
         { id: "", type: "blob", colour: "#fff" },
         { id: "g", type: "group" },
         { id: "g", type: "rect", opacity: 5, width: -2, fill: "banana", tracks: [{ property: "zzz", keyframes: [] }] },
-        { id: "t", type: "text", fontFamily: "Arial", tracks: [{ property: "x", keyframes: [{ t: 1, value: 0 }, { t: 0, value: 1, easing: "wat" }] }] },
+        {
+          id: "t",
+          type: "text",
+          fontFamily: "Arial",
+          tracks: [
+            {
+              property: "x",
+              keyframes: [
+                { t: 1, value: 0 },
+                { t: 0, value: 1, easing: "wat" },
+              ],
+            },
+          ],
+        },
       ],
     };
     const { errors } = validateScene(messySpec);

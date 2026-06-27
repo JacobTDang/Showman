@@ -22,11 +22,7 @@ export function samplePixel(result: RenderResult, x: number, y: number): Pixel {
 
 /** True if a pixel is close to a target color within a per-channel tolerance. */
 export function isColorNear(p: Pixel, target: Omit<Pixel, "a">, tol = 6): boolean {
-  return (
-    Math.abs(p.r - target.r) <= tol &&
-    Math.abs(p.g - target.g) <= tol &&
-    Math.abs(p.b - target.b) <= tol
-  );
+  return Math.abs(p.r - target.r) <= tol && Math.abs(p.g - target.g) <= tol && Math.abs(p.b - target.b) <= tol;
 }
 
 /** Compare two RGBA buffers for exact equality. */

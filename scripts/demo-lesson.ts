@@ -27,7 +27,9 @@ const lesson = buildCountingLesson({ count: 5, topic: "stars", theme: "sunshine"
 const stillFrame = Math.min(Math.round(lesson.duration * lesson.fps) - 1, Math.round(6 * lesson.fps));
 writeFileSync(join(outDir, "lesson-frame.png"), renderFrame(lesson, stillFrame).toPNG());
 
-console.log(`Rendering ${lesson.width}x${lesson.height} @ ${lesson.fps}fps for ${lesson.duration}s (narration + captions + safety gate) ...`);
+console.log(
+  `Rendering ${lesson.width}x${lesson.height} @ ${lesson.fps}fps for ${lesson.duration}s (narration + captions + safety gate) ...`,
+);
 const result = await service.render(lesson, { deterministic: false });
 if (!result.ok) {
   console.error("render failed:", result);

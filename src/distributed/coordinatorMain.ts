@@ -31,5 +31,5 @@ export async function startCoordinator(): Promise<{ port: number; close: () => P
 }
 
 if (process.argv[1]?.endsWith("coordinatorMain.ts") || process.argv[1]?.endsWith("coordinatorMain.js")) {
-  startCoordinator().then(({ port }) => console.log(`[showman] coordinator listening on :${port}`));
+  void startCoordinator().then(({ port }) => console.log(`[showman] coordinator listening on :${port}`));
 }

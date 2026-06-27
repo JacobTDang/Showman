@@ -48,13 +48,15 @@ export class CoordinatorService {
     this.queue.onDeadLetter((task) => this.coordinator.failJob(task.jobId, `shard ${task.shardId} exceeded retries (poison shard)`));
 
     const n = Math.max(0, opts.workers ?? 4);
-    this.workers = Array.from({ length: n }, (_, i) =>
-      new ShardWorker({
-        id: `w${i}`,
-        queue: this.queue,
-        storage: opts.storage,
-        report: (r) => this.coordinator.onShardResult(r),
-      }),
+    this.workers = Array.from(
+      { length: n },
+      (_, i) =>
+        new ShardWorker({
+          id: `w${i}`,
+          queue: this.queue,
+          storage: opts.storage,
+          report: (r) => this.coordinator.onShardResult(r),
+        }),
     );
   }
 

@@ -9,7 +9,7 @@ import { RenderService, LocalObjectStorage, createServer, listen, InMemoryJobSto
 import type { SceneSpec } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function body(r: Response): Promise<any> {
   return r.json();
 }
@@ -38,7 +38,15 @@ function scene(): SceneSpec {
         width: 30,
         height: 30,
         fill: "#e63946",
-        tracks: [{ property: "x", keyframes: [{ t: 0, value: 10 }, { t: 0.8, value: 80 }] }],
+        tracks: [
+          {
+            property: "x",
+            keyframes: [
+              { t: 0, value: 10 },
+              { t: 0.8, value: 80 },
+            ],
+          },
+        ],
       },
     ],
   };

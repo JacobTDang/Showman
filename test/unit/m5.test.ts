@@ -39,8 +39,18 @@ describe("M5.1 primitives", () => {
   });
 
   it("renders a triangle polygon and validates sides>=3", () => {
-    expect(validateScene({ specVersion: 1, width: 60, height: 60, fps: 1, duration: 1, nodes: [{ id: "t", type: "polygon", sides: 2 }] }).valid).toBe(false);
-    const tri: SceneSpec = { specVersion: 1, width: 80, height: 80, fps: 1, duration: 1, background: "#fff", nodes: [{ id: "t", type: "polygon", x: 10, y: 10, sides: 3, radius: 30, fill: "red" }] };
+    expect(
+      validateScene({ specVersion: 1, width: 60, height: 60, fps: 1, duration: 1, nodes: [{ id: "t", type: "polygon", sides: 2 }] }).valid,
+    ).toBe(false);
+    const tri: SceneSpec = {
+      specVersion: 1,
+      width: 80,
+      height: 80,
+      fps: 1,
+      duration: 1,
+      background: "#fff",
+      nodes: [{ id: "t", type: "polygon", x: 10, y: 10, sides: 3, radius: 30, fill: "red" }],
+    };
     expect(validateScene(tri).valid).toBe(true);
     expect(isColorNear(samplePixel(renderFrame(tri, 0), 40, 45), { r: 255, g: 0, b: 0 })).toBe(true);
   });
@@ -53,7 +63,20 @@ describe("M5.1 primitives", () => {
       fps: 1,
       duration: 1,
       background: "#ffffff",
-      nodes: [{ id: "t", type: "text", x: 10, y: 40, text: "HELLO WORLD", fontSize: 40, fontWeight: 800, fill: "#000000", baseline: "middle", reveal }],
+      nodes: [
+        {
+          id: "t",
+          type: "text",
+          x: 10,
+          y: 40,
+          text: "HELLO WORLD",
+          fontSize: 40,
+          fontWeight: 800,
+          fill: "#000000",
+          baseline: "middle",
+          reveal,
+        },
+      ],
     });
     const dark = (spec: SceneSpec) => {
       const f = renderFrame(spec, 0);
@@ -109,7 +132,16 @@ describe("M5.4 TTS + narration", () => {
     expect(estimateSpeechDuration("hi")).toBeLessThan(estimateSpeechDuration("one two three four five"));
   });
   it("synthesizeNarration produces a WAV of the scene duration", async () => {
-    const { wav } = await synthesizeNarration(new SilentTtsProvider(), { segments: [{ t: 0, text: "one" }, { t: 1, text: "two" }] }, 3);
+    const { wav } = await synthesizeNarration(
+      new SilentTtsProvider(),
+      {
+        segments: [
+          { t: 0, text: "one" },
+          { t: 1, text: "two" },
+        ],
+      },
+      3,
+    );
     expect(wav.subarray(0, 4).toString("ascii")).toBe("RIFF");
     expect(wav.subarray(8, 12).toString("ascii")).toBe("WAVE");
     const dataSize = wav.readUInt32LE(40);
@@ -118,7 +150,12 @@ describe("M5.4 TTS + narration", () => {
 });
 
 describe("M5.5 captions", () => {
-  const narration = { segments: [{ t: 0, text: "Hello" }, { t: 1.5, text: "Count with me" }] };
+  const narration = {
+    segments: [
+      { t: 0, text: "Hello" },
+      { t: 1.5, text: "Count with me" },
+    ],
+  };
   it("derives cue end-times from the next segment / scene duration", () => {
     const cues = captionsFromNarration(narration, 4);
     expect(cues[0]!.end).toBeCloseTo(1.5, 5);
@@ -145,7 +182,11 @@ describe("M5.7 content safety", () => {
   });
   it("collects text from nodes and narration", () => {
     const spec: SceneSpec = {
-      specVersion: 1, width: 64, height: 64, fps: 1, duration: 1,
+      specVersion: 1,
+      width: 64,
+      height: 64,
+      fps: 1,
+      duration: 1,
       nodes: [{ id: "g", type: "group", children: [{ id: "t", type: "text", text: "hi there" }] }],
       narration: { segments: [{ t: 0, text: "welcome" }] },
     };
@@ -154,7 +195,15 @@ describe("M5.7 content safety", () => {
     expect(texts).toContain("welcome");
   });
   it("moderateScene flags a scary monster narration as a warning, not a block", async () => {
-    const spec: SceneSpec = { specVersion: 1, width: 64, height: 64, fps: 1, duration: 1, nodes: [], narration: { segments: [{ t: 0, text: "a friendly monster" }] } };
+    const spec: SceneSpec = {
+      specVersion: 1,
+      width: 64,
+      height: 64,
+      fps: 1,
+      duration: 1,
+      nodes: [],
+      narration: { segments: [{ t: 0, text: "a friendly monster" }] },
+    };
     const r = await moderateScene(spec);
     expect(r.safe).toBe(true); // "monster" is a warn, not a block
     expect(r.findings.some((f) => f.category === "scary")).toBe(true);

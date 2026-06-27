@@ -35,10 +35,7 @@ export interface SchemaDescription {
     defaults: Record<string, unknown>;
     limits: typeof LIMITS;
   };
-  nodeTypes: Record<
-    string,
-    { required: string[]; allowedKeys: readonly string[]; animatableProperties: readonly string[] }
-  >;
+  nodeTypes: Record<string, { required: string[]; allowedKeys: readonly string[]; animatableProperties: readonly string[] }>;
   animatablePropertyKinds: Record<string, string>;
   easings: readonly string[];
   fonts: readonly string[];
@@ -79,8 +76,20 @@ export function exampleScene(): SceneSpec {
         fill: "#e63946",
         anchor: { x: 30, y: 30 },
         tracks: [
-          { property: "opacity", keyframes: [{ t: 0, value: 0 }, { t: 0.6, value: 1, easing: "easeOutQuad" }] },
-          { property: "scale", keyframes: [{ t: 0, value: 0.5 }, { t: 0.6, value: 1, easing: "easeOutBack" }] },
+          {
+            property: "opacity",
+            keyframes: [
+              { t: 0, value: 0 },
+              { t: 0.6, value: 1, easing: "easeOutQuad" },
+            ],
+          },
+          {
+            property: "scale",
+            keyframes: [
+              { t: 0, value: 0.5 },
+              { t: 0.6, value: 1, easing: "easeOutBack" },
+            ],
+          },
         ],
       },
     ],

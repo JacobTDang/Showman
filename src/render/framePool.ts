@@ -158,11 +158,7 @@ export class FramePool {
  * Render `indices` across a one-shot worker pool, returning frames sorted by index.
  * Convenience wrapper around {@link FramePool} for callers that render once.
  */
-export async function renderFramesParallel(
-  spec: SceneSpec,
-  indices: number[],
-  options: FramePoolOptions = {},
-): Promise<RenderedFrame[]> {
+export async function renderFramesParallel(spec: SceneSpec, indices: number[], options: FramePoolOptions = {}): Promise<RenderedFrame[]> {
   if (options.sequential || indices.length <= 1) {
     return renderFramesSequential(spec, indices);
   }

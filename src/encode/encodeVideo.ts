@@ -219,21 +219,35 @@ export async function encodeSceneToHls(spec: SceneSpec, options: HlsEncodeOption
 
   const args = [
     "-y",
-    "-f", "rawvideo",
-    "-pix_fmt", "rgba",
-    "-s", `${width}x${height}`,
-    "-r", String(fps),
-    "-i", "pipe:0",
+    "-f",
+    "rawvideo",
+    "-pix_fmt",
+    "rgba",
+    "-s",
+    `${width}x${height}`,
+    "-r",
+    String(fps),
+    "-i",
+    "pipe:0",
     "-an",
-    "-c:v", "libx264",
-    "-preset", preset,
-    "-crf", String(crf),
-    "-pix_fmt", "yuv420p",
-    "-g", String(Math.max(1, Math.round(fps * segmentSeconds))),
-    "-hls_time", String(segmentSeconds),
-    "-hls_playlist_type", "vod",
-    "-hls_segment_filename", join(outDir, "seg_%03d.ts"),
-    "-f", "hls",
+    "-c:v",
+    "libx264",
+    "-preset",
+    preset,
+    "-crf",
+    String(crf),
+    "-pix_fmt",
+    "yuv420p",
+    "-g",
+    String(Math.max(1, Math.round(fps * segmentSeconds))),
+    "-hls_time",
+    String(segmentSeconds),
+    "-hls_playlist_type",
+    "vod",
+    "-hls_segment_filename",
+    join(outDir, "seg_%03d.ts"),
+    "-f",
+    "hls",
     playlistPath,
   ];
 
@@ -247,7 +261,9 @@ export async function encodeSceneToHls(spec: SceneSpec, options: HlsEncodeOption
     proc.on("error", (err) => reject(new Error(`Failed to start ffmpeg ("${ffmpegPath}"): ${err.message}`)));
   });
   const exited = new Promise<void>((resolve, reject) => {
-    proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg HLS exited with code ${code}.\n${stderr.slice(-2000)}`))));
+    proc.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`ffmpeg HLS exited with code ${code}.\n${stderr.slice(-2000)}`)),
+    );
   });
   if (!proc.stdin) throw new Error("ffmpeg stdin unavailable");
   proc.stdin.on("error", () => {});
@@ -278,30 +294,34 @@ export async function encodeSceneToStream(
 ): Promise<EncodeResult> {
   const { width, height, fps } = spec;
   const frameCount = totalFrames(fps, spec.duration);
-  const {
-    crf = 20,
-    preset = "veryfast",
-    pixelFormat = "yuv420p",
-    ffmpegPath = "ffmpeg",
-    concurrency = 1,
-    onProgress,
-  } = options;
+  const { crf = 20, preset = "veryfast", pixelFormat = "yuv420p", ffmpegPath = "ffmpeg", concurrency = 1, onProgress } = options;
 
   const args = [
     "-y",
-    "-f", "rawvideo",
-    "-pix_fmt", "rgba",
-    "-s", `${width}x${height}`,
-    "-r", String(fps),
-    "-i", "pipe:0",
+    "-f",
+    "rawvideo",
+    "-pix_fmt",
+    "rgba",
+    "-s",
+    `${width}x${height}`,
+    "-r",
+    String(fps),
+    "-i",
+    "pipe:0",
     "-an",
-    "-c:v", "libx264",
-    "-preset", preset,
-    "-crf", String(crf),
-    "-pix_fmt", pixelFormat,
+    "-c:v",
+    "libx264",
+    "-preset",
+    preset,
+    "-crf",
+    String(crf),
+    "-pix_fmt",
+    pixelFormat,
     // Fragmented MP4 so bytes are playable as they arrive (no moov-at-end seek).
-    "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
-    "-f", "mp4",
+    "-movflags",
+    "+frag_keyframe+empty_moov+default_base_moof",
+    "-f",
+    "mp4",
     "pipe:1",
   ];
 

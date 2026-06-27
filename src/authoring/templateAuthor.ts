@@ -6,16 +6,44 @@
  */
 
 import { AnthropicSpecAuthor, type SpecAuthor } from "./agent.js";
+import { OpenRouterSpecAuthor } from "./openRouterAuthor.js";
 import { buildCountingLesson, buildLessonFromOutline, type CountingLessonOptions } from "../lessons/templates.js";
 import { THEMES } from "../theme/themes.js";
 
 const NUMBER_WORDS: Record<string, number> = {
-  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
 };
 
 const TOPIC_WORDS = [
-  "apples", "stars", "balloons", "flowers", "fish", "ducks", "bananas", "cars", "blocks",
-  "hearts", "frogs", "bears", "cats", "dogs", "fruits", "shapes", "boats", "trees", "bees", "birds",
+  "apples",
+  "stars",
+  "balloons",
+  "flowers",
+  "fish",
+  "ducks",
+  "bananas",
+  "cars",
+  "blocks",
+  "hearts",
+  "frogs",
+  "bears",
+  "cats",
+  "dogs",
+  "fruits",
+  "shapes",
+  "boats",
+  "trees",
+  "bees",
+  "birds",
 ];
 
 export interface ParsedBrief {
@@ -86,15 +114,23 @@ export class TemplateAuthor implements SpecAuthor {
 }
 
 /**
- * Pick the best available author: the LLM author when ANTHROPIC_API_KEY is set
- * (richer, free-form lessons), otherwise the offline TemplateAuthor (always works).
+ * Pick the best available author: an LLM author when a key is configured (richer,
+ * free-form lessons), otherwise the offline TemplateAuthor (always works).
+ * Preference: OpenRouter > Anthropic > Template.
  */
 export function createDefaultAuthor(opts: TemplateAuthorOptions = {}): SpecAuthor {
+  if (process.env.OPENROUTER_API_KEY) {
+    try {
+      return new OpenRouterSpecAuthor();
+    } catch {
+      /* fall through */
+    }
+  }
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       return new AnthropicSpecAuthor();
     } catch {
-      /* fall back to the template author */
+      /* fall through */
     }
   }
   return new TemplateAuthor(opts);

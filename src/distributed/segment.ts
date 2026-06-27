@@ -63,7 +63,15 @@ export async function assembleSegments(
   options: AssembleOptions,
 ): Promise<void> {
   const { width, height, fps, deterministic = false, crf, preset, ffmpegPath = "ffmpeg" } = options;
-  const args = buildEncodeArgs({ width, height, fps, deterministic, ...(crf !== undefined ? { crf } : {}), ...(preset ? { preset } : {}), outPath });
+  const args = buildEncodeArgs({
+    width,
+    height,
+    fps,
+    deterministic,
+    ...(crf !== undefined ? { crf } : {}),
+    ...(preset ? { preset } : {}),
+    outPath,
+  });
 
   const proc = spawn(ffmpegPath, args, { stdio: ["pipe", "ignore", "pipe"] });
   let stderr = "";

@@ -11,7 +11,7 @@ import type { SceneSpec } from "../../src/index.js";
 const execFileAsync = promisify(execFile);
 
 // Test helper: fetch JSON body as `any` (keeps assertions terse).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function body(r: Response): Promise<any> {
   return r.json();
 }

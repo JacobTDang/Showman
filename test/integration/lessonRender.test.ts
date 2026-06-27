@@ -4,13 +4,7 @@ import { promisify } from "node:util";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  RenderService,
-  LocalObjectStorage,
-  SilentTtsProvider,
-  RuleBasedModeration,
-  buildCountingLesson,
-} from "../../src/index.js";
+import { RenderService, LocalObjectStorage, SilentTtsProvider, RuleBasedModeration, buildCountingLesson } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
@@ -24,7 +18,15 @@ async function hasFfmpeg(): Promise<boolean> {
 }
 async function audioStreams(file: string): Promise<{ codec: string; duration: number }[]> {
   const { stdout } = await execFileAsync("ffprobe", [
-    "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_name,duration", "-of", "json", file,
+    "-v",
+    "error",
+    "-select_streams",
+    "a",
+    "-show_entries",
+    "stream=codec_name,duration",
+    "-of",
+    "json",
+    file,
   ]);
   const j = JSON.parse(stdout) as { streams?: { codec_name: string; duration: string }[] };
   return (j.streams ?? []).map((s) => ({ codec: s.codec_name, duration: Number(s.duration) }));

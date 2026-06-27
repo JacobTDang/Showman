@@ -5,6 +5,9 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["test/**/*.test.ts"],
+    // `*.live.test.ts` hit the network/LLM and require keys — never run them in the
+    // default suite (this is what CI runs), regardless of env. Use `npm run test:live`.
+    exclude: ["**/node_modules/**", "**/dist/**", "**/*.live.test.ts"],
     // Rendering is CPU-bound and deterministic; keep tests stable and not flaky.
     testTimeout: 20_000,
     hookTimeout: 20_000,

@@ -22,7 +22,15 @@ function scene(): SceneSpec {
         width: 20,
         height: 20,
         fill: "#e63946",
-        tracks: [{ property: "x", keyframes: [{ t: 0, value: 10 }, { t: 1.2, value: 90, easing: "easeOutBack" }] }],
+        tracks: [
+          {
+            property: "x",
+            keyframes: [
+              { t: 0, value: 10 },
+              { t: 1.2, value: 90, easing: "easeOutBack" },
+            ],
+          },
+        ],
       },
     ],
   };

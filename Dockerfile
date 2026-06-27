@@ -19,8 +19,9 @@ WORKDIR /app
 
 # FFmpeg is the encoder. Pin via the distro; for strict cross-host pixel parity,
 # pin a specific FFmpeg build instead of the rolling apt version.
+# ffmpeg = encoder; fontconfig/libfontconfig1 = Skia (@napi-rs/canvas) text rendering on slim Debian.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates fontconfig libfontconfig1 \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

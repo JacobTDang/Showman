@@ -28,15 +28,35 @@ function window(opts: TimingOptions, defaultDuration = 0.5): { t0: number; t1: n
 /** Fade in (opacity 0 → 1). */
 export function fadeIn(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);
-  return [{ property: "opacity", keyframes: [{ t: t0, value: 0 }, { t: t1, value: 1, easing: opts.easing ?? "easeOutQuad" }] }];
+  return [
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: opts.easing ?? "easeOutQuad" },
+      ],
+    },
+  ];
 }
 
 /** Pop in with a springy overshoot (opacity + scale 0.5 → 1, easeOutBack). */
 export function popIn(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);
   return [
-    { property: "opacity", keyframes: [{ t: t0, value: 0 }, { t: t0 + (t1 - t0) * 0.5, value: 1, easing: "easeOutQuad" }] },
-    { property: "scale", keyframes: [{ t: t0, value: 0.5 }, { t: t1, value: 1, easing: "easeOutBack" }] },
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t0 + (t1 - t0) * 0.5, value: 1, easing: "easeOutQuad" },
+      ],
+    },
+    {
+      property: "scale",
+      keyframes: [
+        { t: t0, value: 0.5 },
+        { t: t1, value: 1, easing: "easeOutBack" },
+      ],
+    },
   ];
 }
 
@@ -44,8 +64,20 @@ export function popIn(opts: TimingOptions = {}): Track[] {
 export function spinIn(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);
   return [
-    { property: "opacity", keyframes: [{ t: t0, value: 0 }, { t: t1, value: 1, easing: "easeOutQuad" }] },
-    { property: "rotation", keyframes: [{ t: t0, value: -180 }, { t: t1, value: 0, easing: "easeOutBack" }] },
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: "easeOutQuad" },
+      ],
+    },
+    {
+      property: "rotation",
+      keyframes: [
+        { t: t0, value: -180 },
+        { t: t1, value: 0, easing: "easeOutBack" },
+      ],
+    },
   ];
 }
 
@@ -61,23 +93,55 @@ export interface SlideInOptions extends TimingOptions {
 export function slideIn(opts: SlideInOptions): Track[] {
   const { t0, t1 } = window(opts);
   return [
-    { property: opts.axis, keyframes: [{ t: t0, value: opts.from }, { t: t1, value: opts.to, easing: opts.easing ?? "easeOutCubic" }] },
-    { property: "opacity", keyframes: [{ t: t0, value: 0 }, { t: t1, value: 1, easing: "easeOutQuad" }] },
+    {
+      property: opts.axis,
+      keyframes: [
+        { t: t0, value: opts.from },
+        { t: t1, value: opts.to, easing: opts.easing ?? "easeOutCubic" },
+      ],
+    },
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: "easeOutQuad" },
+      ],
+    },
   ];
 }
 
 /** Fade out (opacity 1 → 0). */
 export function fadeOut(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);
-  return [{ property: "opacity", keyframes: [{ t: t0, value: 1 }, { t: t1, value: 0, easing: opts.easing ?? "easeInQuad" }] }];
+  return [
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 1 },
+        { t: t1, value: 0, easing: opts.easing ?? "easeInQuad" },
+      ],
+    },
+  ];
 }
 
 /** Pop out (scale 1 → 0.5 with anticipation, fading). */
 export function popOut(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);
   return [
-    { property: "opacity", keyframes: [{ t: t0, value: 1 }, { t: t1, value: 0, easing: "easeInQuad" }] },
-    { property: "scale", keyframes: [{ t: t0, value: 1 }, { t: t1, value: 0.5, easing: "easeInBack" }] },
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 1 },
+        { t: t1, value: 0, easing: "easeInQuad" },
+      ],
+    },
+    {
+      property: "scale",
+      keyframes: [
+        { t: t0, value: 1 },
+        { t: t1, value: 0.5, easing: "easeInBack" },
+      ],
+    },
   ];
 }
 
@@ -108,7 +172,15 @@ export function pulse(opts: PulseOptions = {}): Track[] {
 /** Typewriter reveal for a text node (reveal 0 → 1). */
 export function typewriter(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts, 1);
-  return [{ property: "reveal", keyframes: [{ t: t0, value: 0 }, { t: t1, value: 1, easing: opts.easing ?? "linear" }] }];
+  return [
+    {
+      property: "reveal",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: opts.easing ?? "linear" },
+      ],
+    },
+  ];
 }
 
 /**

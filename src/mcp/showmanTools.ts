@@ -74,7 +74,9 @@ export class HttpBackend implements ShowmanClient {
     return (await this.fetchImpl(this.url("/schema"))).json() as Promise<SchemaDescription>;
   }
   async validate(spec: unknown): Promise<ValidationResult> {
-    return (await this.fetchImpl(this.url("/validate"), { method: "POST", body: JSON.stringify({ spec }) })).json() as Promise<ValidationResult>;
+    return (
+      await this.fetchImpl(this.url("/validate"), { method: "POST", body: JSON.stringify({ spec }) })
+    ).json() as Promise<ValidationResult>;
   }
   async preview(spec: unknown, frame: number): Promise<PreviewOk | CapabilityErr> {
     const r = await this.fetchImpl(this.url(`/preview?format=json&frame=${frame}`), { method: "POST", body: JSON.stringify({ spec }) });
@@ -107,7 +109,8 @@ const objSpec = { type: "object", description: "A Showman Scene Spec object." };
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "showman_get_schema",
-    description: "Get the Scene Spec schema (node types, animatable properties, easings, fonts, limits, and an example). Read this first to author valid scenes.",
+    description:
+      "Get the Scene Spec schema (node types, animatable properties, easings, fonts, limits, and an example). Read this first to author valid scenes.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -118,12 +121,21 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "showman_preview_scene",
     description: "Render a single frame of a scene as a PNG (base64) so you can see what it looks like before committing to a full render.",
-    inputSchema: { type: "object", properties: { spec: objSpec, frame: { type: "number", description: "Frame index (default 0)." } }, required: ["spec"] },
+    inputSchema: {
+      type: "object",
+      properties: { spec: objSpec, frame: { type: "number", description: "Frame index (default 0)." } },
+      required: ["spec"],
+    },
   },
   {
     name: "showman_submit_render",
-    description: "Submit a scene for full video rendering. Returns a jobId immediately (async). Poll showman_job_status for the result URL.",
-    inputSchema: { type: "object", properties: { spec: objSpec, options: { type: "object", description: "Render options (deterministic, crf, preset)." } }, required: ["spec"] },
+    description:
+      "Submit a scene for full video rendering. Returns a jobId immediately (async). Poll showman_job_status for the result URL.",
+    inputSchema: {
+      type: "object",
+      properties: { spec: objSpec, options: { type: "object", description: "Render options (deterministic, crf, preset)." } },
+      required: ["spec"],
+    },
   },
   {
     name: "showman_job_status",

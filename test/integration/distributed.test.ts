@@ -18,8 +18,16 @@ async function hasFfmpeg(): Promise<boolean> {
 }
 async function frameCount(file: string): Promise<number> {
   const { stdout } = await execFileAsync("ffprobe", [
-    "-v", "error", "-select_streams", "v:0", "-count_frames",
-    "-show_entries", "stream=nb_read_frames", "-of", "default=nokey=1:noprint_wrappers=1", file,
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-count_frames",
+    "-show_entries",
+    "stream=nb_read_frames",
+    "-of",
+    "default=nokey=1:noprint_wrappers=1",
+    file,
   ]);
   return Number(stdout.trim());
 }
@@ -43,8 +51,20 @@ function scene(): SceneSpec {
         height: 30,
         fill: "#e63946",
         tracks: [
-          { property: "x", keyframes: [{ t: 0, value: 10 }, { t: 2, value: 120, easing: "easeInOutCubic" }] },
-          { property: "fill", keyframes: [{ t: 0, value: "#e63946" }, { t: 2, value: "#457b9d" }] },
+          {
+            property: "x",
+            keyframes: [
+              { t: 0, value: 10 },
+              { t: 2, value: 120, easing: "easeInOutCubic" },
+            ],
+          },
+          {
+            property: "fill",
+            keyframes: [
+              { t: 0, value: "#e63946" },
+              { t: 2, value: "#457b9d" },
+            ],
+          },
         ],
       },
     ],
@@ -64,11 +84,15 @@ describe("distributed rendering (M3)", () => {
   it("shards a job across workers, assembles one correct video", async () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
     const storage = new LocalObjectStorage(join(dataDir, "a"));
-    const result = await renderDistributed(scene(), { shardSize: 7, deterministic: true }, {
-      storage,
-      workDir: join(dataDir, "a-work"),
-      workers: 4,
-    });
+    const result = await renderDistributed(
+      scene(),
+      { shardSize: 7, deterministic: true },
+      {
+        storage,
+        workDir: join(dataDir, "a-work"),
+        workers: 4,
+      },
+    );
     expect(result.ok).toBe(true);
     expect(result.status!.state).toBe("done");
     expect(result.status!.shardsTotal).toBe(Math.ceil(24 / 7)); // 4 shards
@@ -88,11 +112,15 @@ describe("distributed rendering (M3)", () => {
 
     // Distributed deterministic render (different shard sizes must still agree).
     const storage = new LocalObjectStorage(join(dataDir, "b"));
-    const result = await renderDistributed(scene(), { shardSize: 5, deterministic: true }, {
-      storage,
-      workDir: join(dataDir, "b-work"),
-      workers: 6,
-    });
+    const result = await renderDistributed(
+      scene(),
+      { shardSize: 5, deterministic: true },
+      {
+        storage,
+        workDir: join(dataDir, "b-work"),
+        workers: 6,
+      },
+    );
     expect(result.ok).toBe(true);
     const distBytes = await storage.get(result.status!.result!.key);
     expect(Buffer.compare(readFileSync(mono), distBytes)).toBe(0);
@@ -102,26 +130,34 @@ describe("distributed rendering (M3)", () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
     // Reference: clean distributed render.
     const refStorage = new LocalObjectStorage(join(dataDir, "ref"));
-    const ref = await renderDistributed(scene(), { shardSize: 6, deterministic: true }, {
-      storage: refStorage,
-      workDir: join(dataDir, "ref-work"),
-      workers: 4,
-    });
+    const ref = await renderDistributed(
+      scene(),
+      { shardSize: 6, deterministic: true },
+      {
+        storage: refStorage,
+        workDir: join(dataDir, "ref-work"),
+        workers: 4,
+      },
+    );
     const refBytes = await refStorage.get(ref.status!.result!.key);
 
     // Faulted: shard 1 throws on its first attempt; the lease requeues it.
     const faultStorage = new LocalObjectStorage(join(dataDir, "fault"));
     const seenAttempt = new Map<number, number>();
-    const result = await renderDistributed(scene(), { shardSize: 6, deterministic: true }, {
-      storage: faultStorage,
-      workDir: join(dataDir, "fault-work"),
-      workers: 3,
-      queueOptions: { defaultVisibilityMs: 50, maxAttempts: 5 },
-      faultInjector: (task: ShardTask, attempt: number) => {
-        seenAttempt.set(task.shardId, attempt);
-        return task.shardId === 1 && attempt === 1; // fail shard 1 once
+    const result = await renderDistributed(
+      scene(),
+      { shardSize: 6, deterministic: true },
+      {
+        storage: faultStorage,
+        workDir: join(dataDir, "fault-work"),
+        workers: 3,
+        queueOptions: { defaultVisibilityMs: 50, maxAttempts: 5 },
+        faultInjector: (task: ShardTask, attempt: number) => {
+          seenAttempt.set(task.shardId, attempt);
+          return task.shardId === 1 && attempt === 1; // fail shard 1 once
+        },
       },
-    });
+    );
     expect(result.ok).toBe(true);
     expect(seenAttempt.get(1)).toBeGreaterThanOrEqual(2); // shard 1 was retried
     const faultBytes = await faultStorage.get(result.status!.result!.key);
@@ -132,12 +168,16 @@ describe("distributed rendering (M3)", () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
     const storage = new LocalObjectStorage(join(dataDir, "c"));
     const events: ProgressEvent[] = [];
-    const result = await renderDistributed(scene(), { shardSize: 8, deterministic: true }, {
-      storage,
-      workDir: join(dataDir, "c-work"),
-      workers: 3,
-      onProgress: (e) => events.push(e),
-    });
+    const result = await renderDistributed(
+      scene(),
+      { shardSize: 8, deterministic: true },
+      {
+        storage,
+        workDir: join(dataDir, "c-work"),
+        workers: 3,
+        onProgress: (e) => events.push(e),
+      },
+    );
     expect(result.ok).toBe(true);
     const states = new Set(events.map((e) => e.state));
     expect(states.has("rendering")).toBe(true);
@@ -148,13 +188,18 @@ describe("distributed rendering (M3)", () => {
   it("fails the job (not hang) when a shard is poison and dead-letters", async () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
     const storage = new LocalObjectStorage(join(dataDir, "poison"));
-    const result = await renderDistributed(scene(), { shardSize: 8, deterministic: true }, {
-      storage,
-      workDir: join(dataDir, "poison-work"),
-      workers: 2,
-      queueOptions: { defaultVisibilityMs: 20, maxAttempts: 2 },
-      faultInjector: (task: ShardTask) => task.shardId === 0, // shard 0 ALWAYS fails
-    }, 15_000);
+    const result = await renderDistributed(
+      scene(),
+      { shardSize: 8, deterministic: true },
+      {
+        storage,
+        workDir: join(dataDir, "poison-work"),
+        workers: 2,
+        queueOptions: { defaultVisibilityMs: 20, maxAttempts: 2 },
+        faultInjector: (task: ShardTask) => task.shardId === 0, // shard 0 ALWAYS fails
+      },
+      15_000,
+    );
     // The fan-in barrier must not hang forever; the job resolves to an error.
     expect(result.status!.state).toBe("error");
     expect(result.ok).toBe(false);

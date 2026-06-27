@@ -11,14 +11,21 @@ const execFileAsync = promisify(execFile);
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "out", "__test__");
 
 /** Probe a video file's stream/format info via ffprobe. */
-async function ffprobe(file: string): Promise<{ width: number; height: number; frames: number; codec: string; pixFmt: string; duration: number }> {
+async function ffprobe(
+  file: string,
+): Promise<{ width: number; height: number; frames: number; codec: string; pixFmt: string; duration: number }> {
   const { stdout } = await execFileAsync("ffprobe", [
-    "-v", "error",
-    "-select_streams", "v:0",
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
     "-count_frames",
-    "-show_entries", "stream=width,height,nb_read_frames,codec_name,pix_fmt",
-    "-show_entries", "format=duration",
-    "-of", "json",
+    "-show_entries",
+    "stream=width,height,nb_read_frames,codec_name,pix_fmt",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "json",
     file,
   ]);
   const j = JSON.parse(stdout);
@@ -59,7 +66,15 @@ function movingRectScene(): SceneSpec {
         width: 20,
         height: 20,
         fill: "red",
-        tracks: [{ property: "x", keyframes: [{ t: 0, value: 10 }, { t: 0.6, value: 150 }] }],
+        tracks: [
+          {
+            property: "x",
+            keyframes: [
+              { t: 0, value: 10 },
+              { t: 0.6, value: 150 },
+            ],
+          },
+        ],
       },
     ],
   };

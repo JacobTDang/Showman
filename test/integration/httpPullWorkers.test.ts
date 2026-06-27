@@ -5,13 +5,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
-import {
-  CoordinatorService, createCoordinatorServer, listenCoordinator, LocalObjectStorage, createRemoteWorker,
-} from "../../src/index.js";
+import { CoordinatorService, createCoordinatorServer, listenCoordinator, LocalObjectStorage, createRemoteWorker } from "../../src/index.js";
 import type { SceneSpec, ShardWorker } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function body(r: Response): Promise<any> {
   return r.json();
 }
@@ -25,8 +23,33 @@ async function hasFfmpeg(): Promise<boolean> {
 }
 function scene(): SceneSpec {
   return {
-    specVersion: 1, width: 128, height: 72, fps: 10, duration: 1.6, background: "#fdf6e3", seed: 2,
-    nodes: [{ id: "b", type: "ellipse", x: 10, y: 20, width: 28, height: 28, fill: "#e63946", tracks: [{ property: "x", keyframes: [{ t: 0, value: 10 }, { t: 1.6, value: 90 }] }] }],
+    specVersion: 1,
+    width: 128,
+    height: 72,
+    fps: 10,
+    duration: 1.6,
+    background: "#fdf6e3",
+    seed: 2,
+    nodes: [
+      {
+        id: "b",
+        type: "ellipse",
+        x: 10,
+        y: 20,
+        width: 28,
+        height: 28,
+        fill: "#e63946",
+        tracks: [
+          {
+            property: "x",
+            keyframes: [
+              { t: 0, value: 10 },
+              { t: 1.6, value: 90 },
+            ],
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -61,7 +84,10 @@ afterAll(async () => {
 describe("horizontal scale: HTTP-pull workers (no Redis)", () => {
   it("a coordinator with zero internal workers gets its job rendered by external pull workers", async () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
-    const submit = await fetch(`${baseUrl}/jobs`, { method: "POST", body: JSON.stringify({ spec: scene(), options: { shardSize: 4, deterministic: true } }) });
+    const submit = await fetch(`${baseUrl}/jobs`, {
+      method: "POST",
+      body: JSON.stringify({ spec: scene(), options: { shardSize: 4, deterministic: true } }),
+    });
     expect(submit.status).toBe(202);
     const { jobId, shardsTotal } = await body(submit);
     expect(shardsTotal).toBe(Math.ceil(16 / 4)); // 4 shards

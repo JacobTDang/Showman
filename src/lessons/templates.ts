@@ -218,7 +218,15 @@ export function buildLessonFromOutline(opts: OutlineLessonOptions): SceneSpec {
       align: "center",
       baseline: "middle",
       tracks: mergeTracks(fadeIn({ start: t0, duration: 0.4 }), [
-        { property: "opacity", keyframes: [{ t: t0, value: 0 }, { t: t0 + 0.4, value: 1 }, { t: t0 + per - 0.3, value: 1 }, { t: t0 + per - 0.05, value: 0 }] },
+        {
+          property: "opacity",
+          keyframes: [
+            { t: t0, value: 0 },
+            { t: t0 + 0.4, value: 1 },
+            { t: t0 + per - 0.3, value: 1 },
+            { t: t0 + per - 0.05, value: 0 },
+          ],
+        },
       ]),
     });
     nodes.push({

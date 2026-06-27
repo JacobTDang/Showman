@@ -5,9 +5,26 @@ on:
     branches: [main]
   pull_request:
 
+# The live LLM test (*.live.test.ts) is excluded from `npm test` by vitest.config.ts,
+# so CI never needs an API key and never hits the network.
+
 jobs:
-  engine:
-    name: Engine + services (TypeScript)
+  lint:
+    name: Lint + format + typecheck (TS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+
+  test:
+    name: Test + build (TS)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +35,11 @@ jobs:
       - name: Install ffmpeg (encoder dependency)
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npm ci
-      - run: npm run typecheck
       - run: npm test
       - run: npm run build
 
-  gateway:
-    name: Gateway (Go)
+  go:
+    name: Lint + vet + test (Go gateway)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -33,14 +49,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
+          cache-dependency-path: control-plane/go.mod
+      - name: gofmt (check)
+        run: test -z "$(gofmt -l .)" || (echo 'gofmt found unformatted files:' && gofmt -l . && exit 1)
       - run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1
+          working-directory: control-plane
       - run: go test ./...
       - run: go build ./...
 
   images:
     name: Build container images
     runs-on: ubuntu-latest
-    needs: [engine, gateway]
+    needs: [lint, test, go]
     steps:
       - uses: actions/checkout@v4
       - name: Build worker image

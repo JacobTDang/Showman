@@ -59,14 +59,16 @@ export async function renderDistributed(
   const { jobId } = submitted;
 
   const workerCount = Math.max(1, deps.workers ?? 4);
-  const workers = Array.from({ length: workerCount }, (_, i) =>
-    new ShardWorker({
-      id: `w${i}`,
-      queue,
-      storage: deps.storage,
-      report: (r) => coordinator.onShardResult(r),
-      ...(deps.faultInjector ? { faultInjector: deps.faultInjector } : {}),
-    }),
+  const workers = Array.from(
+    { length: workerCount },
+    (_, i) =>
+      new ShardWorker({
+        id: `w${i}`,
+        queue,
+        storage: deps.storage,
+        report: (r) => coordinator.onShardResult(r),
+        ...(deps.faultInjector ? { faultInjector: deps.faultInjector } : {}),
+      }),
   );
   const running = workers.map((w) => w.run());
 

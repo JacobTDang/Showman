@@ -47,7 +47,13 @@ export class ShardWorker {
 
   /** Process at most one task. Returns whether work was done / retried / idle. */
   async step(): Promise<StepOutcome> {
-    const leased = await this.queue.lease(this.leaseMs);
+    let leased;
+    try {
+      leased = await this.queue.lease(this.leaseMs);
+    } catch {
+      // Transient (e.g. the coordinator is briefly unreachable / shutting down).
+      return "idle";
+    }
     if (!leased) return "idle";
     const task = leased.payload;
     try {
@@ -64,7 +70,12 @@ export class ShardWorker {
       return "ok";
     } catch {
       // Crash semantics: return the task to the queue for another worker to retry.
-      await this.queue.nack(leased.leaseId);
+      // nack is best-effort — if the queue is also unreachable, the lease expires anyway.
+      try {
+        await this.queue.nack(leased.leaseId);
+      } catch {
+        /* lease will time out and be redelivered */
+      }
       return "retry";
     }
   }
@@ -73,7 +84,12 @@ export class ShardWorker {
   async run(idlePollMs = 5): Promise<void> {
     this.stopped = false;
     while (!this.stopped) {
-      const outcome = await this.step();
+      let outcome: StepOutcome = "idle";
+      try {
+        outcome = await this.step();
+      } catch {
+        /* step is already guarded; this is a final backstop so run() never rejects */
+      }
       if (outcome === "idle") await delay(idlePollMs);
     }
   }

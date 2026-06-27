@@ -37,15 +37,23 @@ async function muxInScratch(
 
   const args = [
     "-y",
-    "-i", videoPath,
-    "-i", audioPath,
-    "-map", "0:v:0",
-    "-map", "1:a:0",
-    "-c:v", "copy",
-    "-c:a", "aac",
-    "-b:a", audioBitrate,
+    "-i",
+    videoPath,
+    "-i",
+    audioPath,
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    audioBitrate,
     "-shortest",
-    "-movflags", "+faststart",
+    "-movflags",
+    "+faststart",
     outPath,
   ];
 
@@ -59,7 +67,9 @@ async function muxInScratch(
   try {
     await new Promise<void>((resolve, reject) => {
       proc.on("error", (err) => reject(new Error(`Failed to start ffmpeg ("${ffmpegPath}"): ${err.message}`)));
-      proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg mux exited with code ${code}.\n${stderr.slice(-2000)}`))));
+      proc.on("close", (code) =>
+        code === 0 ? resolve() : reject(new Error(`ffmpeg mux exited with code ${code}.\n${stderr.slice(-2000)}`)),
+      );
     });
   } catch (err) {
     try {

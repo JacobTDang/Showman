@@ -2,12 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  RenderService,
-  LocalObjectStorage,
-  InMemoryJobStore,
-  JobRunner,
-} from "../../src/index.js";
+import { RenderService, LocalObjectStorage, InMemoryJobStore, JobRunner } from "../../src/index.js";
 import { DirectBackend, TOOL_DEFINITIONS, callTool } from "../../src/mcp/showmanTools.js";
 import { AuthoringAgent, ScriptedAuthor, extractJson } from "../../src/authoring/agent.js";
 import type { SceneSpec } from "../../src/index.js";
@@ -102,7 +97,10 @@ describe("authoring loop (M4.3)", () => {
   });
 
   it("extractJson pulls a spec object out of chatty text", () => {
-    const obj = extractJson('Sure! Here you go:\n```json\n{"a": 1, "b": {"c": "}"}}\n```\nHope that helps') as { a: number; b: { c: string } };
+    const obj = extractJson('Sure! Here you go:\n```json\n{"a": 1, "b": {"c": "}"}}\n```\nHope that helps') as {
+      a: number;
+      b: { c: string };
+    };
     expect(obj.a).toBe(1);
     expect(obj.b.c).toBe("}");
   });

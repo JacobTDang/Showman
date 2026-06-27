@@ -33,5 +33,5 @@ export async function startRemoteWorker(): Promise<ShardWorker> {
 }
 
 if (process.argv[1]?.endsWith("remoteWorkerMain.ts") || process.argv[1]?.endsWith("remoteWorkerMain.js")) {
-  startRemoteWorker().then((w) => console.log(`[showman] remote shard worker ${w.workerId} pulling from coordinator`));
+  void startRemoteWorker().then((w) => console.log(`[showman] remote shard worker ${w.workerId} pulling from coordinator`));
 }

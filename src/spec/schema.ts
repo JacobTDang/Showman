@@ -52,19 +52,7 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
 };
 
 /** Transform properties common to all node types. */
-const COMMON_KEYS = [
-  "id",
-  "type",
-  "x",
-  "y",
-  "rotation",
-  "scale",
-  "scaleX",
-  "scaleY",
-  "opacity",
-  "anchor",
-  "tracks",
-] as const;
+const COMMON_KEYS = ["id", "type", "x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "anchor", "tracks"] as const;
 
 /**
  * The full set of allowed keys per node type. Any key outside this set is reported
@@ -75,19 +63,7 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
   rect: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth", "radius"],
   ellipse: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth"],
   polygon: [...COMMON_KEYS, "sides", "radius", "innerRadius", "fill", "stroke", "strokeWidth"],
-  text: [
-    ...COMMON_KEYS,
-    "text",
-    "reveal",
-    "fontSize",
-    "fontFamily",
-    "fontWeight",
-    "align",
-    "baseline",
-    "fill",
-    "stroke",
-    "strokeWidth",
-  ],
+  text: [...COMMON_KEYS, "text", "reveal", "fontSize", "fontFamily", "fontWeight", "align", "baseline", "fill", "stroke", "strokeWidth"],
   group: [...COMMON_KEYS, "children"],
 };
 

@@ -25,7 +25,15 @@ function movingRectScene(): SceneSpec {
         width: 20,
         height: 20,
         fill: "red",
-        tracks: [{ property: "x", keyframes: [{ t: 0, value: 10 }, { t: 1, value: 150 }] }],
+        tracks: [
+          {
+            property: "x",
+            keyframes: [
+              { t: 0, value: 10 },
+              { t: 1, value: 150 },
+            ],
+          },
+        ],
       },
     ],
   };
@@ -161,7 +169,18 @@ describe("renderFrame — end to end", () => {
       duration: 1,
       background: "#ffffff",
       nodes: [
-        { id: "t", type: "text", x: 100, y: 60, text: "5", fontSize: 80, fontWeight: 800, fill: "#000000", align: "center", baseline: "middle" },
+        {
+          id: "t",
+          type: "text",
+          x: 100,
+          y: 60,
+          text: "5",
+          fontSize: 80,
+          fontWeight: 800,
+          fill: "#000000",
+          align: "center",
+          baseline: "middle",
+        },
       ],
     };
     expect(validateScene(spec).valid).toBe(true);
@@ -190,7 +209,15 @@ describe("renderFrame — end to end", () => {
           width: 100,
           height: 100,
           fill: "#000000",
-          tracks: [{ property: "fill", keyframes: [{ t: 0, value: "#000000" }, { t: 1, value: "#ffffff" }] }],
+          tracks: [
+            {
+              property: "fill",
+              keyframes: [
+                { t: 0, value: "#000000" },
+                { t: 1, value: "#ffffff" },
+              ],
+            },
+          ],
         },
       ],
     };
@@ -269,9 +296,7 @@ describe("render regressions (from adversarial review)", () => {
       fps: 1,
       duration: 1,
       background: "#ffffff",
-      nodes: [
-        { id: "bar", type: "rect", x: 100, y: 100, width: 80, height: 8, fill: "red", anchor: { x: 40, y: 4 }, rotation: 90 },
-      ],
+      nodes: [{ id: "bar", type: "rect", x: 100, y: 100, width: 80, height: 8, fill: "red", anchor: { x: 40, y: 4 }, rotation: 90 }],
     };
     const f = renderFrame(spec, 0);
     // The horizontal bar becomes vertical about its center (140,104).
@@ -294,7 +319,15 @@ describe("render regressions (from adversarial review)", () => {
           x: 10,
           y: 10,
           fill: "red",
-          tracks: [{ property: "width", keyframes: [{ t: 0, value: 40 }, { t: 1, value: -40 }] }],
+          tracks: [
+            {
+              property: "width",
+              keyframes: [
+                { t: 0, value: 40 },
+                { t: 1, value: -40 },
+              ],
+            },
+          ],
         },
       ],
     };

@@ -5,11 +5,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
-import { CoordinatorService, createCoordinatorServer, listenCoordinator, LocalObjectStorage, RuleBasedModeration } from "../../src/index.js";
+import {
+  CoordinatorService,
+  createCoordinatorServer,
+  listenCoordinator,
+  LocalObjectStorage,
+  RuleBasedModeration,
+} from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function body(r: Response): Promise<any> {
   return r.json();
 }
@@ -29,7 +35,26 @@ function scene(): SceneSpec {
     fps: 12,
     duration: 1.5, // 18 frames
     background: "#fdf6e3",
-    nodes: [{ id: "r", type: "rect", x: 10, y: 10, width: 30, height: 30, fill: "#1d6f72", tracks: [{ property: "rotation", keyframes: [{ t: 0, value: 0 }, { t: 1.5, value: 180 }] }] }],
+    nodes: [
+      {
+        id: "r",
+        type: "rect",
+        x: 10,
+        y: 10,
+        width: 30,
+        height: 30,
+        fill: "#1d6f72",
+        tracks: [
+          {
+            property: "rotation",
+            keyframes: [
+              { t: 0, value: 0 },
+              { t: 1.5, value: 180 },
+            ],
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -57,7 +82,10 @@ afterAll(async () => {
 describe("coordinator service over HTTP (M3.3)", () => {
   it("submit -> poll -> sharded render -> fetchable video", async () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
-    const submit = await fetch(`${baseUrl}/jobs`, { method: "POST", body: JSON.stringify({ spec: scene(), options: { shardSize: 5, deterministic: true } }) });
+    const submit = await fetch(`${baseUrl}/jobs`, {
+      method: "POST",
+      body: JSON.stringify({ spec: scene(), options: { shardSize: 5, deterministic: true } }),
+    });
     expect(submit.status).toBe(202);
     const { jobId, shardsTotal } = await body(submit);
     expect(shardsTotal).toBe(Math.ceil(18 / 5)); // 4 shards
@@ -83,7 +111,12 @@ describe("coordinator service over HTTP (M3.3)", () => {
 
   it("blocks an unsafe spec at the coordinator's safety gate (no shards enqueued)", async () => {
     const unsafe: SceneSpec = {
-      specVersion: 1, width: 64, height: 64, fps: 5, duration: 1, background: "#fff",
+      specVersion: 1,
+      width: 64,
+      height: 64,
+      fps: 5,
+      duration: 1,
+      background: "#fff",
       nodes: [{ id: "t", type: "text", x: 5, y: 30, text: "shoot the gun", fontSize: 14, fill: "#000" }],
     };
     const r = await fetch(`${baseUrl}/jobs`, { method: "POST", body: JSON.stringify({ spec: unsafe }) });

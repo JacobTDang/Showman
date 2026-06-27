@@ -139,12 +139,7 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
   ctx.restore();
 }
 
-function applyFillAndStroke(
-  ctx: SKRSContext2D,
-  fill: string | undefined,
-  stroke: string | undefined,
-  strokeWidth: number,
-): void {
+function applyFillAndStroke(ctx: SKRSContext2D, fill: string | undefined, stroke: string | undefined, strokeWidth: number): void {
   if (fill !== undefined && fill !== "transparent") {
     ctx.fillStyle = normalizeColor(fill);
     ctx.fill();

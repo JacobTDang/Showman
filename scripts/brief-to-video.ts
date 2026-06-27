@@ -9,8 +9,16 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  RenderService, LocalObjectStorage, InMemoryJobStore, JobRunner, DirectBackend,
-  AuthoringAgent, createDefaultAuthor, ToneTtsProvider, RuleBasedModeration, renderFrame,
+  RenderService,
+  LocalObjectStorage,
+  InMemoryJobStore,
+  JobRunner,
+  DirectBackend,
+  AuthoringAgent,
+  createDefaultAuthor,
+  ToneTtsProvider,
+  RuleBasedModeration,
+  renderFrame,
 } from "../src/index.js";
 import type { SceneSpec } from "../src/index.js";
 

@@ -37,9 +37,7 @@ const NAMED: Record<EasingName, (t: number) => number> = {
   easeInBack: (t) => c3 * t * t * t - c1 * t * t,
   easeOutBack: (t) => 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2),
   easeInOutBack: (t) =>
-    t < 0.5
-      ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2
-      : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2,
+    t < 0.5 ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2 : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2,
 
   easeOutElastic: (t) => {
     if (t === 0) return 0;

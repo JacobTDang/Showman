@@ -39,7 +39,15 @@ describe("resolveTransform", () => {
       id: "n",
       type: "rect",
       x: 0,
-      tracks: [{ property: "x", keyframes: [{ t: 0, value: 0 }, { t: 1, value: 100 }] }],
+      tracks: [
+        {
+          property: "x",
+          keyframes: [
+            { t: 0, value: 0 },
+            { t: 1, value: 100 },
+          ],
+        },
+      ],
     };
     expect(resolveTransform(node, 0).x).toBe(0);
     expect(resolveTransform(node, 0.5).x).toBe(50);
@@ -54,7 +62,15 @@ describe("NodeResolver", () => {
       type: "rect",
       width: 40,
       fill: "#112233",
-      tracks: [{ property: "width", keyframes: [{ t: 0, value: 40 }, { t: 1, value: 80 }] }],
+      tracks: [
+        {
+          property: "width",
+          keyframes: [
+            { t: 0, value: 40 },
+            { t: 1, value: 80 },
+          ],
+        },
+      ],
     };
     const r0 = new NodeResolver(node, 0);
     expect(r0.num("width", 100)).toBe(40);

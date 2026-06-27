@@ -46,5 +46,5 @@ export async function startWorker(): Promise<{ port: number; close: () => Promis
 
 // Run if invoked directly (not when imported).
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("worker.ts") || process.argv[1]?.endsWith("worker.js")) {
-  startWorker().then(({ port }) => console.log(`[showman] render worker listening on :${port}`));
+  void startWorker().then(({ port }) => console.log(`[showman] render worker listening on :${port}`));
 }

@@ -15,10 +15,7 @@ import { TOOL_DEFINITIONS, callTool, type ShowmanClient } from "./showmanTools.j
 
 /** Build an MCP Server bound to a Showman backend (does not start a transport). */
 export function createMcpServer(client: ShowmanClient): Server {
-  const server = new Server(
-    { name: "showman", version: "0.1.0" },
-    { capabilities: { tools: {} } },
-  );
+  const server = new Server({ name: "showman", version: "0.1.0" }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOL_DEFINITIONS.map((t) => ({

@@ -4,16 +4,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
 import {
-  RenderService, LocalObjectStorage, createServer, listen, InMemoryJobStore, JobRunner, RuleBasedModeration, SilentTtsProvider,
+  RenderService,
+  LocalObjectStorage,
+  createServer,
+  listen,
+  InMemoryJobStore,
+  JobRunner,
+  RuleBasedModeration,
+  SilentTtsProvider,
 } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function body(r: Response): Promise<any> {
   return r.json();
 }
 const unsafeScene = (): SceneSpec => ({
-  specVersion: 1, width: 64, height: 64, fps: 5, duration: 0.4, background: "#fff",
+  specVersion: 1,
+  width: 64,
+  height: 64,
+  fps: 5,
+  duration: 0.4,
+  background: "#fff",
   nodes: [{ id: "t", type: "text", x: 4, y: 30, text: "shoot the gun and kill", fontSize: 12, fill: "#000" }],
 });
 
@@ -25,8 +36,10 @@ beforeAll(async () => {
   dataDir = mkdtempSync(join(tmpdir(), "showman-safety-"));
   const storage = new LocalObjectStorage(join(dataDir, "objects"));
   const service = new RenderService({
-    storage, workDir: join(dataDir, "tmp"),
-    tts: new SilentTtsProvider(), moderation: new RuleBasedModeration(),
+    storage,
+    workDir: join(dataDir, "tmp"),
+    tts: new SilentTtsProvider(),
+    moderation: new RuleBasedModeration(),
   });
   const jobRunner = new JobRunner(service, new InMemoryJobStore(), { maxConcurrent: 1 });
   server = createServer({ service, storage, jobRunner });

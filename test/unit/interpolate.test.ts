@@ -95,8 +95,20 @@ describe("interpolate", () => {
   });
 
   it("sampleTrack dispatches by kind", () => {
-    const num: Track = { property: "x", keyframes: [{ t: 0, value: 0 }, { t: 1, value: 10 }] };
-    const col: Track = { property: "fill", keyframes: [{ t: 0, value: "#000" }, { t: 1, value: "#fff" }] };
+    const num: Track = {
+      property: "x",
+      keyframes: [
+        { t: 0, value: 0 },
+        { t: 1, value: 10 },
+      ],
+    };
+    const col: Track = {
+      property: "fill",
+      keyframes: [
+        { t: 0, value: "#000" },
+        { t: 1, value: "#fff" },
+      ],
+    };
     expect(sampleTrack(num, 0.5, "number")).toBe(5);
     expect(sampleTrack(col, 0.5, "color")).toBe("rgba(128, 128, 128, 1)");
   });

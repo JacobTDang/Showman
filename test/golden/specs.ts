@@ -30,7 +30,18 @@ const shapes: SceneSpec = {
   seed: 1,
   background: "#ffffff",
   nodes: [
-    { id: "card", type: "rect", x: 30, y: 40, width: 120, height: 120, radius: 24, fill: "#1d6f72", rotation: 15, anchor: { x: 60, y: 60 } },
+    {
+      id: "card",
+      type: "rect",
+      x: 30,
+      y: 40,
+      width: 120,
+      height: 120,
+      radius: 24,
+      fill: "#1d6f72",
+      rotation: 15,
+      anchor: { x: 60, y: 60 },
+    },
     { id: "ball", type: "ellipse", x: 180, y: 50, width: 100, height: 100, fill: "#ffb703", stroke: "#fb8500", strokeWidth: 6 },
     { id: "bar", type: "rect", x: 40, y: 170, width: 240, height: 16, radius: 8, fill: "#e63946" },
   ],
@@ -42,8 +53,30 @@ function countingLesson(): SceneSpec {
   const apple = "#e63946";
   const centers = [160, 320, 480];
   const nodes: SceneSpec["nodes"] = [
-    { id: "title", type: "text", x: 320, y: 46, text: "Count to 3!", fontSize: 46, fontWeight: 800, fill: teal, align: "center", baseline: "middle" },
-    { id: "subtitle", type: "text", x: 320, y: 320, text: "Let's count the apples", fontSize: 24, fontWeight: 500, fill: "#457b9d", align: "center", baseline: "middle" },
+    {
+      id: "title",
+      type: "text",
+      x: 320,
+      y: 46,
+      text: "Count to 3!",
+      fontSize: 46,
+      fontWeight: 800,
+      fill: teal,
+      align: "center",
+      baseline: "middle",
+    },
+    {
+      id: "subtitle",
+      type: "text",
+      x: 320,
+      y: 320,
+      text: "Let's count the apples",
+      fontSize: 24,
+      fontWeight: 500,
+      fill: "#457b9d",
+      align: "center",
+      baseline: "middle",
+    },
   ];
   centers.forEach((cx, i) => {
     const start = 0.3 + i * 0.3;
@@ -58,8 +91,20 @@ function countingLesson(): SceneSpec {
       fill: apple,
       anchor: { x: 35, y: 35 },
       tracks: [
-        { property: "opacity", keyframes: [{ t: start, value: 0 }, { t: end, value: 1, easing: "easeOutQuad" }] },
-        { property: "scale", keyframes: [{ t: start, value: 0.6 }, { t: end, value: 1, easing: "easeOutBack" }] },
+        {
+          property: "opacity",
+          keyframes: [
+            { t: start, value: 0 },
+            { t: end, value: 1, easing: "easeOutQuad" },
+          ],
+        },
+        {
+          property: "scale",
+          keyframes: [
+            { t: start, value: 0.6 },
+            { t: end, value: 1, easing: "easeOutBack" },
+          ],
+        },
       ],
     });
     nodes.push({
@@ -73,7 +118,15 @@ function countingLesson(): SceneSpec {
       fill: teal,
       align: "center",
       baseline: "middle",
-      tracks: [{ property: "opacity", keyframes: [{ t: end - 0.1, value: 0 }, { t: end + 0.2, value: 1 }] }],
+      tracks: [
+        {
+          property: "opacity",
+          keyframes: [
+            { t: end - 0.1, value: 0 },
+            { t: end + 0.2, value: 1 },
+          ],
+        },
+      ],
     });
   });
   return { specVersion: SPEC_VERSION, width: 640, height: 360, fps: 30, duration: 3, seed: 7, background: "#fdf6e3", nodes };

@@ -10,9 +10,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test scripts",
+    "lint:fix": "eslint src test scripts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.ts\" \"*.{ts,js,json}\" eslint.config.js",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.ts\" \"*.{ts,js,json}\" eslint.config.js",
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm test",
     "start": "node dist/service/worker.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "test:golden": "vitest run test/golden",
     "golden:update": "tsx scripts/update-golden.ts",
     "demo": "tsx scripts/render-lesson.ts",
@@ -28,9 +34,14 @@
     "@napi-rs/canvas": "^0.1.65"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^22.10.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "prettier": "^3.9.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.62.0",
     "vitest": "^2.1.8"
   }
 }

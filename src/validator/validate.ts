@@ -66,17 +66,7 @@ export interface ValidationResult {
   errors: ValidationError[];
 }
 
-const TOP_LEVEL_KEYS = [
-  "specVersion",
-  "width",
-  "height",
-  "fps",
-  "duration",
-  "seed",
-  "background",
-  "nodes",
-  "narration",
-];
+const TOP_LEVEL_KEYS = ["specVersion", "width", "height", "fps", "duration", "seed", "background", "nodes", "narration"];
 
 const TEXT_ALIGN = ["left", "center", "right"];
 const TEXT_BASELINE = ["top", "middle", "alphabetic", "bottom"];
@@ -99,11 +89,7 @@ function editDistance(a: string, b: string): number {
     dp[0] = i;
     for (let j = 1; j <= n; j++) {
       const tmp = dp[j]!;
-      dp[j] = Math.min(
-        dp[j]! + 1,
-        dp[j - 1]! + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
+      dp[j] = Math.min(dp[j]! + 1, dp[j - 1]! + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
       prev = tmp;
     }
   }
@@ -185,9 +171,7 @@ class Validator {
           path: "background",
           property: "background",
           code: "INVALID_COLOR",
-          message: `background must be a color (hex, rgb()/rgba(), or a named color); got ${JSON.stringify(
-            spec.background,
-          )}.`,
+          message: `background must be a color (hex, rgb()/rgba(), or a named color); got ${JSON.stringify(spec.background)}.`,
         });
       }
     }
@@ -322,9 +306,7 @@ class Validator {
         ...(nodeId ? { nodeId } : {}),
         property: "type",
         code: "UNKNOWN_TYPE",
-        message: `Node "${nodeId ?? "?"}" has unknown type ${JSON.stringify(type)}. Expected one of: ${NODE_TYPES.join(
-          ", ",
-        )}.`,
+        message: `Node "${nodeId ?? "?"}" has unknown type ${JSON.stringify(type)}. Expected one of: ${NODE_TYPES.join(", ")}.`,
       });
       return; // can't validate further without a known type
     }
@@ -340,9 +322,7 @@ class Validator {
           ...(nodeId ? { nodeId } : {}),
           property: key,
           code: "UNKNOWN_PROPERTY",
-          message: `Node "${nodeId ?? "?"}" (${nodeType}) has unknown property "${key}".${
-            hint ? ` Did you mean "${hint}"?` : ""
-          }`,
+          message: `Node "${nodeId ?? "?"}" (${nodeType}) has unknown property "${key}".${hint ? ` Did you mean "${hint}"?` : ""}`,
         });
       }
     }
@@ -400,12 +380,7 @@ class Validator {
     }
   }
 
-  private validateTypeProps(
-    node: Record<string, unknown>,
-    type: NodeType,
-    path: string,
-    nodeId: string | undefined,
-  ): void {
+  private validateTypeProps(node: Record<string, unknown>, type: NodeType, path: string, nodeId: string | undefined): void {
     const nonNegNum = (key: string) => {
       const v = node[key];
       if (v === undefined) return;
@@ -520,12 +495,7 @@ class Validator {
     }
   }
 
-  private validateTracks(
-    node: Record<string, unknown>,
-    type: NodeType,
-    path: string,
-    nodeId: string | undefined,
-  ): void {
+  private validateTracks(node: Record<string, unknown>, type: NodeType, path: string, nodeId: string | undefined): void {
     const tracks = node.tracks;
     if (tracks === undefined) return;
     if (!Array.isArray(tracks)) {
@@ -650,9 +620,7 @@ class Validator {
               ...(nodeId ? { nodeId } : {}),
               property,
               code: "INVALID_COLOR",
-              message: `Keyframe value for "${property}" must be an interpolatable color; got ${JSON.stringify(
-                kf.value,
-              )}.`,
+              message: `Keyframe value for "${property}" must be an interpolatable color; got ${JSON.stringify(kf.value)}.`,
             });
           }
         }
@@ -708,13 +676,7 @@ class Validator {
     });
   }
 
-  private enumProp(
-    node: Record<string, unknown>,
-    key: string,
-    options: string[],
-    path: string,
-    nodeId: string | undefined,
-  ): void {
+  private enumProp(node: Record<string, unknown>, key: string, options: string[], path: string, nodeId: string | undefined): void {
     const v = node[key];
     if (v === undefined) return;
     if (typeof v !== "string" || !options.includes(v)) {

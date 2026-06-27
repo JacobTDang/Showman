@@ -26,9 +26,7 @@ describe("golden frames", () => {
           const actual = renderFrame(spec, frame).toPNG();
 
           if (!existsSync(file)) {
-            throw new Error(
-              `Missing golden ${goldenFileName(name, frame)}. Run \`npm run golden:update\` to generate it.`,
-            );
+            throw new Error(`Missing golden ${goldenFileName(name, frame)}. Run \`npm run golden:update\` to generate it.`);
           }
 
           const expected = readFileSync(file);
