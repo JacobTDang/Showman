@@ -91,6 +91,8 @@ export type { ClusterOptions, DistributedResult } from "./distributed/cluster.js
 export { renderSegment, decodeSegment, assembleSegments } from "./distributed/segment.js";
 export { CoordinatorService, createCoordinatorServer, listenCoordinator } from "./distributed/coordinatorService.js";
 export type { CoordinatorServiceOptions } from "./distributed/coordinatorService.js";
+export { HttpTaskQueue } from "./distributed/httpQueue.js";
+export { createRemoteWorker, startRemoteWorker } from "./distributed/remoteWorkerMain.js";
 
 // Beautiful + learning-grade (M5)
 export type { PolygonNode, NarrationSegment } from "./spec/types.js";

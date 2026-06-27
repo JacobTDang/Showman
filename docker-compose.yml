@@ -30,11 +30,24 @@ services:
     environment:
       PORT: "8090"
       SHOWMAN_DATA_DIR: /data
-      SHOWMAN_WORKERS: "8"
+      SHOWMAN_WORKERS: "0" # do no rendering here; the shard-worker fleet pulls the work
     volumes:
       - showman-data:/data
     depends_on:
       - worker
+
+  # Horizontally-scalable shard workers that PULL tasks from the coordinator over
+  # HTTP and share storage. Scale with: docker compose up --scale shard-worker=8
+  shard-worker:
+    image: showman:dev
+    command: ["node", "dist/distributed/remoteWorkerMain.js"]
+    environment:
+      SHOWMAN_COORDINATOR_URL: http://coordinator:8090
+      SHOWMAN_DATA_DIR: /data
+    volumes:
+      - showman-data:/data
+    depends_on:
+      - coordinator
 
   gateway:
     build:

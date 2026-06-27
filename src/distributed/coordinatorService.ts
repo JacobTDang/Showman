@@ -9,7 +9,8 @@ import type { AddressInfo } from "node:net";
 import { Coordinator } from "./coordinator.js";
 import { ShardWorker } from "./shardWorker.js";
 import { InMemoryLeaseQueue } from "./queue.js";
-import type { DistributedRenderOptions, ProgressEvent, ShardTask } from "./messages.js";
+import type { DistributedRenderOptions, ProgressEvent, ShardResult, ShardTask } from "./messages.js";
+import type { LeasedMessage } from "./queue.js";
 import type { ObjectStorage } from "../service/storage.js";
 import { guessContentType } from "../service/storage.js";
 
@@ -18,9 +19,12 @@ import type { ModerationProvider } from "../safety/moderation.js";
 export interface CoordinatorServiceOptions {
   storage: ObjectStorage;
   workDir: string;
+  /** Internal in-process shard workers. Set to 0 to serve only external HTTP-pull workers. */
   workers?: number;
   ffmpegPath?: string;
   moderation?: ModerationProvider;
+  /** Provide a custom queue (e.g. a Redis-backed one). Defaults to in-memory. */
+  queue?: InMemoryLeaseQueue<ShardTask>;
 }
 
 /** A persistent coordinator + continuously-running shard workers. */
@@ -32,7 +36,7 @@ export class CoordinatorService {
   private readonly lastProgress = new Map<string, ProgressEvent>();
 
   constructor(opts: CoordinatorServiceOptions) {
-    this.queue = new InMemoryLeaseQueue<ShardTask>();
+    this.queue = opts.queue ?? new InMemoryLeaseQueue<ShardTask>();
     this.coordinator = new Coordinator({
       queue: this.queue,
       storage: opts.storage,
@@ -43,7 +47,7 @@ export class CoordinatorService {
     });
     this.queue.onDeadLetter((task) => this.coordinator.failJob(task.jobId, `shard ${task.shardId} exceeded retries (poison shard)`));
 
-    const n = Math.max(1, opts.workers ?? 4);
+    const n = Math.max(0, opts.workers ?? 4);
     this.workers = Array.from({ length: n }, (_, i) =>
       new ShardWorker({
         id: `w${i}`,
@@ -74,6 +78,20 @@ export class CoordinatorService {
 
   progress(jobId: string): ProgressEvent | undefined {
     return this.lastProgress.get(jobId);
+  }
+
+  // --- Task broker: lets external HTTP-pull workers share this coordinator's queue ---
+  leaseTask(visibilityMs?: number): Promise<LeasedMessage<ShardTask> | null> {
+    return this.queue.lease(visibilityMs);
+  }
+  ackTask(leaseId: string): Promise<void> {
+    return this.queue.ack(leaseId);
+  }
+  nackTask(leaseId: string): Promise<void> {
+    return this.queue.nack(leaseId);
+  }
+  reportResult(result: ShardResult): Promise<void> {
+    return this.coordinator.onShardResult(result);
   }
 
   /** Observability snapshot: queue depth, in-flight, dead-letters, jobs by state. */
@@ -154,6 +172,29 @@ export function createCoordinatorServer(service: CoordinatorService, storage: Ob
         const status = service.status(id);
         if (!status) return sendJson(res, 404, { error: "not_found", id });
         return sendJson(res, 200, status);
+      }
+
+      // Task broker for external HTTP-pull shard workers.
+      if (method === "POST" && path === "/tasks/lease") {
+        const b = (await readJson(req)) as { visibilityMs?: number };
+        const leased = await service.leaseTask(b?.visibilityMs);
+        if (!leased) return void res.writeHead(204).end();
+        return sendJson(res, 200, leased);
+      }
+      if (method === "POST" && path === "/tasks/ack") {
+        const b = (await readJson(req)) as { leaseId?: string };
+        await service.ackTask(String(b?.leaseId));
+        return sendJson(res, 200, { ok: true });
+      }
+      if (method === "POST" && path === "/tasks/nack") {
+        const b = (await readJson(req)) as { leaseId?: string };
+        await service.nackTask(String(b?.leaseId));
+        return sendJson(res, 200, { ok: true });
+      }
+      if (method === "POST" && path === "/tasks/result") {
+        const b = (await readJson(req)) as ShardResult;
+        await service.reportResult(b);
+        return sendJson(res, 200, { ok: true });
       }
 
       if (method === "GET" && path.startsWith("/objects/")) {

@@ -111,6 +111,16 @@ finished video") is realized end to end and tested offline:
 - `npm run brief -- "teach counting to four balloons in a magical fairy land"` produced
   the berry-themed 4-balloon lesson in `docs/brief-lesson-frame.png`.
 
+## Horizontal scale — HTTP-pull workers  ✅
+
+True multi-process worker scaling **without Redis**: the coordinator exposes its
+queue over HTTP (`/tasks/lease|ack|nack|result`), and standalone shard workers
+(`src/distributed/remoteWorkerMain.ts`, via `HttpTaskQueue`) pull tasks, render
+segments to shared storage, and report back. Proven by a test where a coordinator
+with **zero internal workers** has its job rendered entirely by external pull
+workers. `docker compose up --scale shard-worker=8` scales the fleet. (A Redis-backed
+`Queue` is the alternative for very large fleets — same interface.)
+
 ### Build order
 Critical path **M0 → M1 → M2 → M3**, then M4, then M5, harden in M6. Optional:
 pull a thin slice of M5 (theming + one storytelling primitive) forward as an

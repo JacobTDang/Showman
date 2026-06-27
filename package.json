@@ -20,6 +20,7 @@
     "brief": "tsx scripts/brief-to-video.ts",
     "worker": "node dist/service/worker.js",
     "coordinator": "node dist/distributed/coordinatorMain.js",
+    "shard-worker": "node dist/distributed/remoteWorkerMain.js",
     "mcp": "node dist/mcp/main.js"
   },
   "dependencies": {

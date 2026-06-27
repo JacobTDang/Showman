@@ -32,7 +32,7 @@ describe("parseBrief", () => {
 describe("TemplateAuthor", () => {
   it("authors a valid lesson spec from a brief", async () => {
     const author = new TemplateAuthor({ width: 320, height: 180, fps: 10 });
-    const spec = (await author.propose("teach counting to four with stars under the sea", { schema: {} as never, attempt: 1 })) as SceneSpec;
+    const spec = (await author.propose("teach counting to four with stars under the sea")) as SceneSpec;
     expect(validateScene(spec).valid).toBe(true);
     expect(spec.width).toBe(320);
     expect(spec.narration!.segments!.length).toBe(6); // intro + 4 + recap
