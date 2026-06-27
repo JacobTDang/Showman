@@ -25,12 +25,6 @@ func (m *metrics) inc(name string) {
 	m.mu.Unlock()
 }
 
-func (m *metrics) get(name string) int64 {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.counters[name]
-}
-
 // render writes the registry in Prometheus exposition format.
 func (m *metrics) render(w http.ResponseWriter) {
 	m.mu.Lock()
