@@ -91,6 +91,13 @@ export type { ClusterOptions, DistributedResult } from "./distributed/cluster.js
 export { renderSegment, decodeSegment, assembleSegments } from "./distributed/segment.js";
 export { CoordinatorService, createCoordinatorServer, listenCoordinator } from "./distributed/coordinatorService.js";
 export type { CoordinatorServiceOptions } from "./distributed/coordinatorService.js";
+
+// MCP + authoring (M4)
+export { DirectBackend, HttpBackend, TOOL_DEFINITIONS, callTool } from "./mcp/showmanTools.js";
+export type { ShowmanClient, ToolDefinition, PreviewOk, CapabilityErr } from "./mcp/showmanTools.js";
+export { createMcpServer, startMcpServer } from "./mcp/server.js";
+export { AuthoringAgent, ScriptedAuthor, AnthropicSpecAuthor, extractJson } from "./authoring/agent.js";
+export type { SpecAuthor, AuthorContext, AuthoringResult, AuthoringOptions, AuthoringAttempt } from "./authoring/agent.js";
 export type {
   ShardTask,
   ShardResult,

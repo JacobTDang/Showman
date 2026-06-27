@@ -70,11 +70,11 @@ the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a ty
 - [x] **M3.5 — Assembler + fan-in barrier** — coordinator waits for *all* shards, then `assembleSegments` concatenates through one FFmpeg pass.
 - [x] **M3.6 — Idempotent retry + progress** — lease expiry/nack requeues a dead worker's shard; a retried shard produces **byte-identical** output. **Proven: a sharded render equals a monolithic render byte-for-byte.** Progress events observable; poison shards dead-lettered.
 
-## M4 — Agent-native interface (MCP) + authoring loop
+## M4 — Agent-native interface (MCP) + authoring loop  ✅
 
-- [ ] **M4.1 — MCP adapter** — get-schema, validate, preview, submit, status, result.
-- [ ] **M4.2 — Self-describing schema tool** — agent authors valid scenes from schema alone.
-- [ ] **M4.3 — Authoring agent loop** — brief → plan → emit → validate → preview → self-correct → submit.
+- [x] **M4.1 — MCP adapter** — `src/mcp/`: MCP server (SDK, stdio) exposing get-schema, validate, preview, submit, status. Backend-agnostic (`DirectBackend` in-process / `HttpBackend` over the gateway). Real protocol round-trip tested via in-memory transport.
+- [x] **M4.2 — Self-describing schema tool** — `showman_get_schema` returns `describeScene()` (node types, animatable props, easings, fonts, limits, example) so an agent authors valid scenes with no hardcoded format.
+- [x] **M4.3 — Authoring agent loop** — `src/authoring/agent.ts`: brief → propose → validate → preview → **self-correct from structured errors** → submit. Pluggable `SpecAuthor` (`ScriptedAuthor` for tests, `AnthropicSpecAuthor` for real LLM authoring). Self-correction proven by test.
 
 ## M5 — Beautiful + learning-grade  *(the reason the project exists)*
 
