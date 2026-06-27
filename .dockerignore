@@ -1,0 +1,13 @@
+node_modules
+dist
+out
+data
+data-smoke
+.git
+.gitignore
+test
+**/*.test.ts
+coverage
+*.log
+README.md
+control-plane/bin

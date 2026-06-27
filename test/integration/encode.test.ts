@@ -112,6 +112,15 @@ describe("encodeSceneToFile (spec -> mp4)", () => {
     expect(Buffer.compare(readFileSync(a), readFileSync(b))).toBe(0);
   });
 
+  it("parallel encoding (concurrency>1) is byte-identical to inline encoding", async () => {
+    if (!ffmpegAvailable) return expect.unreachable("ffmpeg is required for the encoder");
+    const inline = join(outDir, "c1.mp4");
+    const parallel = join(outDir, "c4.mp4");
+    await encodeSceneToFile(movingRectScene(), { outPath: inline, deterministic: true, concurrency: 1 });
+    await encodeSceneToFile(movingRectScene(), { outPath: parallel, deterministic: true, concurrency: 4 });
+    expect(Buffer.compare(readFileSync(inline), readFileSync(parallel))).toBe(0);
+  });
+
   it("reports progress for every frame, ending at (n, n)", async () => {
     if (!ffmpegAvailable) return expect.unreachable("ffmpeg is required for the encoder");
     const calls: Array<[number, number]> = [];

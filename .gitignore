@@ -2,6 +2,9 @@ node_modules/
 dist/
 coverage/
 out/
+data/
+data-smoke/
+control-plane/bin/
 *.log
 .DS_Store
 

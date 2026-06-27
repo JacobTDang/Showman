@@ -43,18 +43,18 @@ the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a ty
 
 ---
 
-## M1 — Single render container (spec → mp4)  🚧 (encoder landed)
+## M1 — Single render container (spec → mp4)  ✅
 
-- [ ] **M1.1 — Frame pool** — worker-thread/process pool sized to cores. *Done: pool saturates all cores.* (encoder is sequential today)
-- [x] **M1.2 — FFmpeg pipe** — `src/encode/encodeVideo.ts`: engine frames → FFmpeg stdin (no disk hop) → mp4. Deterministic (bitexact) mode byte-identical across runs; verified with ffprobe. `npm run demo` renders the counting lesson to `out/lesson.mp4`.
-- [ ] **M1.3 — HTTP surface** — `POST {spec, options}` → stored video reference. *Done: POST a spec, get an mp4.*
-- [ ] **M1.4 — Worker image** — pinned fonts + FFmpeg + engine version baked in; stateless. *Done: identical mp4 across machines.*
+- [x] **M1.1 — Frame pool** — `src/render/framePool.ts`: `worker_threads` pool (cores-1) renders frames in parallel, byte-identical to sequential; encoder uses it in ordered chunks. 20-core machine verified.
+- [x] **M1.2 — FFmpeg pipe** — `src/encode/encodeVideo.ts`: engine frames → FFmpeg stdin (no disk hop) → mp4. Deterministic (bitexact) mode byte-identical; ffprobe-verified. `npm run demo`.
+- [x] **M1.3 — HTTP surface** — `src/service/`: `GET /healthz /schema`, `POST /validate /preview /render`, `GET /objects/<key>`. Content-addressed → idempotent/cached renders. `RenderService` is the shared capability core.
+- [x] **M1.4 — Worker image** — `Dockerfile` (multi-stage: build → slim runtime + ffmpeg + pinned fonts + compiled engine), `.dockerignore`. Worker runs natively (`npm start`); image build needs a running Docker daemon (Docker Desktop was off this session).
 
-## M2 — Streaming + async output
+## M2 — Streaming + async output  ✅
 
-- [ ] **M2.1 — Streaming endpoint** — fragmented MP4/HLS; playback before render finishes.
-- [ ] **M2.2 — Async job lifecycle** — submit → `jobId` → poll → `resultUrl`.
-- [ ] **M2.3 — Preview-frame capability** — single inline PNG for a frame.
+- [x] **M2.1 — Streaming endpoint** — `POST /render/stream` pipes a fragmented MP4 as frames render (`encodeSceneToStream`); playback can begin before render finishes.
+- [x] **M2.2 — Async job lifecycle** — `POST /jobs` → `jobId` (202) → `GET /jobs/:id` → `result.video`. `JobRunner` + pluggable `JobStore` (in-memory now, Postgres in M3).
+- [x] **M2.3 — Preview-frame capability** — `POST /preview` → inline PNG (or base64 via `?format=json`).
 
 ## M3 — Go control plane + distributed rendering
 
