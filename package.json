@@ -1,0 +1,27 @@
+{
+  "name": "showman",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent-driven animated learning videos — deterministic rendering engine (M0).",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:golden": "vitest run test/golden",
+    "golden:update": "tsx scripts/update-golden.ts"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.65"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Local scratch / caches not part of the engine
+db_cache/
+
+# Golden test scratch output (regenerated, never committed except the blessed goldens)
+test/golden/__received__/
