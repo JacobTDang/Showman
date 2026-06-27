@@ -1,0 +1,184 @@
+# Showman on Kubernetes (M6.4).
+#
+#   Internet ── Ingress ──▶ gateway (Deployment) ──┬─▶ worker (Deployment, autoscaled)
+#                                                   └─▶ coordinator (Deployment)
+#
+# Workers are the unit of horizontal scale; the HPA grows them on CPU, and the
+# commented KEDA ScaledObject grows them on queue depth (the coordinator's
+# /metrics showman_coordinator_queue_pending) — the right signal for a render farm.
+#
+# Object storage: in a cluster, point storage at S3/MinIO (the ObjectStorage S3
+# adapter) rather than a node-local volume, so every worker shares segments + videos.
+# CI/CD builds the pinned worker image (Dockerfile) and the gateway image
+# (control-plane/Dockerfile).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: showman
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: showman
+data:
+  SHOWMAN_WORKER_URL: "http://worker:8080"
+  SHOWMAN_COORDINATOR_URL: "http://coordinator:8090"
+  SHOWMAN_MAX_JOBS_PER_USER: "200"
+  SHOWMAN_MAX_WIDTH: "3840"
+  SHOWMAN_MAX_HEIGHT: "2160"
+  SHOWMAN_MAX_DURATION: "600"
+  # SHOWMAN_CDN_BASE_URL: "https://cdn.example.com"   # M6.3: redirect /v1/objects to the CDN
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-secrets
+  namespace: showman
+type: Opaque
+stringData:
+  # api-key:userId pairs. Replace before deploying.
+  SHOWMAN_API_KEYS: "replace-me:demo-user"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: showman
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      containers:
+        - name: worker
+          image: showman:dev # built from ./Dockerfile (pinned fonts + ffmpeg + engine)
+          command: ["node", "dist/service/worker.js"]
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: SHOWMAN_DATA_DIR, value: "/data" }
+          resources:
+            requests: { cpu: "1", memory: "1Gi" }
+            limits: { cpu: "4", memory: "4Gi" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: showman
+spec:
+  selector: { app: worker }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coordinator
+  namespace: showman
+spec:
+  replicas: 1 # single coordinator; scale via Redis/Postgres-backed queue + state
+  selector:
+    matchLabels: { app: coordinator }
+  template:
+    metadata:
+      labels: { app: coordinator }
+    spec:
+      containers:
+        - name: coordinator
+          image: showman:dev
+          command: ["node", "dist/distributed/coordinatorMain.js"]
+          ports: [{ containerPort: 8090 }]
+          env:
+            - { name: PORT, value: "8090" }
+            - { name: SHOWMAN_DATA_DIR, value: "/data" }
+            - { name: SHOWMAN_WORKERS, value: "8" }
+          resources:
+            requests: { cpu: "2", memory: "2Gi" }
+            limits: { cpu: "8", memory: "8Gi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator
+  namespace: showman
+spec:
+  selector: { app: coordinator }
+  ports: [{ port: 8090, targetPort: 8090 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: showman
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      containers:
+        - name: gateway
+          image: showman-gateway:dev # built from ./control-plane/Dockerfile
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: gateway-config }
+            - secretRef: { name: gateway-secrets }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: showman
+spec:
+  type: LoadBalancer
+  selector: { app: gateway }
+  ports: [{ port: 80, targetPort: 8080 }]
+---
+# Autoscale workers on CPU (a baseline). For queue-depth scaling, use the KEDA
+# ScaledObject below instead, driven by the coordinator's Prometheus metric.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-hpa
+  namespace: showman
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: 2
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+# ---
+# apiVersion: keda.sh/v1alpha1
+# kind: ScaledObject
+# metadata: { name: worker-queue-scaler, namespace: showman }
+# spec:
+#   scaleTargetRef: { name: worker }
+#   minReplicaCount: 2
+#   maxReplicaCount: 100
+#   triggers:
+#     - type: prometheus
+#       metadata:
+#         serverAddress: http://prometheus.monitoring:9090
+#         query: showman_coordinator_queue_pending
+#         threshold: "20"

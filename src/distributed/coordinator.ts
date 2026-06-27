@@ -129,6 +129,13 @@ export class Coordinator {
     }
   }
 
+  /** Count jobs by state (for observability). */
+  jobStateCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const job of this.jobs.values()) counts[job.state] = (counts[job.state] ?? 0) + 1;
+    return counts;
+  }
+
   status(jobId: string): JobStatusView | null {
     const job = this.jobs.get(jobId);
     if (!job) return null;

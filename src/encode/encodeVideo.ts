@@ -156,6 +156,90 @@ async function pumpFrames(
   stdin.end();
 }
 
+export interface HlsEncodeOptions {
+  /** Directory to write the playlist + segments into. */
+  outDir: string;
+  /** Playlist filename. Default "index.m3u8". */
+  playlistName?: string;
+  /** Target segment length in seconds. Default 4. */
+  segmentSeconds?: number;
+  crf?: number;
+  preset?: string;
+  ffmpegPath?: string;
+  concurrency?: number;
+  onProgress?: (framesDone: number, totalFrames: number) => void;
+}
+
+export interface HlsResult {
+  playlistPath: string;
+  dir: string;
+  frameCount: number;
+  durationSec: number;
+}
+
+/**
+ * M6.3 — Encode to HLS (an .m3u8 playlist + .ts segments) for adaptive streaming of
+ * longer videos. Frames render the same deterministic way and feed one FFmpeg pass
+ * that segments the output.
+ */
+export async function encodeSceneToHls(spec: SceneSpec, options: HlsEncodeOptions): Promise<HlsResult> {
+  const { width, height, fps } = spec;
+  const frameCount = totalFrames(fps, spec.duration);
+  const {
+    outDir,
+    playlistName = "index.m3u8",
+    segmentSeconds = 4,
+    crf = 20,
+    preset = "veryfast",
+    ffmpegPath = "ffmpeg",
+    concurrency = 1,
+    onProgress,
+  } = options;
+
+  const { mkdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  mkdirSync(outDir, { recursive: true });
+  const playlistPath = join(outDir, playlistName);
+
+  const args = [
+    "-y",
+    "-f", "rawvideo",
+    "-pix_fmt", "rgba",
+    "-s", `${width}x${height}`,
+    "-r", String(fps),
+    "-i", "pipe:0",
+    "-an",
+    "-c:v", "libx264",
+    "-preset", preset,
+    "-crf", String(crf),
+    "-pix_fmt", "yuv420p",
+    "-g", String(Math.max(1, Math.round(fps * segmentSeconds))),
+    "-hls_time", String(segmentSeconds),
+    "-hls_playlist_type", "vod",
+    "-hls_segment_filename", join(outDir, "seg_%03d.ts"),
+    "-f", "hls",
+    playlistPath,
+  ];
+
+  const proc = spawn(ffmpegPath, args, { stdio: ["pipe", "ignore", "pipe"] });
+  let stderr = "";
+  proc.stderr?.on("data", (c: Buffer) => {
+    stderr += c.toString();
+    if (stderr.length > 64_000) stderr = stderr.slice(-64_000);
+  });
+  const spawnErr = new Promise<never>((_, reject) => {
+    proc.on("error", (err) => reject(new Error(`Failed to start ffmpeg ("${ffmpegPath}"): ${err.message}`)));
+  });
+  const exited = new Promise<void>((resolve, reject) => {
+    proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg HLS exited with code ${code}.\n${stderr.slice(-2000)}`))));
+  });
+  if (!proc.stdin) throw new Error("ffmpeg stdin unavailable");
+  const pump = pumpFrames(spec, frameCount, concurrency, proc.stdin, onProgress);
+  await Promise.race([Promise.all([pump, exited]), spawnErr]);
+
+  return { playlistPath, dir: outDir, frameCount, durationSec: frameCount / fps };
+}
+
 export interface StreamEncodeOptions {
   crf?: number;
   preset?: string;

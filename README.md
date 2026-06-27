@@ -1,75 +1,107 @@
 # Showman
 
-A deterministic animation engine for **beautiful, narrated, pedagogically-structured
-learning videos for children** — authored by AI agents.
+An animation engine for **beautiful, narrated, pedagogically-structured learning
+videos for children** — authored by AI agents. A teacher or an agent provides a
+brief ("teach counting to five with stars"); Showman produces a polished, warm,
+narrated, captioned animation a child can watch.
 
-This repo currently implements **M0: the spec contract + deterministic engine** (see
-[MILESTONES.md](./MILESTONES.md) for the full roadmap and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)
-for the product vision).
+All milestones **M0–M6** are implemented. See [MILESTONES.md](./MILESTONES.md) for
+the breakdown and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the vision.
 
-## What's here (M0)
+![A counting lesson frame](docs/lesson-frame.png)
 
-- **The Scene Spec** — a serializable JSON contract describing a scene: dimensions,
-  fps, duration, seed, background, and a tree of nodes (`rect`, `ellipse`, `text`,
-  `group`) with base transforms and keyframed animation tracks.
-- **A structured validator** — returns actionable `{path, nodeId, property, code,
-  message}` errors (with "did you mean…" hints) instead of throwing. This is what an
-  authoring agent self-corrects against.
-- **A pure, deterministic renderer** — `renderFrame(spec, frameIndex) → pixels`.
-  Same input → byte-identical output, always. No wall-clock, no `Math.random`
-  (enforced by a test), Skia-backed text with a pinned font.
+## Architecture
+
+```
+            ┌──────────────── Control plane (Go) ───────────────┐
+ agents ──▶ │  Gateway: capability API + auth/quota/bounds      │
+ web app ─▶ │           + /metrics + CDN redirect               │
+            └───────────────────────────────────────────────────┘
+                   │                         │
+            worker (TS)               coordinator (TS)
+       validate/preview/schema     shard → queue → fan-in assemble
+       /render (+ narration,       work-stealing shard workers (TS)
+        captions, safety gate)            │
+                   └──────── object storage (local / S3) ───────┘
+```
+
+- **TypeScript** owns the deterministic engine, render worker, distributed
+  coordinator/workers/assembler, and the MCP adapter.
+- **Go** owns the edge gateway (capability API + policy + observability).
+- Everything speaks the **Scene Spec (JSON)**; languages meet only at JSON seams.
+
+## What's here
+
+| Milestone | What |
+|---|---|
+| **M0** | Scene Spec contract, structured validator, deterministic `(spec, frame) → pixels` renderer (Skia, pinned fonts, seeded RNG). |
+| **M1** | Multi-core frame pool, `spec → mp4` via FFmpeg pipe, HTTP capability worker, Docker image. |
+| **M2** | Streaming (fragmented mp4) + async jobs (submit → poll → result). |
+| **M3** | Distributed rendering: Go gateway, sharded fan-out, work-stealing pull, fan-in assembler, **idempotent retry** (a sharded render is byte-identical to a monolithic one). |
+| **M4** | MCP server (agent tools) + self-correcting authoring loop. |
+| **M5** | Storytelling primitives, motion presets, themes, narration/TTS, captions, lesson templates, content-safety gate. |
+| **M6** | Auth/quota/bounds, Prometheus metrics, CDN + HLS, Kubernetes manifests, CI. |
+
+## Quickstart
+
+```bash
+npm install
+npm test              # 173 tests (unit + integration + golden + purity)
+npm run demo:lesson   # render a narrated, captioned counting lesson -> out/
+
+# Author a lesson programmatically
+node -e "import('./dist/index.js')" # after `npm run build`
+```
 
 ```ts
-import { renderFrame, validateScene, assertValidScene } from "showman";
+import { buildCountingLesson, RenderService, LocalObjectStorage,
+         SilentTtsProvider, RuleBasedModeration } from "showman";
 
-const spec = {
-  specVersion: 1,
-  width: 640, height: 360, fps: 30, duration: 3, seed: 7,
-  background: "#fdf6e3",
-  nodes: [
-    { id: "title", type: "text", x: 320, y: 46, text: "Count to 3!",
-      fontSize: 46, fontWeight: 800, fill: "#1d6f72", align: "center", baseline: "middle" },
-    { id: "apple", type: "ellipse", x: 125, y: 150, width: 70, height: 70, fill: "#e63946",
-      anchor: { x: 35, y: 35 },
-      tracks: [
-        { property: "opacity", keyframes: [{ t: 0.3, value: 0 }, { t: 0.9, value: 1, easing: "easeOutQuad" }] },
-        { property: "scale",   keyframes: [{ t: 0.3, value: 0.6 }, { t: 0.9, value: 1, easing: "easeOutBack" }] },
-      ] },
-  ],
-};
-
-const { valid, errors } = validateScene(spec);   // structured errors, never throws
-const frame = renderFrame(assertValidScene(spec), 60);
-frame.pixels;   // Uint8ClampedArray RGBA (fed to FFmpeg in M1)
-frame.toPNG();  // Buffer (preview)
+const lesson = buildCountingLesson({ count: 5, topic: "stars", theme: "sunshine", itemShape: "star" });
+const storage = new LocalObjectStorage("data/objects");
+const service = new RenderService({ storage, workDir: "data/tmp",
+  tts: new SilentTtsProvider(), moderation: new RuleBasedModeration() });
+const result = await service.render(lesson);   // { video, captions, hasAudio, ... } or { blocked } if unsafe
 ```
+
+## Run the services
+
+```bash
+npm run build
+npm run worker        # render worker        :8080  (/validate /preview /render /jobs /objects)
+npm run coordinator   # sharding coordinator :8090  (/jobs /metrics)
+npm run mcp           # MCP server over stdio (agent tools)
+
+# Local cluster (needs Docker daemon)
+docker compose up --build
+curl -X POST localhost:8080/v1/jobs -d '{"spec": ...}'
+```
+
+## Agent interface (MCP)
+
+The MCP server exposes `showman_get_schema`, `showman_validate_scene`,
+`showman_preview_scene`, `showman_submit_render`, `showman_job_status`. An agent
+reads the schema, authors a scene, previews a frame, self-corrects against
+structured validation errors, and submits — see `src/authoring/agent.ts`.
 
 ## Key design decisions
 
 | Decision | Choice | Why |
 |---|---|---|
-| Render backend | `@napi-rs/canvas` (Skia, prebuilt) | Skia-backed, no system deps, deterministic |
-| Keyframe time unit | **seconds** (not frame index) | fps-independent timing; sets up M5 narration sync |
-| Validation | hand-written structured validator | agent-actionable errors > mapped Ajv output |
-| Fonts | **pinned** Nunito in `assets/fonts/` | font drift is the top cause of cross-machine pixel differences |
-| Randomness | seeded `mulberry32` only | purity = determinism = safe parallelism + retry |
+| Render backend | `@napi-rs/canvas` (Skia) | deterministic, no system deps |
+| Keyframe time | seconds (not frames) | fps-independent; syncs narration |
+| Determinism | seeded RNG only, pinned fonts, bitexact encode | safe parallelism + retry + caching |
+| Control plane | Go gateway, TS coordinator/workers | JSON seams; pragmatic + tested |
+| Storage / queue / jobs | interfaces (local/in-memory now) | Redis/Postgres/S3 adapters for scale |
 
 ## Develop
 
 ```bash
-npm install
-npm test              # all tests (unit + integration + golden + purity)
-npm run test:watch    # watch mode
-npm run typecheck     # tsc --noEmit
-npm run golden:update # regenerate golden PNGs after an intentional visual change
+npm run typecheck                 # tsc --noEmit
+npm run golden:update             # regenerate golden frames after an intentional change
+cd control-plane && go test ./... # gateway tests
 ```
 
-### Test layout
-- `test/unit/` — rng, color, easing, interpolation, resolve, validator.
-- `test/integration/` — end-to-end render, determinism, **animation-correctness via
-  pixel sampling**, group cascade, opacity, transparent bg, text; plus an engine
-  **purity** scan (no clock / `Math.random`).
-- `test/golden/` — blessed reference frames compared byte-for-byte.
-
-Golden images are pinned to this machine + engine + font version; that's intentional.
-M1 bakes those into a container so they hold across machines.
+Determinism is enforced by tests: render-twice byte-equality, a golden-frame suite,
+an engine **purity** scan (no clock / `Math.random`), and a proof that a
+**distributed render equals a monolithic render byte-for-byte**.

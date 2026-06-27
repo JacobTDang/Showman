@@ -35,6 +35,7 @@ type Config struct {
 	APIKeys        map[string]string // api-key -> userID; empty => auth disabled (dev)
 	MaxJobsPerUser int               // 0 => unlimited
 	Bounds         Bounds
+	CDNBaseURL     string // if set, /v1/objects/<key> redirects here (M6.3 CDN delivery)
 }
 
 // ConfigFromEnv builds a Config from environment variables.
@@ -50,14 +51,16 @@ func ConfigFromEnv() Config {
 			MaxFrames:   atoiDefault(os.Getenv("SHOWMAN_MAX_FRAMES"), 18000),
 			MaxDuration: atofDefault(os.Getenv("SHOWMAN_MAX_DURATION"), 600),
 		},
+		CDNBaseURL: os.Getenv("SHOWMAN_CDN_BASE_URL"),
 	}
 }
 
 // Gateway is an http.Handler implementing the capability API + edge policy.
 type Gateway struct {
-	cfg    Config
-	client *http.Client
-	mux    *http.ServeMux
+	cfg     Config
+	client  *http.Client
+	mux     *http.ServeMux
+	metrics *metrics
 
 	mu       sync.Mutex
 	jobCount map[string]int // userID -> jobs submitted (naive quota)
@@ -69,17 +72,24 @@ func New(cfg Config) *Gateway {
 		cfg:      cfg,
 		client:   &http.Client{Timeout: 120 * time.Second},
 		mux:      http.NewServeMux(),
+		metrics:  newMetrics(),
 		jobCount: map[string]int{},
 	}
 	g.routes()
 	return g
 }
 
-func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) { g.mux.ServeHTTP(w, r) }
+func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	g.metrics.inc("requests_total")
+	g.mux.ServeHTTP(w, r)
+}
 
 func (g *Gateway) routes() {
 	g.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	})
+	g.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+		g.metrics.render(w)
 	})
 	g.mux.HandleFunc("GET /v1/schema", g.proxyWorker("/schema"))
 	g.mux.HandleFunc("POST /v1/validate", g.proxyWorker("/validate"))
@@ -92,7 +102,15 @@ func (g *Gateway) routes() {
 		g.forward(w, r, g.cfg.CoordinatorURL, "/jobs/"+r.PathValue("id"), nil)
 	})
 	g.mux.HandleFunc("GET /v1/objects/{key...}", func(w http.ResponseWriter, r *http.Request) {
-		g.forward(w, r, g.cfg.CoordinatorURL, "/objects/"+r.PathValue("key"), nil)
+		key := r.PathValue("key")
+		// M6.3: when a CDN fronts object storage, redirect finished videos there
+		// instead of proxying bytes through the gateway.
+		if g.cfg.CDNBaseURL != "" {
+			g.metrics.inc("cdn_redirects_total")
+			http.Redirect(w, r, strings.TrimRight(g.cfg.CDNBaseURL, "/")+"/"+key, http.StatusFound)
+			return
+		}
+		g.forward(w, r, g.cfg.CoordinatorURL, "/objects/"+key, nil)
 	})
 }
 
@@ -110,6 +128,7 @@ func (g *Gateway) authed(w http.ResponseWriter, r *http.Request) (string, bool) 
 	}
 	user, ok := g.cfg.APIKeys[key]
 	if !ok {
+		g.metrics.inc("auth_failures_total")
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 		return "", false
 	}
@@ -139,6 +158,7 @@ func (g *Gateway) handleSubmit(w http.ResponseWriter, r *http.Request) {
 	var sb submitBody
 	_ = json.Unmarshal(raw, &sb)
 	if msg := g.checkBounds(sb); msg != "" {
+		g.metrics.inc("bounds_rejections_total")
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "spec_bounds_exceeded", "message": msg})
 		return
 	}
@@ -147,12 +167,14 @@ func (g *Gateway) handleSubmit(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		if g.jobCount[user] >= g.cfg.MaxJobsPerUser {
 			g.mu.Unlock()
+			g.metrics.inc("quota_rejections_total")
 			writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "quota_exceeded", "limit": g.cfg.MaxJobsPerUser})
 			return
 		}
 		g.jobCount[user]++
 		g.mu.Unlock()
 	}
+	g.metrics.inc("submits_total")
 	g.forward(w, r, g.cfg.CoordinatorURL, "/jobs", raw)
 }
 
@@ -202,6 +224,7 @@ func (g *Gateway) forward(w http.ResponseWriter, r *http.Request, base, path str
 	}
 	resp, err := g.client.Do(req)
 	if err != nil {
+		g.metrics.inc("upstream_errors_total")
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "upstream_unreachable", "message": err.Error()})
 		return
 	}

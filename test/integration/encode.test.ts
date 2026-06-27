@@ -134,6 +134,18 @@ describe("encodeSceneToFile (spec -> mp4)", () => {
     expect(calls[calls.length - 1]).toEqual([6, 6]);
   });
 
+  it("encodes to HLS (playlist + segments) for adaptive streaming", async () => {
+    if (!ffmpegAvailable) return expect.unreachable("ffmpeg required");
+    const { encodeSceneToHls } = await import("../../src/index.js");
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const hlsDir = join(outDir, "hls");
+    const result = await encodeSceneToHls(movingRectScene(), { outDir: hlsDir, segmentSeconds: 1, preset: "ultrafast" });
+    const playlist = readFileSync(result.playlistPath, "utf8");
+    expect(playlist).toContain("#EXTM3U");
+    const segments = readdirSync(hlsDir).filter((f) => f.endsWith(".ts"));
+    expect(segments.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("rejects clearly when the ffmpeg binary cannot be started", async () => {
     await expect(
       encodeSceneToFile(movingRectScene(), {

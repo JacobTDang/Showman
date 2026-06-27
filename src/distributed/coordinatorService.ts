@@ -69,6 +69,19 @@ export class CoordinatorService {
   progress(jobId: string): ProgressEvent | undefined {
     return this.lastProgress.get(jobId);
   }
+
+  /** Observability snapshot: queue depth, in-flight, dead-letters, jobs by state. */
+  async metrics(): Promise<Record<string, number>> {
+    const states = this.coordinator.jobStateCounts();
+    const out: Record<string, number> = {
+      queue_pending: await this.queue.size(),
+      queue_inflight: await this.queue.inflight(),
+      queue_dead_letter: (await this.queue.deadLetter()).length,
+      workers: this.workers.length,
+    };
+    for (const [state, n] of Object.entries(states)) out[`jobs_${state}`] = n;
+    return out;
+  }
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -112,6 +125,13 @@ export function createCoordinatorServer(service: CoordinatorService, storage: Ob
       const method = req.method ?? "GET";
 
       if (method === "GET" && path === "/healthz") return sendJson(res, 200, { ok: true });
+
+      if (method === "GET" && path === "/metrics") {
+        const m = await service.metrics();
+        const lines = Object.entries(m).map(([k, v]) => `showman_coordinator_${k} ${v}`);
+        res.writeHead(200, { "content-type": "text/plain; version=0.0.4" });
+        return void res.end(lines.join("\n") + "\n");
+      }
 
       if (method === "POST" && path === "/jobs") {
         const b = (await readJson(req)) as { spec?: unknown; options?: DistributedRenderOptions };

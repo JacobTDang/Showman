@@ -80,4 +80,13 @@ describe("coordinator service over HTTP (M3.3)", () => {
     const r = await fetch(`${baseUrl}/jobs`, { method: "POST", body: JSON.stringify({ spec: { specVersion: 1, nodes: "nope" } }) });
     expect(r.status).toBe(400);
   });
+
+  it("exposes Prometheus metrics (queue depth, workers, jobs by state)", async () => {
+    const r = await fetch(`${baseUrl}/metrics`);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("text/plain");
+    const text = await r.text();
+    expect(text).toContain("showman_coordinator_queue_pending");
+    expect(text).toContain("showman_coordinator_workers 4");
+  });
 });

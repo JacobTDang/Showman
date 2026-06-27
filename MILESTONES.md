@@ -89,12 +89,12 @@ the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a ty
 - [x] **M5.6 — Pedagogical templates** — `src/lessons/templates.ts`: `buildCountingLesson` + `buildLessonFromOutline` encode intro→concept→example→recap with segmentation, signaling, dual coding.
 - [x] **M5.7 — Content-safety gate** — `src/safety/moderation.ts`: rule-based + pluggable model provider; `moderateScene` scans all text + narration; **render is blocked (422) on unsafe content** unless explicitly bypassed post-approval. Release blocker, on by default in the worker.
 
-## M6 — Production hardening + delivery
+## M6 — Production hardening + delivery  ✅
 
-- [ ] **M6.1 — Auth + quotas + spec bounds** — keys, user auth, per-user quotas, max res/duration/frames at validation.
-- [ ] **M6.2 — Observability** — queue depth, per-frame time, worker utilization, shard failure rate; logs/traces.
-- [ ] **M6.3 — CDN delivery** — CDN over object storage; HLS for long videos.
-- [ ] **M6.4 — Kubernetes orchestration** — Deployments, autoscale on queue depth, dead-letter queue, CI/CD, secrets.
+- [x] **M6.1 — Auth + quotas + spec bounds** — Go gateway: API-key auth, per-user quota, spec bounds (max w/h/duration/frames) enforced at the edge before a job is enqueued. `go test` covers each.
+- [x] **M6.2 — Observability** — Prometheus `/metrics` on the gateway (requests, auth/quota/bounds rejections, upstream errors, CDN redirects) and the coordinator (queue depth, in-flight, dead-letter, jobs by state). Determinism gives free idempotency for retries; poison shards dead-letter.
+- [x] **M6.3 — CDN delivery** — gateway redirects `/v1/objects/<key>` to `SHOWMAN_CDN_BASE_URL` when set; `encodeSceneToHls` produces an HLS playlist + segments for long videos.
+- [x] **M6.4 — Kubernetes orchestration** — `k8s/showman.yaml` (gateway/worker/coordinator Deployments + Services, worker HPA, KEDA queue-depth ScaledObject template, config/secret); `.github/workflows/ci.yml` runs TS tests + Go tests + builds both images. *(Needs a cluster + the S3 storage adapter to run for real.)*
 
 ---
 

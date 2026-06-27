@@ -44,9 +44,9 @@ export type { ValidationError, ValidationResult, ValidationCode } from "./valida
 export { renderFrame } from "./engine/render.js";
 export type { RenderResult } from "./engine/render.js";
 
-// Encoding (M1: spec -> mp4, M2.1: streaming)
-export { encodeSceneToFile, encodeSceneToStream } from "./encode/encodeVideo.js";
-export type { EncodeOptions, EncodeResult, StreamEncodeOptions } from "./encode/encodeVideo.js";
+// Encoding (M1: spec -> mp4, M2.1: streaming, M6.3: HLS)
+export { encodeSceneToFile, encodeSceneToStream, encodeSceneToHls } from "./encode/encodeVideo.js";
+export type { EncodeOptions, EncodeResult, StreamEncodeOptions, HlsEncodeOptions, HlsResult } from "./encode/encodeVideo.js";
 
 // Frame pool (M1.1: multi-core frame rendering)
 export { FramePool, renderFramesParallel, renderFramesSequential, defaultConcurrency } from "./render/framePool.js";

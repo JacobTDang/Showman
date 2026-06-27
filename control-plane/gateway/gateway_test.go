@@ -147,6 +147,46 @@ func TestQuotaEnforced(t *testing.T) {
 	}
 }
 
+func TestMetricsExposed(t *testing.T) {
+	worker := newStub(http.StatusOK, `{}`)
+	coord := newStub(http.StatusAccepted, `{}`)
+	g := New(baseConfig(worker, coord))
+
+	// A bounds rejection and a successful submit.
+	do(g, "POST", "/v1/jobs", `{"spec":{"width":9000,"height":360,"fps":30,"duration":3}}`, nil)
+	do(g, "POST", "/v1/jobs", `{"spec":{"width":640,"height":360,"fps":30,"duration":3}}`, nil)
+
+	rec := do(g, "GET", "/metrics", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics code = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"showman_gateway_requests_total", "showman_gateway_bounds_rejections_total 1", "showman_gateway_submits_total 1"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics missing %q in:\n%s", want, body)
+		}
+	}
+}
+
+func TestCDNRedirect(t *testing.T) {
+	worker := newStub(http.StatusOK, `{}`)
+	coord := newStub(http.StatusOK, `bytes`)
+	cfg := baseConfig(worker, coord)
+	cfg.CDNBaseURL = "https://cdn.example.com"
+	g := New(cfg)
+
+	rec := do(g, "GET", "/v1/objects/videos/abc.mp4", "", nil)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "https://cdn.example.com/videos/abc.mp4" {
+		t.Fatalf("redirect location = %q", loc)
+	}
+	if coord.callCount != 0 {
+		t.Fatalf("object bytes proxied despite CDN config")
+	}
+}
+
 func TestJobStatusProxied(t *testing.T) {
 	worker := newStub(http.StatusOK, `{}`)
 	coord := newStub(http.StatusOK, `{"state":"done"}`)
