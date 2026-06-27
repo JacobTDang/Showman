@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
-import { CoordinatorService, createCoordinatorServer, listenCoordinator, LocalObjectStorage } from "../../src/index.js";
+import { CoordinatorService, createCoordinatorServer, listenCoordinator, LocalObjectStorage, RuleBasedModeration } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
@@ -43,7 +43,7 @@ beforeAll(async () => {
   ffmpeg = await hasFfmpeg();
   dataDir = mkdtempSync(join(tmpdir(), "showman-coord-"));
   const storage = new LocalObjectStorage(join(dataDir, "objects"));
-  service = new CoordinatorService({ storage, workDir: join(dataDir, "work"), workers: 4 });
+  service = new CoordinatorService({ storage, workDir: join(dataDir, "work"), workers: 4, moderation: new RuleBasedModeration() });
   server = createCoordinatorServer(service, storage);
   baseUrl = `http://127.0.0.1:${await listenCoordinator(server, 0)}`;
 });
@@ -79,6 +79,16 @@ describe("coordinator service over HTTP (M3.3)", () => {
   it("rejects an invalid spec with 400", async () => {
     const r = await fetch(`${baseUrl}/jobs`, { method: "POST", body: JSON.stringify({ spec: { specVersion: 1, nodes: "nope" } }) });
     expect(r.status).toBe(400);
+  });
+
+  it("blocks an unsafe spec at the coordinator's safety gate (no shards enqueued)", async () => {
+    const unsafe: SceneSpec = {
+      specVersion: 1, width: 64, height: 64, fps: 5, duration: 1, background: "#fff",
+      nodes: [{ id: "t", type: "text", x: 5, y: 30, text: "shoot the gun", fontSize: 14, fill: "#000" }],
+    };
+    const r = await fetch(`${baseUrl}/jobs`, { method: "POST", body: JSON.stringify({ spec: unsafe }) });
+    expect(r.status).toBe(422);
+    expect(((await r.json()) as { error: string }).error).toBe("content_safety");
   });
 
   it("exposes Prometheus metrics (queue depth, workers, jobs by state)", async () => {

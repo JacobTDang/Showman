@@ -7,7 +7,7 @@
 
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, existsSync, readFileSync, createReadStream } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import type { ReadStream } from "node:fs";
 
 export interface StoredObject {
@@ -44,7 +44,14 @@ export class LocalObjectStorage implements ObjectStorage {
   }
 
   localPath(key: string): string {
-    return resolve(this.root, key);
+    // Guard against path traversal: a key like "../../etc/passwd" must not escape
+    // the storage root. Reject anything that resolves outside it.
+    const rootResolved = resolve(this.root);
+    const full = resolve(rootResolved, key);
+    if (full !== rootResolved && !full.startsWith(rootResolved + sep)) {
+      throw new Error(`invalid object key (path traversal): ${JSON.stringify(key)}`);
+    }
+    return full;
   }
 
   async put(key: string, bytes: Buffer, contentType: string): Promise<StoredObject> {
@@ -54,8 +61,18 @@ export class LocalObjectStorage implements ObjectStorage {
     return { key, url: this.urlFor(key), size: bytes.length, contentType };
   }
 
+  /** Resolve a key to a path, or null if the key is invalid (traversal). */
+  private safePath(key: string): string | null {
+    try {
+      return this.localPath(key);
+    } catch {
+      return null;
+    }
+  }
+
   async has(key: string): Promise<boolean> {
-    return existsSync(this.localPath(key));
+    const path = this.safePath(key);
+    return path !== null && existsSync(path);
   }
 
   async get(key: string): Promise<Buffer> {
@@ -63,8 +80,8 @@ export class LocalObjectStorage implements ObjectStorage {
   }
 
   async stat(key: string): Promise<StoredObject | null> {
-    const path = this.localPath(key);
-    if (!existsSync(path)) return null;
+    const path = this.safePath(key);
+    if (path === null || !existsSync(path)) return null;
     const bytes = readFileSync(path);
     return { key, url: this.urlFor(key), size: bytes.length, contentType: guessContentType(key) };
   }

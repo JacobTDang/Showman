@@ -52,7 +52,7 @@ export async function renderDistributed(
   });
 
   const submitted = await coordinator.submit(spec, options);
-  if (!submitted.ok) return { ok: false, errors: submitted.errors };
+  if (!submitted.ok) return { ok: false, ...("errors" in submitted ? { errors: submitted.errors } : {}) };
   const { jobId } = submitted;
 
   const workerCount = Math.max(1, deps.workers ?? 4);

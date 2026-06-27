@@ -12,6 +12,7 @@ import type { SceneSpec } from "../spec/types.js";
 import { validateScene, type ValidationError } from "../validator/validate.js";
 import { totalFrames } from "../spec/schema.js";
 import type { ObjectStorage, StoredObject } from "../service/storage.js";
+import { moderateScene, type ModerationProvider, type ModerationFinding } from "../safety/moderation.js";
 import type { Queue } from "./queue.js";
 import type { DistributedRenderOptions, JobState, ProgressEvent, ShardResult, ShardTask } from "./messages.js";
 import { assembleSegments, decodeSegment } from "./segment.js";
@@ -46,6 +47,8 @@ export interface CoordinatorOptions {
   workDir: string;
   ffmpegPath?: string;
   onProgress?: (event: ProgressEvent) => void;
+  /** Content-safety gate (M5.7). If set, unsafe specs are rejected at submit. */
+  moderation?: ModerationProvider;
 }
 
 const DEFAULT_SHARD_SIZE = 30;
@@ -57,6 +60,7 @@ export class Coordinator {
   private readonly workDir: string;
   private readonly ffmpegPath: string | undefined;
   private readonly onProgress: ((event: ProgressEvent) => void) | undefined;
+  private readonly moderation: ModerationProvider | undefined;
 
   constructor(opts: CoordinatorOptions) {
     this.queue = opts.queue;
@@ -64,17 +68,28 @@ export class Coordinator {
     this.workDir = opts.workDir;
     this.ffmpegPath = opts.ffmpegPath;
     this.onProgress = opts.onProgress;
+    this.moderation = opts.moderation;
     mkdirSync(this.workDir, { recursive: true });
   }
 
-  /** Validate, shard, and enqueue a job. Returns the jobId, or validation errors. */
+  /** Validate, gate for safety, shard, and enqueue a job. Returns the jobId, or errors/block. */
   async submit(
     spec: unknown,
     options: DistributedRenderOptions = {},
-  ): Promise<{ ok: true; jobId: string; shardsTotal: number } | { ok: false; errors: ValidationError[] }> {
+  ): Promise<
+    | { ok: true; jobId: string; shardsTotal: number }
+    | { ok: false; errors: ValidationError[] }
+    | { ok: false; blocked: "content_safety"; findings: ModerationFinding[] }
+  > {
     const validation = validateScene(spec);
     if (!validation.valid) return { ok: false, errors: validation.errors };
     const scene = spec as SceneSpec;
+
+    // Content-safety gate (release blocker) — before any work is enqueued.
+    if (this.moderation) {
+      const verdict = await moderateScene(scene, this.moderation);
+      if (!verdict.safe) return { ok: false, blocked: "content_safety", findings: verdict.findings };
+    }
 
     const jobId = randomUUID();
     const framesTotal = totalFrames(scene.fps, scene.duration);

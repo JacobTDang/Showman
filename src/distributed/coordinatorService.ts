@@ -13,11 +13,14 @@ import type { DistributedRenderOptions, ProgressEvent, ShardTask } from "./messa
 import type { ObjectStorage } from "../service/storage.js";
 import { guessContentType } from "../service/storage.js";
 
+import type { ModerationProvider } from "../safety/moderation.js";
+
 export interface CoordinatorServiceOptions {
   storage: ObjectStorage;
   workDir: string;
   workers?: number;
   ffmpegPath?: string;
+  moderation?: ModerationProvider;
 }
 
 /** A persistent coordinator + continuously-running shard workers. */
@@ -35,6 +38,7 @@ export class CoordinatorService {
       storage: opts.storage,
       workDir: opts.workDir,
       ...(opts.ffmpegPath ? { ffmpegPath: opts.ffmpegPath } : {}),
+      ...(opts.moderation ? { moderation: opts.moderation } : {}),
       onProgress: (e) => this.lastProgress.set(e.jobId, e),
     });
     const n = Math.max(1, opts.workers ?? 4);
@@ -136,7 +140,10 @@ export function createCoordinatorServer(service: CoordinatorService, storage: Ob
       if (method === "POST" && path === "/jobs") {
         const b = (await readJson(req)) as { spec?: unknown; options?: DistributedRenderOptions };
         const submitted = await service.submit(b?.spec ?? b, b?.options ?? {});
-        if (!submitted.ok) return sendJson(res, 400, { error: "invalid_spec", errors: submitted.errors });
+        if (!submitted.ok) {
+          if ("blocked" in submitted) return sendJson(res, 422, { error: "content_safety", findings: submitted.findings });
+          return sendJson(res, 400, { error: "invalid_spec", errors: submitted.errors });
+        }
         return sendJson(res, 202, { jobId: submitted.jobId, shardsTotal: submitted.shardsTotal, statusUrl: `/jobs/${submitted.jobId}` });
       }
 

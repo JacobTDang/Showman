@@ -134,6 +134,9 @@ export function createServer(deps: ServerDeps): http.Server {
       const spec = body?.spec ?? body;
       const validation = service.validate(spec);
       if (!validation.valid) return sendJson(res, 400, { error: "invalid_spec", errors: validation.errors });
+      // Content-safety gate also applies to the streaming path (release blocker).
+      const verdict = await service.moderate(spec as SceneSpec);
+      if (!verdict.safe) return sendJson(res, 422, { error: "content_safety", findings: verdict.findings });
       res.writeHead(200, { "content-type": "video/mp4", "transfer-encoding": "chunked" });
       try {
         await encodeSceneToStream(spec as SceneSpec, res, {

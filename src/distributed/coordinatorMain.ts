@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { LocalObjectStorage } from "../service/storage.js";
 import { CoordinatorService, createCoordinatorServer, listenCoordinator } from "./coordinatorService.js";
 import { defaultConcurrency } from "../render/framePool.js";
+import { RuleBasedModeration } from "../safety/moderation.js";
 
 export async function startCoordinator(): Promise<{ port: number; close: () => Promise<void> }> {
   const dataDir = process.env.SHOWMAN_DATA_DIR ?? join(process.cwd(), "data");
@@ -16,6 +17,7 @@ export async function startCoordinator(): Promise<{ port: number; close: () => P
     storage,
     workDir: join(dataDir, "coordinator-tmp"),
     workers: Number(process.env.SHOWMAN_WORKERS ?? defaultConcurrency()),
+    moderation: new RuleBasedModeration(),
   });
   const server = createCoordinatorServer(service, storage);
   const port = await listenCoordinator(server, Number(process.env.PORT ?? 8090), "0.0.0.0");
