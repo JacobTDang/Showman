@@ -18,10 +18,10 @@ export const SPEC_VERSION = 1 as const;
  * cross-machine determinism, so the validator rejects it. `engine/fonts.ts` maps
  * these names to the bundled font files and registers exactly them.
  */
-export const REGISTERED_FONT_FAMILIES = ["Nunito"] as const;
+export const REGISTERED_FONT_FAMILIES = ["Nunito", "Fredoka"] as const;
 
 /** Every supported node type. */
-export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "text", "group"];
+export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "polygon", "text", "group"];
 
 /** The kind of value an animatable property carries. */
 export type PropertyKind = "number" | "color";
@@ -43,8 +43,10 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
   width: "number",
   height: "number",
   radius: "number",
+  innerRadius: "number",
   strokeWidth: "number",
   fontSize: "number",
+  reveal: "number",
   fill: "color",
   stroke: "color",
 };
@@ -72,9 +74,11 @@ const COMMON_KEYS = [
 export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
   rect: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth", "radius"],
   ellipse: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth"],
+  polygon: [...COMMON_KEYS, "sides", "radius", "innerRadius", "fill", "stroke", "strokeWidth"],
   text: [
     ...COMMON_KEYS,
     "text",
+    "reveal",
     "fontSize",
     "fontFamily",
     "fontWeight",
@@ -88,11 +92,13 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
 };
 
 /** Which animatable properties are valid targets for a track, per node type. */
+const TRANSFORM_ANIM = ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity"];
 export const ANIMATABLE_BY_TYPE: Readonly<Record<NodeType, readonly string[]>> = {
-  rect: ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "width", "height", "radius", "strokeWidth", "fill", "stroke"],
-  ellipse: ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "width", "height", "strokeWidth", "fill", "stroke"],
-  text: ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "fontSize", "strokeWidth", "fill", "stroke"],
-  group: ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity"],
+  rect: [...TRANSFORM_ANIM, "width", "height", "radius", "strokeWidth", "fill", "stroke"],
+  ellipse: [...TRANSFORM_ANIM, "width", "height", "strokeWidth", "fill", "stroke"],
+  polygon: [...TRANSFORM_ANIM, "radius", "innerRadius", "strokeWidth", "fill", "stroke"],
+  text: [...TRANSFORM_ANIM, "fontSize", "reveal", "strokeWidth", "fill", "stroke"],
+  group: [...TRANSFORM_ANIM],
 };
 
 /** Default base-transform values applied when a property is absent. */

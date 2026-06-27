@@ -117,6 +117,9 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
     case "ellipse":
       drawEllipse(ctx, res);
       break;
+    case "polygon":
+      drawPolygon(ctx, res);
+      break;
     case "text":
       drawText(ctx, res);
       break;
@@ -184,9 +187,53 @@ function drawEllipse(ctx: SKRSContext2D, res: NodeResolver): void {
   applyFillAndStroke(ctx, fill, stroke, strokeWidth);
 }
 
+function drawPolygon(ctx: SKRSContext2D, res: NodeResolver): void {
+  const sidesRaw = res.raw("sides");
+  const sides = Math.max(3, typeof sidesRaw === "number" ? Math.floor(sidesRaw) : 3);
+  const radius = Math.max(0, res.num("radius", 50));
+  const innerRaw = res.numOpt("innerRadius");
+  const fill = res.color("fill") ?? SHAPE_DEFAULTS.fill;
+  const stroke = res.color("stroke");
+  const strokeWidth = Math.max(0, res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth));
+  const cx = radius;
+  const cy = radius;
+
+  ctx.beginPath();
+  if (innerRaw !== undefined && innerRaw >= 0) {
+    // Star: alternate outer/inner radius over 2*sides points.
+    const inner = Math.max(0, innerRaw);
+    const points = sides * 2;
+    for (let i = 0; i < points; i++) {
+      const r = i % 2 === 0 ? radius : inner;
+      const a = -Math.PI / 2 + (i * Math.PI) / sides;
+      const x = cx + r * Math.cos(a);
+      const y = cy + r * Math.sin(a);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  } else {
+    for (let i = 0; i < sides; i++) {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / sides;
+      const x = cx + radius * Math.cos(a);
+      const y = cy + radius * Math.sin(a);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  }
+  ctx.closePath();
+  applyFillAndStroke(ctx, fill, stroke, strokeWidth);
+}
+
 function drawText(ctx: SKRSContext2D, res: NodeResolver): void {
-  const text = res.str("text") ?? "";
+  let text = res.str("text") ?? "";
   if (text.length === 0) return;
+  // Typewriter reveal: show only the first round(reveal * length) characters.
+  const reveal = res.numOpt("reveal");
+  if (reveal !== undefined) {
+    const visible = Math.max(0, Math.min(text.length, Math.round(reveal * text.length)));
+    text = text.slice(0, visible);
+    if (text.length === 0) return;
+  }
   const fontSize = Math.max(0, res.num("fontSize", SHAPE_DEFAULTS.fontSize));
   // Only render with a pinned family; fall back to the default otherwise so an
   // unregistered family can never silently pull in a host font. (The validator

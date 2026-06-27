@@ -76,15 +76,18 @@ the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a ty
 - [x] **M4.2 — Self-describing schema tool** — `showman_get_schema` returns `describeScene()` (node types, animatable props, easings, fonts, limits, example) so an agent authors valid scenes with no hardcoded format.
 - [x] **M4.3 — Authoring agent loop** — `src/authoring/agent.ts`: brief → propose → validate → preview → **self-correct from structured errors** → submit. Pluggable `SpecAuthor` (`ScriptedAuthor` for tests, `AnthropicSpecAuthor` for real LLM authoring). Self-correction proven by test.
 
-## M5 — Beautiful + learning-grade  *(the reason the project exists)*
+## M5 — Beautiful + learning-grade  ✅ *(the reason the project exists)*
 
-- [ ] **M5.1 — Storytelling primitives** — characters, scenes, entrance/exit, transitions, camera, text reveals, learning visuals.
-- [ ] **M5.2 — Motion-design system** — curated easing/preset library (stagger, anticipation, follow-through).
-- [ ] **M5.3 — Child-friendly theming** — warm palette + font theme tokens per lesson.
-- [ ] **M5.4 — Narration & audio** — TTS; narration track timed to beats; synced mux.
-- [ ] **M5.5 — Captions/subtitles** — accessibility + literacy.
-- [ ] **M5.6 — Pedagogical templates** — intro → concept → example → recap (segmentation, signaling, dual coding).
-- [ ] **M5.7 — Content-safety gate** — moderation + review/approval before publish. **Release blocker.**
+> The demo (`npm run demo:lesson`) renders a warm, narrated, captioned, themed
+> counting lesson that passes the safety gate — the "would a parent show this" bar.
+
+- [x] **M5.1 — Storytelling primitives** — `polygon` node (regular n-gon / star / triangle) + typewriter `reveal` on text. Characters/scenes/cameras compose from groups + transforms; entrance/exit/transitions are motion presets.
+- [x] **M5.2 — Motion-design system** — `src/motion/presets.ts`: popIn/spinIn/slideIn/fadeIn/out, pulse, typewriter + `stagger`/`mergeTracks`, built on the back/elastic/bounce easings — anticipation & overshoot, not linear tweens.
+- [x] **M5.3 — Child-friendly theming** — `src/theme/themes.ts`: warm palettes + pinned display font (added **Fredoka**) as per-lesson tokens (sunshine/ocean/meadow/berry).
+- [x] **M5.4 — Narration & audio** — `src/audio/`: pluggable `TtsProvider` (silent default + audible tone; cloud TTS slots in), narration assembled on the fps-synced timeline, muxed to AAC. Verified: output mp4 carries an audio stream ≈ scene length.
+- [x] **M5.5 — Captions/subtitles** — WebVTT + SRT generated from the narration timeline (`src/audio/captions.ts`); sidecar emitted alongside the video.
+- [x] **M5.6 — Pedagogical templates** — `src/lessons/templates.ts`: `buildCountingLesson` + `buildLessonFromOutline` encode intro→concept→example→recap with segmentation, signaling, dual coding.
+- [x] **M5.7 — Content-safety gate** — `src/safety/moderation.ts`: rule-based + pluggable model provider; `moderateScene` scans all text + narration; **render is blocked (422) on unsafe content** unless explicitly bypassed post-approval. Release blocker, on by default in the worker.
 
 ## M6 — Production hardening + delivery
 

@@ -15,7 +15,11 @@
     "test:watch": "vitest",
     "test:golden": "vitest run test/golden",
     "golden:update": "tsx scripts/update-golden.ts",
-    "demo": "tsx scripts/render-lesson.ts"
+    "demo": "tsx scripts/render-lesson.ts",
+    "demo:lesson": "tsx scripts/demo-lesson.ts",
+    "worker": "node dist/service/worker.js",
+    "coordinator": "node dist/distributed/coordinatorMain.js",
+    "mcp": "node dist/mcp/main.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

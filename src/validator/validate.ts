@@ -433,6 +433,23 @@ class Validator {
       nonNegNum("strokeWidth");
       colorProp("fill");
       colorProp("stroke");
+    } else if (type === "polygon") {
+      if (node.sides !== undefined) {
+        if (!Number.isInteger(node.sides) || (node.sides as number) < 3) {
+          this.err({
+            path: `${path}.sides`,
+            ...(nodeId ? { nodeId } : {}),
+            property: "sides",
+            code: "OUT_OF_RANGE",
+            message: `sides must be an integer >= 3; got ${JSON.stringify(node.sides)}.`,
+          });
+        }
+      }
+      nonNegNum("radius");
+      nonNegNum("innerRadius");
+      nonNegNum("strokeWidth");
+      colorProp("fill");
+      colorProp("stroke");
     } else if (type === "text") {
       if (typeof node.text !== "string" || node.text.length === 0) {
         this.err({
@@ -447,6 +464,17 @@ class Validator {
       nonNegNum("strokeWidth");
       colorProp("fill");
       colorProp("stroke");
+      if (node.reveal !== undefined) {
+        if (!isFiniteNumber(node.reveal) || node.reveal < 0 || node.reveal > 1) {
+          this.err({
+            path: `${path}.reveal`,
+            ...(nodeId ? { nodeId } : {}),
+            property: "reveal",
+            code: "OUT_OF_RANGE",
+            message: `reveal must be a number between 0 and 1; got ${JSON.stringify(node.reveal)}.`,
+          });
+        }
+      }
       if (node.fontFamily !== undefined) {
         const fam = node.fontFamily;
         if (typeof fam !== "string" || !(REGISTERED_FONT_FAMILIES as readonly string[]).includes(fam)) {

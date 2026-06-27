@@ -12,6 +12,8 @@ import { RenderService } from "./renderService.js";
 import { createServer, listen } from "./httpServer.js";
 import { InMemoryJobStore, JobRunner } from "./jobs.js";
 import { defaultConcurrency } from "../render/framePool.js";
+import { SilentTtsProvider } from "../audio/tts.js";
+import { RuleBasedModeration } from "../safety/moderation.js";
 
 export async function startWorker(): Promise<{ port: number; close: () => Promise<void> }> {
   const dataDir = process.env.SHOWMAN_DATA_DIR ?? join(process.cwd(), "data");
@@ -21,6 +23,9 @@ export async function startWorker(): Promise<{ port: number; close: () => Promis
     storage,
     workDir: join(dataDir, "tmp"),
     defaultConcurrency: Number(process.env.SHOWMAN_CONCURRENCY ?? defaultConcurrency()),
+    // Narrated + safety-gated by default for a children's product.
+    tts: new SilentTtsProvider(),
+    moderation: new RuleBasedModeration(),
   });
   const jobRunner = new JobRunner(service, new InMemoryJobStore(), {
     maxConcurrent: Number(process.env.SHOWMAN_JOB_CONCURRENCY ?? 2),

@@ -29,6 +29,7 @@ export const DEFAULT_FONT_FAMILY = "Nunito";
 /** Maps each shippable family to its bundled font file (relative to assets/fonts/). */
 const FONT_FILES: Readonly<Record<string, string>> = {
   Nunito: "Nunito-Variable.ttf",
+  Fredoka: "Fredoka-Variable.ttf",
 };
 
 /** True if `family` is one the engine ships and pins (and may therefore be rendered). */

@@ -92,6 +92,23 @@ export { renderSegment, decodeSegment, assembleSegments } from "./distributed/se
 export { CoordinatorService, createCoordinatorServer, listenCoordinator } from "./distributed/coordinatorService.js";
 export type { CoordinatorServiceOptions } from "./distributed/coordinatorService.js";
 
+// Beautiful + learning-grade (M5)
+export type { PolygonNode, NarrationSegment } from "./spec/types.js";
+export { THEMES, DEFAULT_THEME, getTheme, swatch } from "./theme/themes.js";
+export type { Theme, Palette } from "./theme/themes.js";
+export * as motion from "./motion/presets.js";
+export { captionsFromNarration, toVTT, toSRT } from "./audio/captions.js";
+export type { Cue } from "./audio/captions.js";
+export { SilentTtsProvider, ToneTtsProvider, synthesizeNarration, estimateSpeechDuration } from "./audio/tts.js";
+export type { TtsProvider, SynthesizedSpeech } from "./audio/tts.js";
+export { muxAudioVideo } from "./audio/mux.js";
+export { pcmToWav, silencePcm, tonePcm, SAMPLE_RATE } from "./audio/wav.js";
+export { RuleBasedModeration, moderateScene, collectSceneTexts } from "./safety/moderation.js";
+export type { ModerationProvider, ModerationResult, ModerationFinding } from "./safety/moderation.js";
+export { buildCountingLesson, buildLessonFromOutline } from "./lessons/templates.js";
+export type { CountingLessonOptions, OutlineLessonOptions, LessonSegment } from "./lessons/templates.js";
+export type { RenderBlocked, RenderSuccess } from "./service/renderService.js";
+
 // MCP + authoring (M4)
 export { DirectBackend, HttpBackend, TOOL_DEFINITIONS, callTool } from "./mcp/showmanTools.js";
 export type { ShowmanClient, ToolDefinition, PreviewOk, CapabilityErr } from "./mcp/showmanTools.js";

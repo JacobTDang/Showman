@@ -112,9 +112,14 @@ export function createServer(deps: ServerDeps): http.Server {
     if (method === "POST" && path === "/render") {
       const body = (await readJson(req, limit)) as { spec?: unknown; options?: Record<string, unknown> };
       const result = await service.render(body?.spec ?? body, body?.options ?? {});
-      if (!result.ok) return sendJson(res, 400, { error: "invalid_spec", errors: result.errors });
+      if (!result.ok) {
+        if ("blocked" in result) return sendJson(res, 422, { error: "content_safety", findings: result.findings });
+        return sendJson(res, 400, { error: "invalid_spec", errors: result.errors });
+      }
       return sendJson(res, 200, {
         video: result.video,
+        ...(result.captions ? { captions: result.captions } : {}),
+        hasAudio: result.hasAudio,
         width: result.width,
         height: result.height,
         fps: result.fps,

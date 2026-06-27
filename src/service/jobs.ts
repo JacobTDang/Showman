@@ -188,7 +188,14 @@ export class JobRunner {
         },
       });
       if (!result.ok) {
-        await this.store.update(id, { status: "error", errors: result.errors, error: "invalid_spec" });
+        if ("blocked" in result) {
+          await this.store.update(id, {
+            status: "error",
+            error: `content_safety: ${result.findings.map((f) => `${f.category}:${f.term}`).join(", ")}`,
+          });
+        } else {
+          await this.store.update(id, { status: "error", errors: result.errors, error: "invalid_spec" });
+        }
         return;
       }
       await this.store.update(id, {

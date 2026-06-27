@@ -116,11 +116,33 @@ export interface EllipseNode extends BaseNodeProps {
   strokeWidth?: number;
 }
 
+export interface PolygonNode extends BaseNodeProps {
+  id: string;
+  type: "polygon";
+  /** Number of sides/points (>= 3). Default 3 (triangle). */
+  sides?: number;
+  /** Circumradius in px. The node spans 2*radius. Default 50. Animatable. */
+  radius?: number;
+  /** If set, alternates outer/inner radius to make a star. Animatable. */
+  innerRadius?: number;
+  /** Fill color. Default `"#000000"`. Animatable. */
+  fill?: Color;
+  /** Stroke color. Default none. Animatable. */
+  stroke?: Color;
+  /** Stroke width in px. Default 0. Animatable. */
+  strokeWidth?: number;
+}
+
 export interface TextNode extends BaseNodeProps {
   id: string;
   type: "text";
-  /** The text to render. Required. Not animatable (use opacity/position for reveals). */
+  /** The text to render. Required. */
   text: string;
+  /**
+   * Typewriter reveal 0..1: only the first `round(reveal * length)` characters
+   * draw. Animate it for a reading reveal. Default 1 (all shown). Animatable.
+   */
+  reveal?: number;
   /** Font size in px. Default 48. Animatable. */
   fontSize?: number;
   /** Font family. Default `"Nunito"` (pinned). */
@@ -147,7 +169,7 @@ export interface GroupNode extends BaseNodeProps {
 }
 
 /** A node in the scene tree. */
-export type Node = RectNode | EllipseNode | TextNode | GroupNode;
+export type Node = RectNode | EllipseNode | PolygonNode | TextNode | GroupNode;
 
 export type NodeType = Node["type"];
 
@@ -156,9 +178,18 @@ export type NodeType = Node["type"];
  * it, but it is part of the contract from day one so the schema does not break
  * when audio lands. Validated leniently.
  */
+export interface NarrationSegment {
+  /** Start time in seconds. */
+  t: number;
+  /** The line to speak / caption. */
+  text: string;
+  /** Optional explicit spoken duration (seconds). If omitted, runs until the next segment. */
+  duration?: number;
+}
+
 export interface NarrationTrack {
   /** Narration beats, each timed to a point in the scene (seconds). */
-  segments?: Array<{ t: number; text: string }>;
+  segments?: NarrationSegment[];
   /** Voice identifier for the TTS step. */
   voice?: string;
 }
