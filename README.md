@@ -42,11 +42,29 @@ the breakdown and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the vis
 | **M5** | Storytelling primitives, motion presets, themes, narration/TTS, captions, lesson templates, content-safety gate. |
 | **M6** | Auth/quota/bounds, Prometheus metrics, CDN + HLS, Kubernetes manifests, CI. |
 
+## Brief → video (the product goal)
+
+One call turns a plain-English brief into a finished, narrated, captioned video.
+With `ANTHROPIC_API_KEY` set it uses an LLM author; otherwise an offline template
+author parses the brief (count, topic, theme, shape) deterministically.
+
+```bash
+npm run brief -- "teach counting to four balloons in a magical fairy land"
+# -> out/brief-lesson.mp4   (the frame below was authored entirely from that brief)
+```
+
+![A lesson authored from a brief](docs/brief-lesson-frame.png)
+
+```
+POST /author { "brief": "..." }  -> 202 { jobId }   # author + submit in one call
+GET  /jobs/{jobId}               -> { status, result.video }
+```
+
 ## Quickstart
 
 ```bash
 npm install
-npm test              # 173 tests (unit + integration + golden + purity)
+npm test              # 192 tests (unit + integration + golden + purity)
 npm run demo:lesson   # render a narrated, captioned counting lesson -> out/
 
 # Author a lesson programmatically

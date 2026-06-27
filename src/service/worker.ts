@@ -14,6 +14,9 @@ import { InMemoryJobStore, JobRunner } from "./jobs.js";
 import { defaultConcurrency } from "../render/framePool.js";
 import { SilentTtsProvider } from "../audio/tts.js";
 import { RuleBasedModeration } from "../safety/moderation.js";
+import { DirectBackend } from "../mcp/showmanTools.js";
+import { AuthoringAgent } from "../authoring/agent.js";
+import { createDefaultAuthor } from "../authoring/templateAuthor.js";
 
 export async function startWorker(): Promise<{ port: number; close: () => Promise<void> }> {
   const dataDir = process.env.SHOWMAN_DATA_DIR ?? join(process.cwd(), "data");
@@ -30,7 +33,10 @@ export async function startWorker(): Promise<{ port: number; close: () => Promis
   const jobRunner = new JobRunner(service, new InMemoryJobStore(), {
     maxConcurrent: Number(process.env.SHOWMAN_JOB_CONCURRENCY ?? 2),
   });
-  const server = createServer({ service, storage, jobRunner });
+  // brief -> spec -> submit, in one call. Uses the LLM author if ANTHROPIC_API_KEY
+  // is set, otherwise the offline template author.
+  const authoringAgent = new AuthoringAgent(new DirectBackend(service, jobRunner), createDefaultAuthor(), { maxAttempts: 3 });
+  const server = createServer({ service, storage, jobRunner, authoringAgent });
   const port = await listen(server, Number(process.env.PORT ?? 8080), "0.0.0.0");
   return {
     port,

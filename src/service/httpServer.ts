@@ -17,6 +17,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { RenderService } from "./renderService.js";
 import type { JobRunner } from "./jobs.js";
+import type { AuthoringAgent } from "../authoring/agent.js";
 import type { ObjectStorage } from "./storage.js";
 import { guessContentType } from "./storage.js";
 import { encodeSceneToStream } from "../encode/encodeVideo.js";
@@ -27,6 +28,8 @@ export interface ServerDeps {
   storage: ObjectStorage;
   /** Optional async job runner; enables POST /jobs and GET /jobs/:id (M2.2). */
   jobRunner?: JobRunner;
+  /** Optional authoring agent; enables POST /author (brief -> spec -> submit, M4.3). */
+  authoringAgent?: AuthoringAgent;
   /** FFmpeg binary for streaming (M2.1). Default "ffmpeg". */
   ffmpegPath?: string;
   /** Max request body size in bytes (specs are small). Default 8 MiB. */
@@ -164,6 +167,16 @@ export function createServer(deps: ServerDeps): http.Server {
         res.end();
       }
       return;
+    }
+
+    if (method === "POST" && path === "/author") {
+      if (!deps.authoringAgent) return sendJson(res, 501, { error: "authoring_disabled" });
+      const body = (await readJson(req, limit)) as { brief?: unknown };
+      const brief = typeof body?.brief === "string" ? body.brief : "";
+      if (!brief.trim()) return sendJson(res, 400, { error: "missing_brief", message: "Provide a non-empty 'brief' string." });
+      const result = await deps.authoringAgent.run(brief);
+      if (!result.ok) return sendJson(res, 422, { error: "authoring_failed", attempts: result.attempts, history: result.history });
+      return sendJson(res, 202, { jobId: result.jobId, attempts: result.attempts, statusUrl: `/jobs/${result.jobId}` });
     }
 
     if (method === "POST" && path === "/jobs") {

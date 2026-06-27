@@ -98,6 +98,19 @@ the color parser, premultiplied-alpha fades, a render exhaustiveness guard, a ty
 
 ---
 
+## Product flow — brief → finished video  ✅
+
+The headline goal from the plan ("an agent submits a brief and receives a URL to a
+finished video") is realized end to end and tested offline:
+
+- `src/authoring/templateAuthor.ts` — `TemplateAuthor` parses a plain-English brief
+  (count, topic, theme, shape) into a structured lesson with no LLM; `createDefaultAuthor`
+  picks `AnthropicSpecAuthor` when `ANTHROPIC_API_KEY` is set.
+- `POST /author { brief }` on the worker runs the authoring loop (validate → preview →
+  self-correct → submit) and returns a `jobId`; `GET /jobs/{id}` resolves to the video.
+- `npm run brief -- "teach counting to four balloons in a magical fairy land"` produced
+  the berry-themed 4-balloon lesson in `docs/brief-lesson-frame.png`.
+
 ### Build order
 Critical path **M0 → M1 → M2 → M3**, then M4, then M5, harden in M6. Optional:
 pull a thin slice of M5 (theming + one storytelling primitive) forward as an

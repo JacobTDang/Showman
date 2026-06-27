@@ -115,6 +115,8 @@ export type { ShowmanClient, ToolDefinition, PreviewOk, CapabilityErr } from "./
 export { createMcpServer, startMcpServer } from "./mcp/server.js";
 export { AuthoringAgent, ScriptedAuthor, AnthropicSpecAuthor, extractJson } from "./authoring/agent.js";
 export type { SpecAuthor, AuthorContext, AuthoringResult, AuthoringOptions, AuthoringAttempt } from "./authoring/agent.js";
+export { TemplateAuthor, parseBrief, createDefaultAuthor, lessonFromBriefOutline } from "./authoring/templateAuthor.js";
+export type { ParsedBrief, TemplateAuthorOptions } from "./authoring/templateAuthor.js";
 export type {
   ShardTask,
   ShardResult,

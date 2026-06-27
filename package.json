@@ -17,6 +17,7 @@
     "golden:update": "tsx scripts/update-golden.ts",
     "demo": "tsx scripts/render-lesson.ts",
     "demo:lesson": "tsx scripts/demo-lesson.ts",
+    "brief": "tsx scripts/brief-to-video.ts",
     "worker": "node dist/service/worker.js",
     "coordinator": "node dist/distributed/coordinatorMain.js",
     "mcp": "node dist/mcp/main.js"
