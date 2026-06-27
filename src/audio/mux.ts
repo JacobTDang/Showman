@@ -17,6 +17,21 @@ export interface MuxOptions {
 export async function muxAudioVideo(videoPath: string, audioWav: Buffer, outPath: string, options: MuxOptions = {}): Promise<void> {
   const { ffmpegPath = "ffmpeg", audioBitrate = "128k" } = options;
   const scratch = mkdtempSync(join(tmpdir(), "showman-mux-"));
+  try {
+    return await muxInScratch(scratch, videoPath, audioWav, outPath, ffmpegPath, audioBitrate);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+async function muxInScratch(
+  scratch: string,
+  videoPath: string,
+  audioWav: Buffer,
+  outPath: string,
+  ffmpegPath: string,
+  audioBitrate: string,
+): Promise<void> {
   const audioPath = join(scratch, "narration.wav");
   writeFileSync(audioPath, audioWav);
 
@@ -46,7 +61,12 @@ export async function muxAudioVideo(videoPath: string, audioWav: Buffer, outPath
       proc.on("error", (err) => reject(new Error(`Failed to start ffmpeg ("${ffmpegPath}"): ${err.message}`)));
       proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg mux exited with code ${code}.\n${stderr.slice(-2000)}`))));
     });
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
+  } catch (err) {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    throw err;
   }
 }

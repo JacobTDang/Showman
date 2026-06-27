@@ -144,6 +144,15 @@ export class Coordinator {
     }
   }
 
+  /** Mark a job failed (e.g. a shard exhausted retries and was dead-lettered). */
+  failJob(jobId: string, error: string): void {
+    const job = this.jobs.get(jobId);
+    if (!job || job.state === "done" || job.state === "error") return;
+    job.state = "error";
+    job.error = error;
+    this.emit(job);
+  }
+
   /** Count jobs by state (for observability). */
   jobStateCounts(): Record<string, number> {
     const counts: Record<string, number> = {};

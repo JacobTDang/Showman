@@ -170,18 +170,20 @@ export class JobRunner {
     while (this.active < this.maxConcurrent && this.pending.length > 0) {
       const id = this.pending.shift()!;
       this.active++;
-      void this.process(id).finally(() => {
-        this.active--;
-        this.drain();
-      });
+      void this.process(id)
+        .catch(() => {}) // a rejecting store must never crash the runner
+        .finally(() => {
+          this.active--;
+          this.drain();
+        });
     }
   }
 
   private async process(id: string): Promise<void> {
-    const job = await this.store.get(id);
-    if (!job) return;
-    await this.store.update(id, { status: "running" });
     try {
+      const job = await this.store.get(id);
+      if (!job) return;
+      await this.store.update(id, { status: "running" });
       const result = await this.service.render(job.spec, job.options, {
         onProgress: (framesDone, totalFrames) => {
           void this.store.update(id, { progress: { framesDone, totalFrames } });

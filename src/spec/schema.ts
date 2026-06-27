@@ -140,6 +140,7 @@ export const LIMITS = {
   minFps: 1,
   maxFps: 120,
   maxDuration: 600, // seconds
+  maxFrames: 36_000, // hard cap on total frames (farm protection, enforced at validation)
   maxNodes: 10_000,
   maxTreeDepth: 32,
 } as const;

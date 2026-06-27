@@ -61,6 +61,11 @@ describe("validateScene", () => {
     expect(codes(baseScene({ duration: -1 }))).toContain("OUT_OF_RANGE");
   });
 
+  it("rejects a runaway frame count (farm-protection backstop)", () => {
+    // 120fps * 600s = 72000 frames > maxFrames (36000), each individually in range.
+    expect(codes(baseScene({ fps: 120, duration: 600 }))).toContain("LIMIT_EXCEEDED");
+  });
+
   it("flags an invalid background color", () => {
     expect(codes(baseScene({ background: "chartreuse-ish" }))).toContain("INVALID_COLOR");
   });

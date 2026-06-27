@@ -51,6 +51,9 @@ export async function renderDistributed(
     ...(deps.onProgress ? { onProgress: deps.onProgress } : {}),
   });
 
+  // A poison shard (exhausted retries) must fail the job, not hang the fan-in barrier.
+  queue.onDeadLetter((task) => coordinator.failJob(task.jobId, `shard ${task.shardId} exceeded retries (poison shard)`));
+
   const submitted = await coordinator.submit(spec, options);
   if (!submitted.ok) return { ok: false, ...("errors" in submitted ? { errors: submitted.errors } : {}) };
   const { jobId } = submitted;

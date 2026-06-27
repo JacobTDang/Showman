@@ -181,7 +181,13 @@ export class RenderService {
     const fps = scene.fps;
     const frameCount = totalFrames(scene.fps, scene.duration);
     if (existing) {
-      const captions = wantCaptions ? await this.storage.stat(captionKey) : null;
+      let captions = wantCaptions ? await this.storage.stat(captionKey) : null;
+      // The video hash doesn't include caption state, so a video cached before
+      // captions were requested won't have the sidecar — regenerate it on demand.
+      if (wantCaptions && !captions) {
+        const vtt = toVTT(captionsFromNarration(scene.narration!, frameCount / fps));
+        captions = await this.storage.put(captionKey, Buffer.from(vtt, "utf8"), "text/vtt");
+      }
       return {
         ok: true,
         video: existing,
@@ -210,9 +216,11 @@ export class RenderService {
       });
 
       let videoPath = tmp;
+      let segmentDurations: number[] | undefined;
       if (wantNarration && this.tts) {
-        const { wav } = await synthesizeNarration(this.tts, scene.narration!, frameCount / fps);
-        await muxAudioVideo(tmp, wav, tmpMuxed, this.ffmpegPath ? { ffmpegPath: this.ffmpegPath } : {});
+        const synth = await synthesizeNarration(this.tts, scene.narration!, frameCount / fps);
+        segmentDurations = synth.segmentDurations;
+        await muxAudioVideo(tmp, synth.wav, tmpMuxed, this.ffmpegPath ? { ffmpegPath: this.ffmpegPath } : {});
         videoPath = tmpMuxed;
       }
 
@@ -220,7 +228,7 @@ export class RenderService {
 
       let captions: StoredObject | undefined;
       if (wantCaptions) {
-        const vtt = toVTT(captionsFromNarration(scene.narration!, frameCount / fps));
+        const vtt = toVTT(captionsFromNarration(scene.narration!, frameCount / fps, segmentDurations));
         captions = await this.storage.put(captionKey, Buffer.from(vtt, "utf8"), "text/vtt");
       }
 

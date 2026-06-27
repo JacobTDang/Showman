@@ -78,9 +78,11 @@ export class FramePool {
       return;
     }
     this.started = true;
+    let handles: Worker[] = [];
     try {
       const { url, execArgv } = workerEntry();
-      const handles = Array.from({ length: this.concurrency }, () => new Worker(url, { workerData: { spec: this.spec }, execArgv }));
+      handles = Array.from({ length: this.concurrency }, () => new Worker(url, { workerData: { spec: this.spec }, execArgv }));
+      for (const w of handles) w.on("error", () => {}); // avoid unhandled 'error' after init
       await Promise.all(
         handles.map(
           (w) =>
@@ -92,7 +94,8 @@ export class FramePool {
       );
       this.workers = handles;
     } catch {
-      await this.terminateWorkers();
+      // Terminate the handles we actually spawned (this.workers may still be []).
+      await Promise.all(handles.map((w) => w.terminate().catch(() => undefined)));
       this.workers = []; // fall back to sequential
     }
   }

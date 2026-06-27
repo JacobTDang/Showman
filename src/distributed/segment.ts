@@ -80,6 +80,7 @@ export async function assembleSegments(
 
   const stdin = proc.stdin;
   if (!stdin) throw new Error("ffmpeg stdin unavailable");
+  stdin.on("error", () => {});
 
   const pump = (async () => {
     for (let shardId = 0; shardId < segmentCount; shardId++) {
@@ -89,5 +90,14 @@ export async function assembleSegments(
     stdin.end();
   })();
 
-  await Promise.race([Promise.all([pump, exited]), spawnErr]);
+  try {
+    await Promise.race([Promise.all([pump, exited]), spawnErr]);
+  } catch (err) {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    throw err;
+  }
 }

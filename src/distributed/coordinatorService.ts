@@ -41,6 +41,8 @@ export class CoordinatorService {
       ...(opts.moderation ? { moderation: opts.moderation } : {}),
       onProgress: (e) => this.lastProgress.set(e.jobId, e),
     });
+    this.queue.onDeadLetter((task) => this.coordinator.failJob(task.jobId, `shard ${task.shardId} exceeded retries (poison shard)`));
+
     const n = Math.max(1, opts.workers ?? 4);
     this.workers = Array.from({ length: n }, (_, i) =>
       new ShardWorker({

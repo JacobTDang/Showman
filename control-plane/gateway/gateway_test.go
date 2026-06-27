@@ -147,6 +147,29 @@ func TestQuotaEnforced(t *testing.T) {
 	}
 }
 
+func TestObjectsAndPreviewRequireAuthWhenConfigured(t *testing.T) {
+	worker := newStub(http.StatusOK, `png`)
+	coord := newStub(http.StatusOK, `bytes`)
+	cfg := baseConfig(worker, coord)
+	cfg.APIKeys = map[string]string{"k": "alice"}
+	g := New(cfg)
+
+	// Object retrieval and preview must reject unauthenticated callers (compute/data).
+	if rec := do(g, "GET", "/v1/objects/videos/abc.mp4", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth objects = %d", rec.Code)
+	}
+	if rec := do(g, "POST", "/v1/preview", `{"spec":{}}`, nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth preview = %d", rec.Code)
+	}
+	// With a valid key they pass through.
+	if rec := do(g, "GET", "/v1/objects/videos/abc.mp4", "", map[string]string{"X-API-Key": "k"}); rec.Code != http.StatusOK {
+		t.Fatalf("auth objects = %d", rec.Code)
+	}
+	if coord.callCount == 0 {
+		t.Fatalf("authed object request did not reach coordinator")
+	}
+}
+
 func TestMetricsExposed(t *testing.T) {
 	worker := newStub(http.StatusOK, `{}`)
 	coord := newStub(http.StatusAccepted, `{}`)

@@ -157,6 +157,19 @@ class Validator {
     this.checkNumberInRange(spec.fps, "fps", LIMITS.minFps, LIMITS.maxFps);
     this.checkNumberInRange(spec.duration, "duration", Number.MIN_VALUE, LIMITS.maxDuration);
 
+    // Hard cap on total frames — farm protection enforced at every backend.
+    if (isFiniteNumber(spec.fps) && isFiniteNumber(spec.duration)) {
+      const frames = Math.round(spec.fps * spec.duration);
+      if (frames > LIMITS.maxFrames) {
+        this.err({
+          path: "duration",
+          property: "duration",
+          code: "LIMIT_EXCEEDED",
+          message: `Total frames (fps*duration=${frames}) exceeds the maximum ${LIMITS.maxFrames}.`,
+        });
+      }
+    }
+
     if (spec.seed !== undefined && !Number.isInteger(spec.seed)) {
       this.err({
         path: "seed",

@@ -62,8 +62,12 @@ type Gateway struct {
 	mux     *http.ServeMux
 	metrics *metrics
 
-	mu       sync.Mutex
-	jobCount map[string]int // userID -> jobs submitted (naive quota)
+	mu sync.Mutex
+	// userID -> jobs submitted. NOTE: this is a per-instance cumulative counter — with
+	// multiple gateway replicas a user's effective quota is N*limit, and it never
+	// decrements. Production should use a shared, time-windowed limiter (e.g. a Redis
+	// token bucket keyed by userID) decremented on job completion.
+	jobCount map[string]int
 }
 
 // New builds a Gateway.
@@ -91,9 +95,16 @@ func (g *Gateway) routes() {
 	g.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
 		g.metrics.render(w)
 	})
+	// Schema + validate are cheap and useful for discovery; left public.
 	g.mux.HandleFunc("GET /v1/schema", g.proxyWorker("/schema"))
 	g.mux.HandleFunc("POST /v1/validate", g.proxyWorker("/validate"))
-	g.mux.HandleFunc("POST /v1/preview", g.proxyWorker("/preview"))
+	// Preview does real render work — require auth so it can't be used unauthenticated.
+	g.mux.HandleFunc("POST /v1/preview", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := g.authed(w, r); !ok {
+			return
+		}
+		g.forward(w, r, g.cfg.WorkerURL, "/preview", nil)
+	})
 	g.mux.HandleFunc("POST /v1/jobs", g.handleSubmit)
 	g.mux.HandleFunc("GET /v1/jobs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := g.authed(w, r); !ok {
@@ -102,6 +113,11 @@ func (g *Gateway) routes() {
 		g.forward(w, r, g.cfg.CoordinatorURL, "/jobs/"+r.PathValue("id"), nil)
 	})
 	g.mux.HandleFunc("GET /v1/objects/{key...}", func(w http.ResponseWriter, r *http.Request) {
+		// Object retrieval requires auth (consistent with job status); content-addressed
+		// keys are not an access-control boundary.
+		if _, ok := g.authed(w, r); !ok {
+			return
+		}
 		key := r.PathValue("key")
 		// M6.3: when a CDN fronts object storage, redirect finished videos there
 		// instead of proxying bytes through the gateway.

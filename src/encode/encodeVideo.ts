@@ -95,11 +95,13 @@ export async function encodeSceneToFile(spec: SceneSpec, options: EncodeOptions)
 
   const stdin = proc.stdin;
   if (!stdin) throw new Error("ffmpeg stdin unavailable");
+  stdin.on("error", () => {}); // swallow EPIPE if ffmpeg dies first; real cause comes via `exited`
 
   const pump = pumpFrames(spec, frameCount, concurrency, stdin, onProgress);
 
-  // If ffmpeg dies mid-pump, the write would EPIPE; race so we report the real cause.
-  await Promise.race([Promise.all([pump, exited]), spawnErr]);
+  // If ffmpeg dies mid-pump, the write would EPIPE; race so we report the real cause,
+  // and always reap the child on failure so it can't leak.
+  await settleFfmpeg(proc, Promise.all([pump, exited]), spawnErr);
 
   return {
     outPath,
@@ -109,6 +111,20 @@ export async function encodeSceneToFile(spec: SceneSpec, options: EncodeOptions)
     frameCount,
     durationSec: frameCount / fps,
   };
+}
+
+/** Await ffmpeg work, but SIGKILL the child on any failure so processes never leak. */
+async function settleFfmpeg(proc: ReturnType<typeof spawn>, work: Promise<unknown>, spawnErr: Promise<never>): Promise<void> {
+  try {
+    await Promise.race([work, spawnErr]);
+  } catch (err) {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    throw err;
+  }
 }
 
 /**
@@ -234,8 +250,9 @@ export async function encodeSceneToHls(spec: SceneSpec, options: HlsEncodeOption
     proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg HLS exited with code ${code}.\n${stderr.slice(-2000)}`))));
   });
   if (!proc.stdin) throw new Error("ffmpeg stdin unavailable");
+  proc.stdin.on("error", () => {});
   const pump = pumpFrames(spec, frameCount, concurrency, proc.stdin, onProgress);
-  await Promise.race([Promise.all([pump, exited]), spawnErr]);
+  await settleFfmpeg(proc, Promise.all([pump, exited]), spawnErr);
 
   return { playlistPath, dir: outDir, frameCount, durationSec: frameCount / fps };
 }
@@ -303,15 +320,22 @@ export async function encodeSceneToStream(
     proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}.\n${stderr.slice(-2000)}`))));
   });
 
-  // Pipe encoded bytes to the consumer as they are produced (don't end `out` —
-  // the caller owns that, e.g. the HTTP response).
-  proc.stdout?.on("data", (chunk: Buffer) => {
-    out.write(chunk);
+  // Pipe encoded bytes to the consumer, respecting backpressure (pipe pauses ffmpeg
+  // stdout when `out` is slow). Don't end `out` — the caller owns it (e.g. the HTTP
+  // response). If the consumer errors (client disconnects), kill ffmpeg.
+  proc.stdout?.pipe(out, { end: false });
+  out.on("error", () => {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
   });
 
   if (!proc.stdin) throw new Error("ffmpeg stdin unavailable");
+  proc.stdin.on("error", () => {});
   const pump = pumpFrames(spec, frameCount, concurrency, proc.stdin, onProgress);
-  await Promise.race([Promise.all([pump, exited]), spawnErr]);
+  await settleFfmpeg(proc, Promise.all([pump, exited]), spawnErr);
 
   return { outPath: "", width, height, fps, frameCount, durationSec: frameCount / fps };
 }

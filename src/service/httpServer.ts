@@ -35,6 +35,17 @@ export interface ServerDeps {
 
 const MAX_BODY_DEFAULT = 8 * 1024 * 1024;
 
+/**
+ * Strip the `moderate` opt-out from client-supplied options so an untrusted caller
+ * can never disable the content-safety gate over HTTP. Trusted internal callers use
+ * RenderService.render directly when a post-approval bypass is genuinely needed.
+ */
+function stripModerateOptOut(options: Record<string, unknown> | undefined): Record<string, unknown> {
+  const out = { ...(options ?? {}) };
+  delete out.moderate;
+  return out;
+}
+
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(payload) });
@@ -94,7 +105,13 @@ export function createServer(deps: ServerDeps): http.Server {
     if (method === "POST" && path === "/preview") {
       const body = (await readJson(req, limit)) as { spec?: unknown; frame?: number };
       const frame = body?.frame ?? Number(url.searchParams.get("frame") ?? 0);
-      const result = service.preview(body?.spec ?? body, frame);
+      const spec = body?.spec ?? body;
+      const validation = service.validate(spec);
+      if (!validation.valid) return sendJson(res, 400, { valid: false, errors: validation.errors });
+      // The safety gate applies to previews too (no unsafe imagery, even one frame).
+      const verdict = await service.moderate(spec as SceneSpec);
+      if (!verdict.safe) return sendJson(res, 422, { error: "content_safety", findings: verdict.findings });
+      const result = service.preview(spec, frame);
       if (!result.ok) return sendJson(res, 400, { valid: false, errors: result.errors });
       if (url.searchParams.get("format") === "json") {
         return sendJson(res, 200, {
@@ -111,7 +128,7 @@ export function createServer(deps: ServerDeps): http.Server {
 
     if (method === "POST" && path === "/render") {
       const body = (await readJson(req, limit)) as { spec?: unknown; options?: Record<string, unknown> };
-      const result = await service.render(body?.spec ?? body, body?.options ?? {});
+      const result = await service.render(body?.spec ?? body, stripModerateOptOut(body?.options));
       if (!result.ok) {
         if ("blocked" in result) return sendJson(res, 422, { error: "content_safety", findings: result.findings });
         return sendJson(res, 400, { error: "invalid_spec", errors: result.errors });
@@ -152,7 +169,7 @@ export function createServer(deps: ServerDeps): http.Server {
     if (method === "POST" && path === "/jobs") {
       if (!deps.jobRunner) return sendJson(res, 501, { error: "jobs_disabled" });
       const body = (await readJson(req, limit)) as { spec?: unknown; options?: Record<string, unknown> };
-      const submitted = await deps.jobRunner.submit(body?.spec ?? body, body?.options ?? {});
+      const submitted = await deps.jobRunner.submit(body?.spec ?? body, stripModerateOptOut(body?.options));
       if (!submitted.ok) return sendJson(res, 400, { error: "invalid_spec", errors: submitted.errors });
       return sendJson(res, 202, { jobId: submitted.job.id, status: submitted.job.status, statusUrl: `/jobs/${submitted.job.id}` });
     }

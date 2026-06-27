@@ -14,15 +14,26 @@ export interface Cue {
   text: string;
 }
 
-/** Build caption cues from a narration track, clamped to the scene duration. */
-export function captionsFromNarration(narration: NarrationTrack, sceneDuration: number): Cue[] {
+/**
+ * Build caption cues from a narration track, clamped to the scene duration.
+ * Cues never overlap (each is bounded by the next segment's start) and degenerate
+ * cues (starting at/after the scene end) are dropped. If `segmentDurations` is
+ * provided (the actual synthesized speech lengths, sorted by start time), cue ends
+ * track the spoken audio instead of guessing.
+ */
+export function captionsFromNarration(narration: NarrationTrack, sceneDuration: number, segmentDurations?: number[]): Cue[] {
   const segments = [...(narration.segments ?? [])].sort((a, b) => a.t - b.t);
-  return segments.map((seg, i) => {
+  const cues: Cue[] = [];
+  segments.forEach((seg, i) => {
+    if (seg.t >= sceneDuration) return; // a cue that starts after the video ended is meaningless
     const next = segments[i + 1];
-    const naturalEnd = seg.duration !== undefined ? seg.t + seg.duration : next ? next.t : sceneDuration;
-    const end = Math.min(Math.max(seg.t + 0.3, naturalEnd), sceneDuration);
-    return { start: seg.t, end, text: seg.text };
+    const hardEnd = next ? next.t : sceneDuration; // no overlap with the following cue
+    const dur = segmentDurations?.[i] ?? seg.duration;
+    const naturalEnd = dur !== undefined ? seg.t + dur : hardEnd;
+    const end = Math.min(Math.max(seg.t + 0.3, naturalEnd), hardEnd, sceneDuration);
+    if (end > seg.t) cues.push({ start: seg.t, end, text: seg.text });
   });
+  return cues;
 }
 
 function fmtTimestamp(sec: number, comma: boolean): string {

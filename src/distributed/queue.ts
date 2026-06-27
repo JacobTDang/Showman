@@ -27,6 +27,8 @@ export interface Queue<T> {
   ack(leaseId: string): Promise<void>;
   /** Return a leased task to the queue immediately (explicit retry / give-up). */
   nack(leaseId: string): Promise<void>;
+  /** Register a handler invoked when a task exceeds maxAttempts and is dead-lettered. */
+  onDeadLetter(handler: (payload: T) => void): void;
   /** Pending (un-leased) task count. */
   size(): Promise<number>;
   /** Currently-leased (in-flight) task count. */
@@ -60,6 +62,7 @@ export class InMemoryLeaseQueue<T> implements Queue<T> {
   private readonly defaultVisibilityMs: number;
   private readonly maxAttempts: number;
   private readonly now: () => number;
+  private deadLetterHandler: ((payload: T) => void) | undefined;
 
   constructor(options: InMemoryQueueOptions = {}) {
     this.defaultVisibilityMs = options.defaultVisibilityMs ?? 30_000;
@@ -106,6 +109,10 @@ export class InMemoryLeaseQueue<T> implements Queue<T> {
     return [...this.dead];
   }
 
+  onDeadLetter(handler: (payload: T) => void): void {
+    this.deadLetterHandler = handler;
+  }
+
   /** Requeue leases whose deadline has passed (a worker that never acked). */
   private reap(): void {
     const t = this.now();
@@ -120,6 +127,7 @@ export class InMemoryLeaseQueue<T> implements Queue<T> {
   private requeue(entry: Entry<T>): void {
     if (entry.attempts >= this.maxAttempts) {
       this.dead.push(entry.payload);
+      this.deadLetterHandler?.(entry.payload);
     } else {
       this.pending.push(entry);
     }

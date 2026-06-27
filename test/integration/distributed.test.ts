@@ -145,6 +145,21 @@ describe("distributed rendering (M3)", () => {
     expect(Math.max(...events.map((e) => e.shardsDone))).toBe(result.status!.shardsTotal);
   });
 
+  it("fails the job (not hang) when a shard is poison and dead-letters", async () => {
+    if (!ffmpeg) return expect.unreachable("ffmpeg required");
+    const storage = new LocalObjectStorage(join(dataDir, "poison"));
+    const result = await renderDistributed(scene(), { shardSize: 8, deterministic: true }, {
+      storage,
+      workDir: join(dataDir, "poison-work"),
+      workers: 2,
+      queueOptions: { defaultVisibilityMs: 20, maxAttempts: 2 },
+      faultInjector: (task: ShardTask) => task.shardId === 0, // shard 0 ALWAYS fails
+    }, 15_000);
+    // The fan-in barrier must not hang forever; the job resolves to an error.
+    expect(result.status!.state).toBe("error");
+    expect(result.ok).toBe(false);
+  });
+
   it("dead-letters a shard that always fails (poison-shard safety)", async () => {
     const queue = new InMemoryLeaseQueue<ShardTask>({ maxAttempts: 2, defaultVisibilityMs: 10 });
     await queue.push({ jobId: "j", shardId: 0, frameStart: 0, frameEnd: 1, specRef: "specs/j.json" });
