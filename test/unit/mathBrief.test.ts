@@ -46,6 +46,36 @@ describe("parseMathBrief", () => {
     expect(r.params).toMatchObject({ hundreds: 1, tens: 2, ones: 3 });
   });
 
+  it("parses subtraction", () => {
+    const r = parseMathBrief("subtract 7 - 3 on a number line")!;
+    expect(r.topic).toBe("subtraction");
+    expect(r.params).toMatchObject({ a: 7, b: 3 });
+  });
+
+  it("parses division (shared into groups)", () => {
+    const r = parseMathBrief("divide 12 into 3 groups")!;
+    expect(r.topic).toBe("division");
+    expect(r.params).toMatchObject({ total: 12, groups: 3 });
+  });
+
+  it("parses a decimal", () => {
+    const r = parseMathBrief("show the decimal 0.7")!;
+    expect(r.topic).toBe("decimal");
+    expect(r.params).toMatchObject({ tenths: 7 });
+  });
+
+  it("parses a percent", () => {
+    const r = parseMathBrief("show 75% as a ring")!;
+    expect(r.topic).toBe("percent");
+    expect(r.params).toMatchObject({ percent: 75 });
+  });
+
+  it("parses a geometry shape", () => {
+    const r = parseMathBrief("teach the pentagon shape")!;
+    expect(r.topic).toBe("geometry");
+    expect(r.params).toMatchObject({ sides: 5 });
+  });
+
   it("picks up a theme hint", () => {
     expect(parseMathBrief("graph y = 2x + 1 in an ocean theme")!.params.theme).toBe("ocean");
   });

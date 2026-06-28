@@ -51,6 +51,12 @@ export function parseMathBrief(brief: string): MathBriefResult | null {
     return { topic: "quadratic", params: { a, b: 0, c, theme } };
   }
 
+  // Division: a ÷ b / shared into groups (before fraction, which also matches "/").
+  const div = b.match(/(\d+)\s*(?:÷|\/|divided\s*by|into)\s*(\d+)/);
+  if (div && /divide|division|÷|shared?|split/.test(b)) {
+    return { topic: "division", params: { total: parseInt(div[1]!, 10), groups: parseInt(div[2]!, 10), theme } };
+  }
+
   // Fraction: n/d, framed as a pie/fraction/out-of.
   const frac = b.match(/(\d+)\s*\/\s*(\d+)/);
   if (frac && /pie|fraction|slice|pizza|out of|\//.test(b)) {
@@ -63,6 +69,26 @@ export function parseMathBrief(brief: string): MathBriefResult | null {
     return { topic: "graphing", params: { m: coeff(lin[1]), b: signedTerm(lin[2]), theme } };
   }
 
+  // Percent: "N%" or "N percent".
+  const pct = b.match(/(\d+)\s*(?:%|percent)/);
+  if (pct && /%|percent/.test(b)) {
+    return { topic: "percent", params: { percent: parseInt(pct[1]!, 10), theme } };
+  }
+
+  // Geometry: name a polygon by shape word or side count.
+  const shapeWord = b.match(/triangle|square|pentagon|hexagon|heptagon|octagon/);
+  if (shapeWord || /\b(\d+)[- ]sided\b|polygon|shape with/.test(b)) {
+    const bySides: Record<string, number> = { triangle: 3, square: 4, pentagon: 5, hexagon: 6, heptagon: 7, octagon: 8 };
+    const sides = shapeWord ? (bySides[shapeWord[0]] ?? 4) : parseInt(b.match(/(\d+)[- ]sided/)?.[1] ?? "4", 10);
+    return { topic: "geometry", params: { sides, theme } };
+  }
+
+  // Decimal as tenths (0.N or "N tenths"); any "y = 0.5x" graph was handled above.
+  if (/decimal|tenths|0\s*\.\s*\d/.test(b)) {
+    const d = b.match(/0\s*\.\s*(\d)/)?.[1] ?? b.match(/(\d+)\s*tenths/)?.[1];
+    return { topic: "decimal", params: { tenths: d ? parseInt(d, 10) : 5, theme } };
+  }
+
   // Multiplication: r × c / r times c / array.
   const mul = b.match(/(\d+)\s*(?:×|x|\*|times|by)\s*(\d+)/);
   if (mul && /multiply|times|×|\barray\b|product|\*/.test(b)) {
@@ -73,6 +99,12 @@ export function parseMathBrief(brief: string): MathBriefResult | null {
   const add = b.match(/(\d+)\s*(?:\+|plus)\s*(\d+)/);
   if (add && /add|plus|\+|sum|number\s*line/.test(b)) {
     return { topic: "addition", params: { a: parseInt(add[1]!, 10), b: parseInt(add[2]!, 10), theme } };
+  }
+
+  // Subtraction: a − b / a minus b / take away.
+  const sub = b.match(/(\d+)\s*(?:-|−|minus|take\s*away)\s*(\d+)/);
+  if (sub && /subtract|minus|take\s*away|difference|−/.test(b)) {
+    return { topic: "subtraction", params: { a: parseInt(sub[1]!, 10), b: parseInt(sub[2]!, 10), theme } };
   }
 
   // Place value of a (up to 3-digit) number.

@@ -12,11 +12,13 @@ import { getTheme, type Theme } from "../theme/themes.js";
 import { buildCountingLesson, type CountingLessonOptions } from "../lessons/templates.js";
 import { popIn, fadeIn } from "../motion/presets.js";
 import { drawOn, countUp } from "./presets.js";
-import { coordinatePlane, plotLine, plotFunction, plotPoints, numberLine, fractionCircle } from "./builders.js";
+import { coordinatePlane, plotLine, plotFunction, plotPoints, numberLine, fractionCircle, fractionBar } from "./builders.js";
 import { buildArrayGrid } from "./arrayGrid.js";
 import { buildBaseTenBlocks } from "./baseTenBlocks.js";
 import { buildBalanceScale } from "./balanceScale.js";
 import { buildBarGraph } from "./barGraph.js";
+import { buildLabeledShape } from "./labeledShape.js";
+import { buildPercentRing } from "./percentRing.js";
 
 function title(theme: Theme, text: string, width: number): Node {
   return {
@@ -521,18 +523,352 @@ export function buildDataLesson(opts: DataLessonOptions = {}): SceneSpec {
   };
 }
 
+export interface SubtractionLessonOptions {
+  a?: number;
+  b?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Subtract a − b on a number line: a marker starts at a and hops backward to a − b. */
+export function buildSubtractionLesson(opts: SubtractionLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const a = Math.max(0, Math.floor(opts.a ?? 5));
+  const b = Math.max(0, Math.min(a, Math.floor(opts.b ?? 2)));
+  const diff = a - b;
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const max = Math.max(a + 1, 5);
+  const lineW = Math.min(760, max * 90);
+  const nl = numberLine({ id: "nl", x: (width - lineW) / 2, y: 300, width: lineW, from: 0, to: max, theme: opts.theme });
+  const r = 16;
+  const start = 1.2;
+  const step = 0.55;
+  const baseY = nl.originY - r;
+  const xkeys: Track["keyframes"] = [{ t: start, value: nl.originX + nl.toX(a) - r }];
+  const ykeys: Track["keyframes"] = [{ t: start, value: baseY }];
+  for (let i = 1; i <= b; i++) {
+    const t0 = start + (i - 1) * step;
+    xkeys.push({ t: t0 + step, value: nl.originX + nl.toX(a - i) - r, easing: "easeInOutQuad" });
+    ykeys.push({ t: t0 + step / 2, value: baseY - 34, easing: "easeOutQuad" });
+    ykeys.push({ t: t0 + step, value: baseY, easing: "easeInQuad" });
+  }
+  const marker: Node = {
+    id: "marker",
+    type: "ellipse",
+    x: nl.originX + nl.toX(a) - r,
+    y: baseY,
+    width: r * 2,
+    height: r * 2,
+    fill: theme.palette.accent,
+    tracks: [
+      { property: "x", keyframes: xkeys },
+      { property: "y", keyframes: ykeys },
+    ],
+  };
+  const nodes: Node[] = [
+    title(theme, `${a} − ${b} = ?`, width),
+    {
+      id: "sentence",
+      type: "counter",
+      x: width / 2,
+      y: 150,
+      value: diff,
+      prefix: `${a} − ${b} = `,
+      fontSize: 40,
+      fontFamily: theme.headingFont,
+      fontWeight: theme.headingWeight,
+      fill: theme.palette.secondary,
+      tracks: fadeIn({ start: start + b * step + 0.3, duration: 0.5 }),
+    },
+    nl.node,
+    marker,
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: `Let's take ${a} and subtract ${b}.` },
+    { t: start, text: `Start at ${a} and hop back ${b}.` },
+    { t: start + b * step + 0.3, text: `We land on ${diff}. So ${a} minus ${b} equals ${diff}!` },
+  ];
+  const duration = Math.round((start + b * step + 2.2) * 10) / 10;
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration,
+    seed: 9,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+export interface DivisionLessonOptions {
+  total?: number;
+  groups?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Divide total ÷ groups by sharing into equal rows (an array), each row a group. */
+export function buildDivisionLesson(opts: DivisionLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const total = Math.max(1, Math.floor(opts.total ?? 12));
+  const groups = Math.max(1, Math.floor(opts.groups ?? 3));
+  const per = Math.max(1, Math.floor(total / groups));
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const gap = 60;
+  const dotRadius = 14;
+  const gridW = 2 * dotRadius + (per - 1) * gap;
+  const array = buildArrayGrid({ id: "share", x: (width - gridW) / 2, y: 180, rows: groups, cols: per, gap, dotRadius, theme: opts.theme });
+  const nodes: Node[] = [
+    title(theme, `${total} ÷ ${groups} = ?`, width),
+    { ...array, tracks: popIn({ start: 0.8, duration: 0.6 }) } as Node,
+    {
+      id: "answer",
+      type: "counter",
+      x: width / 2,
+      y: height - 70,
+      value: per,
+      prefix: `${total} ÷ ${groups} = `,
+      fontSize: 44,
+      fontFamily: theme.headingFont,
+      fontWeight: theme.headingWeight,
+      fill: theme.palette.secondary,
+      tracks: fadeIn({ start: 2.4, duration: 0.5 }),
+    },
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: `Let's share ${total} equally into ${groups} groups.` },
+    { t: 1.0, text: `Each row is one group.` },
+    { t: 2.4, text: `Every group gets ${per}. So ${total} divided by ${groups} is ${per}!` },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 4.8,
+    seed: 10,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+export interface DecimalLessonOptions {
+  tenths?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Show a decimal as tenths: a bar split into 10 parts with `tenths` shaded = 0.t. */
+export function buildDecimalLesson(opts: DecimalLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const tenths = Math.max(0, Math.min(10, Math.floor(opts.tenths ?? 7)));
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const barW = 640;
+  const bar = fractionBar({
+    id: "bar",
+    x: (width - barW) / 2,
+    y: 200,
+    width: barW,
+    height: 90,
+    numerator: tenths,
+    denominator: 10,
+    theme: opts.theme,
+  });
+  const nodes: Node[] = [
+    title(theme, `Decimals: 0.${tenths}`, width),
+    { ...bar, tracks: popIn({ start: 0.8, duration: 0.6 }) } as Node,
+    {
+      id: "value",
+      type: "counter",
+      x: width / 2,
+      y: 380,
+      value: tenths / 10,
+      decimals: 1,
+      prefix: `${tenths}/10 = `,
+      fontSize: 48,
+      fontFamily: theme.headingFont,
+      fontWeight: theme.headingWeight,
+      fill: theme.palette.primary,
+      tracks: fadeIn({ start: 1.6, duration: 0.5 }),
+    },
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: "One whole, split into ten equal parts." },
+    { t: 1.6, text: `We shade ${tenths} of the ten parts.` },
+    { t: 3.0, text: `${tenths} tenths is the decimal 0 point ${tenths}.` },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 5.0,
+    seed: 11,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+const SHAPE_NAMES: Record<number, string> = { 3: "triangle", 4: "square", 5: "pentagon", 6: "hexagon", 7: "heptagon", 8: "octagon" };
+
+export interface GeometryLessonOptions {
+  sides?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Name a polygon and count its sides and corners (vertices). */
+export function buildGeometryLesson(opts: GeometryLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const sides = Math.max(3, Math.min(8, Math.floor(opts.sides ?? 4)));
+  const name = SHAPE_NAMES[sides] ?? `${sides}-gon`;
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const radius = 140;
+  const shape = buildLabeledShape({ id: "shape", sides, radius, x: width / 2 - radius, y: 120, theme: opts.theme, showAngle: true });
+  const nodes: Node[] = [
+    title(theme, `Shapes: the ${name}`, width),
+    { ...shape, tracks: popIn({ start: 0.7, duration: 0.6 }) } as Node,
+    {
+      id: "facts",
+      type: "text",
+      x: width / 2,
+      y: height - 56,
+      text: `${sides} sides · ${sides} corners`,
+      fontSize: 30,
+      fontFamily: theme.bodyFont,
+      fontWeight: 600,
+      fill: theme.palette.secondary,
+      align: "center",
+      baseline: "middle",
+      tracks: fadeIn({ start: 1.8, duration: 0.5 }),
+    },
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: `This shape is a ${name}.` },
+    { t: 1.8, text: `It has ${sides} straight sides and ${sides} corners, which we call vertices.` },
+    { t: 3.6, text: `Every ${name} has ${sides} of each.` },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 5.4,
+    seed: 12,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+export interface PercentLessonOptions {
+  percent?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Show a percent as a filling ring — "out of 100". */
+export function buildPercentLesson(opts: PercentLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const percent = Math.max(0, Math.min(100, Math.floor(opts.percent ?? 75)));
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const radius = 120;
+  const ring = buildPercentRing({ id: "ring", percent, x: width / 2 - radius, y: 140, radius, thickness: 34, theme: opts.theme });
+  const nodes: Node[] = [
+    title(theme, `Percents: ${percent}%`, width),
+    { ...ring, tracks: popIn({ start: 0.7, duration: 0.6 }) } as Node,
+    {
+      id: "meaning",
+      type: "text",
+      x: width / 2,
+      y: height - 56,
+      text: `${percent} out of every 100`,
+      fontSize: 30,
+      fontFamily: theme.bodyFont,
+      fontWeight: 600,
+      fill: theme.palette.secondary,
+      align: "center",
+      baseline: "middle",
+      tracks: fadeIn({ start: 1.8, duration: 0.5 }),
+    },
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: "Percent means 'out of one hundred'." },
+    { t: 1.8, text: `So ${percent} percent means ${percent} out of every hundred.` },
+    { t: 3.4, text: `The ring is ${percent} percent full.` },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 5.2,
+    seed: 13,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
 /** All math lesson topics the dispatcher understands. */
 export type MathTopic =
-  "counting" | "addition" | "multiplication" | "fraction" | "place-value" | "graphing" | "quadratic" | "equation" | "data";
+  | "counting"
+  | "addition"
+  | "subtraction"
+  | "multiplication"
+  | "division"
+  | "fraction"
+  | "decimal"
+  | "percent"
+  | "place-value"
+  | "geometry"
+  | "graphing"
+  | "quadratic"
+  | "equation"
+  | "data";
 
 /** Unified options accepted by {@link buildMathLesson} (every lesson's options share optional fields). */
 export type MathLessonOptions = CountingLessonOptions &
   GraphLessonOptions &
   QuadraticLessonOptions &
   AdditionLessonOptions &
-  FractionLessonOptions &
+  SubtractionLessonOptions &
   MultiplicationLessonOptions &
+  DivisionLessonOptions &
+  FractionLessonOptions &
+  DecimalLessonOptions &
   PlaceValueLessonOptions &
+  GeometryLessonOptions &
+  PercentLessonOptions &
   EquationLessonOptions &
   DataLessonOptions;
 
@@ -543,12 +879,22 @@ export function buildMathLesson(topic: MathTopic, params: MathLessonOptions = {}
       return buildCountingLesson(params);
     case "addition":
       return buildAdditionLesson(params);
+    case "subtraction":
+      return buildSubtractionLesson(params);
     case "multiplication":
       return buildMultiplicationLesson(params);
+    case "division":
+      return buildDivisionLesson(params);
     case "fraction":
       return buildFractionLesson(params);
+    case "decimal":
+      return buildDecimalLesson(params);
+    case "percent":
+      return buildPercentLesson(params);
     case "place-value":
       return buildPlaceValueLesson(params);
+    case "geometry":
+      return buildGeometryLesson(params);
     case "graphing":
       return buildGraphingLesson(params);
     case "quadratic":
