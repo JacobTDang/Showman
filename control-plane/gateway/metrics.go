@@ -42,6 +42,6 @@ func (m *metrics) render(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	w.WriteHeader(http.StatusOK)
 	for _, k := range keys {
-		fmt.Fprintf(w, "showman_gateway_%s %d\n", k, snapshot[k])
+		_, _ = fmt.Fprintf(w, "showman_gateway_%s %d\n", k, snapshot[k])
 	}
 }
