@@ -39,6 +39,8 @@ const DEG2RAD = Math.PI / 180;
 
 type TextAlign = "left" | "right" | "center" | "start" | "end";
 type TextBaseline = "top" | "hanging" | "middle" | "alphabetic" | "ideographic" | "bottom";
+type LineCap = "butt" | "round" | "square";
+type LineJoin = "miter" | "round" | "bevel";
 
 /**
  * Render a single frame of `spec` at `frameIndex`. Frame indices are
@@ -119,6 +121,9 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
       break;
     case "polygon":
       drawPolygon(ctx, res);
+      break;
+    case "polyline":
+      drawPolyline(ctx, res);
       break;
     case "arc":
       drawArc(ctx, res);
@@ -281,6 +286,59 @@ function drawCounter(ctx: SKRSContext2D, res: NodeResolver): void {
   const suffix = res.str("suffix") ?? "";
   const str = `${prefix}${value.toFixed(decimals)}${suffix}`;
   paintGlyphs(ctx, res, str, { weight: 700, align: "center", baseline: "middle" });
+}
+
+function drawPolyline(ctx: SKRSContext2D, res: NodeResolver): void {
+  const raw = res.raw("points");
+  if (!Array.isArray(raw) || raw.length < 2) return;
+  const points = raw as Array<{ x: number; y: number }>;
+  const stroke = res.color("stroke") ?? "#000000";
+  const strokeWidth = Math.max(0, res.num("strokeWidth", 2));
+  const fill = res.color("fill");
+  const closed = res.raw("closed") === true;
+  const progress = Math.max(0, Math.min(1, res.num("progress", 1)));
+  if (progress <= 0) return;
+
+  // Vertices to walk, including the closing edge for a closed path.
+  const verts = closed ? [...points, points[0]!] : points;
+  const segLen: number[] = [];
+  let total = 0;
+  for (let i = 1; i < verts.length; i++) {
+    const l = Math.hypot(verts[i]!.x - verts[i - 1]!.x, verts[i]!.y - verts[i - 1]!.y);
+    segLen.push(l);
+    total += l;
+  }
+
+  ctx.lineCap = (res.str("lineCap") as LineCap) ?? "round";
+  ctx.lineJoin = (res.str("lineJoin") as LineJoin) ?? "round";
+  ctx.lineWidth = strokeWidth;
+
+  // Build the stroked path up to `progress` of the total length (draw-on).
+  const target = progress * total;
+  ctx.beginPath();
+  ctx.moveTo(verts[0]!.x, verts[0]!.y);
+  let acc = 0;
+  for (let i = 1; i < verts.length; i++) {
+    const l = segLen[i - 1]!;
+    if (total === 0 || acc + l <= target) {
+      ctx.lineTo(verts[i]!.x, verts[i]!.y);
+      acc += l;
+    } else {
+      const f = l > 0 ? (target - acc) / l : 0;
+      ctx.lineTo(verts[i - 1]!.x + (verts[i]!.x - verts[i - 1]!.x) * f, verts[i - 1]!.y + (verts[i]!.y - verts[i - 1]!.y) * f);
+      break;
+    }
+  }
+
+  // Fill a closed shape only once fully drawn (the outline animates on, then fills).
+  if (fill !== undefined && fill !== "transparent" && closed && progress >= 1) {
+    ctx.fillStyle = normalizeColor(fill);
+    ctx.fill();
+  }
+  if (stroke !== "transparent" && strokeWidth > 0) {
+    ctx.strokeStyle = normalizeColor(stroke);
+    ctx.stroke();
+  }
 }
 
 function drawArc(ctx: SKRSContext2D, res: NodeResolver): void {

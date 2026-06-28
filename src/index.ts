@@ -95,7 +95,7 @@ export { HttpTaskQueue } from "./distributed/httpQueue.js";
 export { createRemoteWorker, startRemoteWorker } from "./distributed/remoteWorkerMain.js";
 
 // Beautiful + learning-grade (M5)
-export type { PolygonNode, ArcNode, CounterNode, NarrationSegment } from "./spec/types.js";
+export type { PolygonNode, PolylineNode, ArcNode, CounterNode, NarrationSegment } from "./spec/types.js";
 export { THEMES, DEFAULT_THEME, getTheme, swatch } from "./theme/themes.js";
 export type { Theme, Palette } from "./theme/themes.js";
 export * as motion from "./motion/presets.js";

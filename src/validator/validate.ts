@@ -438,6 +438,52 @@ class Validator {
       nonNegNum("strokeWidth");
       colorProp("fill");
       colorProp("stroke");
+    } else if (type === "polyline") {
+      const pts = node.points;
+      if (!Array.isArray(pts) || pts.length < 2) {
+        this.err({
+          path: `${path}.points`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "points",
+          code: "MISSING_FIELD",
+          message: `polyline "${nodeId ?? "?"}" must have a "points" array of at least 2 { x, y } points.`,
+        });
+      } else {
+        pts.forEach((p, i) => {
+          if (!isObject(p) || !isFiniteNumber(p.x) || !isFiniteNumber(p.y)) {
+            this.err({
+              path: `${path}.points[${i}]`,
+              ...(nodeId ? { nodeId } : {}),
+              property: "points",
+              code: "INVALID_TYPE",
+              message: `Each polyline point must be { x: number, y: number }; got ${JSON.stringify(p)}.`,
+            });
+          }
+        });
+      }
+      nonNegNum("strokeWidth");
+      colorProp("stroke");
+      colorProp("fill");
+      if (node.progress !== undefined && (!isFiniteNumber(node.progress) || node.progress < 0 || node.progress > 1)) {
+        this.err({
+          path: `${path}.progress`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "progress",
+          code: "OUT_OF_RANGE",
+          message: `progress must be a number between 0 and 1; got ${JSON.stringify(node.progress)}.`,
+        });
+      }
+      if (node.closed !== undefined && typeof node.closed !== "boolean") {
+        this.err({
+          path: `${path}.closed`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "closed",
+          code: "INVALID_TYPE",
+          message: `closed must be a boolean.`,
+        });
+      }
+      this.enumProp(node, "lineCap", ["butt", "round", "square"], path, nodeId);
+      this.enumProp(node, "lineJoin", ["miter", "round", "bevel"], path, nodeId);
     } else if (type === "arc") {
       nonNegNum("radius");
       nonNegNum("innerRadius");

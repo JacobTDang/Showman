@@ -133,6 +133,27 @@ export interface PolygonNode extends BaseNodeProps {
   strokeWidth?: number;
 }
 
+export interface PolylineNode extends BaseNodeProps {
+  id: string;
+  type: "polyline";
+  /** Connected points in local space (relative to x,y). At least 2 required. */
+  points: { x: number; y: number }[];
+  /** Stroke color. Default `"#000000"`. Animatable. */
+  stroke?: Color;
+  /** Stroke width in px. Default 2. Animatable. */
+  strokeWidth?: number;
+  /** Fill color for a closed shape. Default none. Animatable. Filled only at full `progress`. */
+  fill?: Color;
+  /** Close the path (connect last point back to first). Default false. */
+  closed?: boolean;
+  /** Line cap style. Default `"round"`. */
+  lineCap?: "butt" | "round" | "square";
+  /** Line join style. Default `"round"`. */
+  lineJoin?: "miter" | "round" | "bevel";
+  /** Draw-on progress 0..1: draws only the first portion of the path length. Default 1. Animatable. */
+  progress?: number;
+}
+
 export interface ArcNode extends BaseNodeProps {
   id: string;
   type: "arc";
@@ -217,7 +238,7 @@ export interface GroupNode extends BaseNodeProps {
 }
 
 /** A node in the scene tree. */
-export type Node = RectNode | EllipseNode | PolygonNode | ArcNode | CounterNode | TextNode | GroupNode;
+export type Node = RectNode | EllipseNode | PolygonNode | PolylineNode | ArcNode | CounterNode | TextNode | GroupNode;
 
 export type NodeType = Node["type"];
 
