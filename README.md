@@ -2,8 +2,13 @@
 
 An animation engine for **beautiful, narrated, pedagogically-structured learning
 videos for children** — authored by AI agents. A teacher or an agent provides a
-brief ("teach counting to five with stars"); Showman produces a polished, warm,
-narrated, captioned animation a child can watch.
+brief ("teach counting to five with stars", "graph y = 2x + 1"); Showman produces a
+polished, warm, narrated, captioned animation a child can watch.
+
+It now ships a **math animation toolkit spanning counting → algebra** — coordinate
+planes and function graphs (lines & parabolas that draw themselves on), number
+lines, fractions, ten-frames, arrays, place value, equations on a balance scale,
+bar graphs, and lightweight math notation (`a/b`, `x²`).
 
 All milestones **M0–M6** are implemented. See [MILESTONES.md](./MILESTONES.md) for
 the breakdown and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the vision.
@@ -41,6 +46,38 @@ the breakdown and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the vis
 | **M4** | MCP server (agent tools) + self-correcting authoring loop. |
 | **M5** | Storytelling primitives, motion presets, themes, narration/TTS, captions, lesson templates, content-safety gate. |
 | **M6** | Auth/quota/bounds, Prometheus metrics, CDN + HLS, Kubernetes manifests, CI. |
+| **Math** | `arc` / `counter` / `polyline` engine primitives, a `src/math` toolkit of composite builders + math motion presets + narrated lessons spanning counting → quadratics. |
+
+## Math toolkit (counting → algebra)
+
+Beyond the core primitives, `src/math` adds composable, themeable math visuals and a
+library of narrated lessons that compose them. The keystone primitive is `polyline`
+(connected points with an animatable draw-on `progress`), which unlocks axes,
+function curves, segments, braces, and tape diagrams; graphs precompute their sample
+points at build time, so a spec stays pure JSON.
+
+![Every math builder on one contact sheet](docs/math-gallery.png)
+
+- **Builders:** `coordinatePlane` + `plotLine`/`plotFunction`/`plotPoints` (graphing),
+  `numberLine`, `fractionCircle`/`fractionBar`, `tenFrame`, `baseTenBlocks`,
+  `dotPattern`, `arrayGrid`, `numberSentence`, `mathExpr` (lightweight notation),
+  `balanceScale`, `tapeDiagram`, `barGraph`, `angle`.
+- **Motion presets:** `drawOn` (graphs draw themselves), `shadeIn` (fractions fill),
+  `countUp`, `hop` (number-line jumps), `fillStagger`.
+- **Lessons:** `buildMathLesson(topic, params)` dispatches to graphing, quadratic,
+  addition, multiplication, fraction, place-value, equation, and data lessons —
+  each a complete, narrated, captioned Scene Spec.
+
+```ts
+import { math } from "showman";
+
+const lesson = math.buildMathLesson("graphing", { m: 2, b: 1, theme: "ocean" });
+//            ^ the line y = 2x + 1 draws itself across a labeled coordinate plane
+```
+
+```bash
+npm run math-gallery   # render every builder onto one contact sheet -> out/math-gallery.png
+```
 
 ## Brief → video (the product goal)
 
@@ -64,8 +101,9 @@ GET  /jobs/{jobId}               -> { status, result.video }
 
 ```bash
 npm install
-npm test              # 192 tests (unit + integration + golden + purity)
+npm test              # 269 tests (unit + integration + golden + purity)
 npm run demo:lesson   # render a narrated, captioned counting lesson -> out/
+npm run math-gallery  # render the full math-builder gallery -> out/math-gallery.png
 
 # Author a lesson programmatically
 node -e "import('./dist/index.js')" # after `npm run build`
