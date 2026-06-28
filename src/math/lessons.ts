@@ -9,9 +9,14 @@
 import type { SceneSpec, Node, NarrationSegment, Track } from "../spec/types.js";
 import { SPEC_VERSION } from "../spec/schema.js";
 import { getTheme, type Theme } from "../theme/themes.js";
+import { buildCountingLesson, type CountingLessonOptions } from "../lessons/templates.js";
 import { popIn, fadeIn } from "../motion/presets.js";
-import { drawOn } from "./presets.js";
+import { drawOn, countUp } from "./presets.js";
 import { coordinatePlane, plotLine, plotFunction, plotPoints, numberLine, fractionCircle } from "./builders.js";
+import { buildArrayGrid } from "./arrayGrid.js";
+import { buildBaseTenBlocks } from "./baseTenBlocks.js";
+import { buildBalanceScale } from "./balanceScale.js";
+import { buildBarGraph } from "./barGraph.js";
 
 function title(theme: Theme, text: string, width: number): Node {
   return {
@@ -302,4 +307,259 @@ export function buildFractionLesson(opts: FractionLessonOptions = {}): SceneSpec
     nodes,
     narration: { segments: narration },
   };
+}
+
+export interface MultiplicationLessonOptions {
+  rows?: number;
+  cols?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Multiply rows × cols with an array of dots, counting up to the product. */
+export function buildMultiplicationLesson(opts: MultiplicationLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const rows = Math.max(1, Math.floor(opts.rows ?? 3));
+  const cols = Math.max(1, Math.floor(opts.cols ?? 4));
+  const product = rows * cols;
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const gap = 64;
+  const dotRadius = 14;
+  const gridW = 2 * dotRadius + (cols - 1) * gap;
+  const array = buildArrayGrid({ id: "arr", x: (width - gridW) / 2, y: 170, rows, cols, gap, dotRadius, theme: opts.theme });
+
+  const nodes: Node[] = [
+    title(theme, `${rows} × ${cols} = ?`, width),
+    { ...array, tracks: popIn({ start: 0.8, duration: 0.6 }) } as Node,
+    {
+      id: "product",
+      type: "counter",
+      x: width / 2,
+      y: height - 70,
+      value: product,
+      prefix: `${rows} × ${cols} = `,
+      fontSize: 44,
+      fontFamily: theme.headingFont,
+      fontWeight: theme.headingWeight,
+      fill: theme.palette.secondary,
+      tracks: countUp({ start: 2.0, duration: 1.0, to: product }),
+    },
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: `Let's multiply ${rows} times ${cols}.` },
+    { t: 1.0, text: `Here are ${rows} rows of ${cols} dots.` },
+    { t: 2.0, text: "Count them all up..." },
+    { t: 3.2, text: `${rows} times ${cols} equals ${product}!` },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 5.4,
+    seed: 5,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+export interface PlaceValueLessonOptions {
+  hundreds?: number;
+  tens?: number;
+  ones?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Build a 3-digit number from base-ten blocks (hundreds, tens, ones). */
+export function buildPlaceValueLesson(opts: PlaceValueLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const h = Math.max(0, Math.floor(opts.hundreds ?? 1));
+  const t = Math.max(0, Math.floor(opts.tens ?? 2));
+  const o = Math.max(0, Math.floor(opts.ones ?? 3));
+  const number = h * 100 + t * 10 + o;
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const blocks = buildBaseTenBlocks({ id: "btb", x: 280, y: 190, hundreds: h, tens: t, ones: o, unit: 22, theme: opts.theme });
+  const nodes: Node[] = [
+    title(theme, `Place Value: ${number}`, width),
+    { ...blocks, tracks: popIn({ start: 0.8, duration: 0.6 }) } as Node,
+    {
+      id: "breakdown",
+      type: "text",
+      x: width / 2,
+      y: height - 60,
+      text: `${h} hundred, ${t} tens, ${o} ones`,
+      fontSize: 30,
+      fontFamily: theme.bodyFont,
+      fontWeight: 600,
+      fill: theme.palette.secondary,
+      align: "center",
+      baseline: "middle",
+      tracks: fadeIn({ start: 2.0, duration: 0.6 }),
+    },
+  ];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: `Let's build the number ${number}.` },
+    { t: 1.0, text: `${h} hundred, ${t} tens, and ${o} ones.` },
+    { t: 2.4, text: `Together that makes ${number}.` },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 4.6,
+    seed: 6,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+export interface EquationLessonOptions {
+  a?: number;
+  b?: number;
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Introduce equations as a balance scale: both sides weigh the same. */
+export function buildEquationLesson(opts: EquationLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const a = Math.max(1, Math.floor(opts.a ?? 2));
+  const b = Math.max(1, Math.floor(opts.b ?? 3));
+  const sum = a + b;
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const scaleW = 440;
+  const scale = buildBalanceScale({
+    id: "scale",
+    x: (width - scaleW) / 2,
+    y: 210,
+    left: sum,
+    right: sum,
+    width: scaleW,
+    theme: opts.theme,
+    leftLabel: `${a} + ${b}`,
+    rightLabel: `${sum}`,
+  });
+  const nodes: Node[] = [title(theme, `${a} + ${b} = ${sum}`, width), { ...scale, tracks: popIn({ start: 0.8, duration: 0.6 }) } as Node];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: "An equation is like a balance scale." },
+    { t: 1.4, text: `On the left we have ${a} plus ${b}.` },
+    { t: 2.6, text: `On the right we have ${sum}.` },
+    { t: 3.6, text: "Both sides weigh the same — that's what the equals sign means!" },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 6.0,
+    seed: 7,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+export interface DataLessonOptions {
+  bars?: { label: string; value: number }[];
+  theme?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}
+
+/** Read a bar graph: which is tallest, and what taller bars mean. */
+export function buildDataLesson(opts: DataLessonOptions = {}): SceneSpec {
+  const theme = getTheme(opts.theme);
+  const bars = opts.bars ?? [
+    { label: "Cats", value: 5 },
+    { label: "Dogs", value: 8 },
+    { label: "Birds", value: 3 },
+    { label: "Fish", value: 6 },
+  ];
+  const width = opts.width ?? 960;
+  const height = opts.height ?? 540;
+  const fps = opts.fps ?? 30;
+
+  const gW = 540;
+  const graph = buildBarGraph({ id: "graph", x: (width - gW) / 2, y: 150, width: gW, height: 300, bars, theme: opts.theme });
+  const top = bars.reduce((m, x) => (x.value > m.value ? x : m), bars[0] ?? { label: "", value: 0 });
+  const nodes: Node[] = [title(theme, "Reading a Bar Graph", width), { ...graph, tracks: popIn({ start: 0.8, duration: 0.6 }) } as Node];
+  const narration: NarrationSegment[] = [
+    { t: 0.2, text: "This bar graph shows how many of each." },
+    { t: 1.6, text: `The tallest bar is ${top.label}, with ${top.value}.` },
+    { t: 3.0, text: "Taller bars mean bigger numbers." },
+  ];
+  return {
+    specVersion: SPEC_VERSION,
+    width,
+    height,
+    fps,
+    duration: 4.8,
+    seed: 8,
+    background: theme.palette.bg,
+    nodes,
+    narration: { segments: narration },
+  };
+}
+
+/** All math lesson topics the dispatcher understands. */
+export type MathTopic =
+  "counting" | "addition" | "multiplication" | "fraction" | "place-value" | "graphing" | "quadratic" | "equation" | "data";
+
+/** Unified options accepted by {@link buildMathLesson} (every lesson's options share optional fields). */
+export type MathLessonOptions = CountingLessonOptions &
+  GraphLessonOptions &
+  QuadraticLessonOptions &
+  AdditionLessonOptions &
+  FractionLessonOptions &
+  MultiplicationLessonOptions &
+  PlaceValueLessonOptions &
+  EquationLessonOptions &
+  DataLessonOptions;
+
+/** Dispatch to the right lesson builder by topic — the entry point an agent calls. */
+export function buildMathLesson(topic: MathTopic, params: MathLessonOptions = {}): SceneSpec {
+  switch (topic) {
+    case "counting":
+      return buildCountingLesson(params);
+    case "addition":
+      return buildAdditionLesson(params);
+    case "multiplication":
+      return buildMultiplicationLesson(params);
+    case "fraction":
+      return buildFractionLesson(params);
+    case "place-value":
+      return buildPlaceValueLesson(params);
+    case "graphing":
+      return buildGraphingLesson(params);
+    case "quadratic":
+      return buildQuadraticLesson(params);
+    case "equation":
+      return buildEquationLesson(params);
+    case "data":
+      return buildDataLesson(params);
+    default: {
+      const _exhaustive: never = topic;
+      throw new Error(`Unknown math topic: ${String(_exhaustive)}`);
+    }
+  }
 }

@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { renderFrame, validateScene } from "../../src/index.js";
-import { buildGraphingLesson, buildQuadraticLesson, buildAdditionLesson, buildFractionLesson } from "../../src/math/lessons.js";
+import {
+  buildGraphingLesson,
+  buildQuadraticLesson,
+  buildAdditionLesson,
+  buildFractionLesson,
+  buildMathLesson,
+  type MathTopic,
+} from "../../src/math/lessons.js";
 
 describe("math lessons", () => {
   it("graphing lesson is valid and renders, with a narration track", () => {
@@ -29,6 +36,25 @@ describe("math lessons", () => {
     for (const theme of ["sunshine", "ocean", "meadow", "berry"]) {
       const spec = buildFractionLesson({ numerator: 3, denominator: 4, theme });
       expect(validateScene(spec).valid).toBe(true);
+    }
+  });
+
+  it("buildMathLesson dispatches every topic to a valid, renderable lesson", () => {
+    const topics: MathTopic[] = [
+      "counting",
+      "addition",
+      "multiplication",
+      "fraction",
+      "place-value",
+      "graphing",
+      "quadratic",
+      "equation",
+      "data",
+    ];
+    for (const topic of topics) {
+      const spec = buildMathLesson(topic, { theme: "ocean" });
+      expect(validateScene(spec).valid, `${topic} should be valid`).toBe(true);
+      expect(() => renderFrame(spec, 30).toPNG()).not.toThrow();
     }
   });
 
