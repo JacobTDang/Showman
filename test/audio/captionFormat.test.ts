@@ -59,8 +59,10 @@ describe("minReadableDuration", () => {
     expect(minReadableDuration(long)).toBeCloseTo(10.0, 1);
   });
 
-  it("does not count line breaks toward readable length", () => {
-    // A wrapped two-line cue counts the same as its single-line form (newlines excluded).
-    expect(minReadableDuration("hello\nworld")).toBe(minReadableDuration("hello world"));
+  it("excludes line breaks from the readable length (above the floor, so it's not vacuous)", () => {
+    const wrapped = "a".repeat(40) + "\n" + "a".repeat(40); // 80 letters across two lines
+    const flat = "a".repeat(80);
+    expect(minReadableDuration(wrapped)).toBeGreaterThan(0.7); // clears the floor, so length drives it
+    expect(minReadableDuration(wrapped)).toBeCloseTo(minReadableDuration(flat), 5); // the newline isn't counted
   });
 });

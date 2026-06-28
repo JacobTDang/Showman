@@ -115,6 +115,20 @@ describe("KokoroTtsProvider", () => {
     expect(calls.generate).toBe(before + 1);
   });
 
+  it("rethrows a non-voice generate error instead of downgrading the voice", async () => {
+    const module: KokoroModule = {
+      KokoroTTS: {
+        from_pretrained: async () => ({
+          generate: async () => {
+            throw new Error("CUDA out of memory");
+          },
+        }),
+      },
+    };
+    const tts = new KokoroTtsProvider({ load: async () => module, log: silent });
+    await expect(tts.synthesize("hi", { voice: "af_bella" })).rejects.toThrow(/out of memory/);
+  });
+
   it("gives a clear error when kokoro-js is not installed", async () => {
     const tts = new KokoroTtsProvider({
       load: async () => {

@@ -86,7 +86,7 @@ export class KokoroTtsProvider implements TtsProvider {
   /** Load the package + model once (memoized), trying each device in order. */
   private engine(): Promise<KokoroEngine> {
     if (!this.enginePromise) {
-      this.enginePromise = (async () => {
+      const p = (async () => {
         let mod: KokoroModule;
         try {
           mod = await this.load();
@@ -111,6 +111,11 @@ export class KokoroTtsProvider implements TtsProvider {
           `KokoroTtsProvider could not load on any device [${this.devices.join(", ")}]: ${(lastErr as Error)?.message ?? lastErr}`,
         );
       })();
+      // Don't permanently memoize a rejected load — a transient failure should be retryable.
+      p.catch(() => {
+        if (this.enginePromise === p) this.enginePromise = undefined;
+      });
+      this.enginePromise = p;
     }
     return this.enginePromise;
   }
@@ -129,7 +134,10 @@ export class KokoroTtsProvider implements TtsProvider {
     try {
       out = await engine.generate(t, { voice });
     } catch (err) {
-      if (voice === this.voice) throw err;
+      // Only treat a genuinely voice-related error as an unknown voice; rethrow anything
+      // else (a transient/model error must not permanently downgrade a valid voice).
+      const voiceError = /voice|not found|unknown/i.test((err as Error)?.message ?? "");
+      if (voice === this.voice || !voiceError) throw err;
       this.badVoices.add(voice);
       this.log(`[kokoro] voice "${voice}" not available, using "${this.voice}"`);
       out = await engine.generate(t, { voice: this.voice });

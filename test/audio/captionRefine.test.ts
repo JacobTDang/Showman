@@ -46,4 +46,23 @@ describe("caption refinement (wrapping + reading speed)", () => {
     expect(srt).toContain("1\n");
     expect(srt).toMatch(/00:00:00,000 --> /);
   });
+
+  it("sanitizes '-->' in narration text so it can't break the WebVTT/SRT payload", () => {
+    const cues = captionsFromNarration({ segments: [{ t: 0, text: "x --> y" }] }, 2);
+    expect(cues[0]!.text).not.toContain("-->");
+    expect(cues[0]!.text).toContain("→");
+  });
+
+  it("drops empty/whitespace-only segments (no blank-payload cue)", () => {
+    const cues = captionsFromNarration(
+      {
+        segments: [
+          { t: 0, text: "   " },
+          { t: 1, text: "real" },
+        ],
+      },
+      3,
+    );
+    expect(cues.map((c) => c.text)).toEqual(["real"]);
+  });
 });

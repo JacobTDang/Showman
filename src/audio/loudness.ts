@@ -56,3 +56,26 @@ export function softLimit(pcm: Int16Array, threshold = 0.92): Int16Array {
   }
   return out;
 }
+
+/**
+ * Soft-limit a wide-precision mix accumulator (sums of overlapping clips, which may exceed
+ * ±32767) down to Int16. Same tanh curve as {@link softLimit}, but the input isn't pre-clamped
+ * — so overlapping clips compress smoothly instead of hard-clipping at each add. Non-finite
+ * samples are treated as silence.
+ */
+export function softLimitMix(samples: Float64Array, threshold = 0.92): Int16Array {
+  const knee = 1 - threshold;
+  const out = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i]!;
+    if (!Number.isFinite(s)) continue;
+    const x = Math.abs(s) / 32767;
+    if (x <= threshold || knee <= 0) {
+      out[i] = clampSample(Math.round(s));
+      continue;
+    }
+    const y = threshold + knee * Math.tanh((x - threshold) / knee);
+    out[i] = clampSample(Math.sign(s) * Math.round(y * 32767));
+  }
+  return out;
+}

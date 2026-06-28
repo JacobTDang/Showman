@@ -35,7 +35,10 @@ export function captionsFromNarration(narration: NarrationTrack, sceneDuration: 
     // still clamped so it never overlaps the next cue or the scene end.
     const minEnd = seg.t + minReadableDuration(seg.text);
     const end = Math.min(Math.max(naturalEnd, minEnd), hardEnd, sceneDuration);
-    if (end > seg.t) cues.push({ start: seg.t, end, text: wrapCaption(seg.text) });
+    // "-->" inside a cue payload breaks spec-compliant WebVTT/SRT parsers; soften it. Skip
+    // empty cues (a blank payload is a malformed block).
+    const text = wrapCaption(seg.text).replace(/-->/g, "→");
+    if (end > seg.t && text.length > 0) cues.push({ start: seg.t, end, text });
   });
   return cues;
 }

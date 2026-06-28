@@ -112,3 +112,40 @@ describe("end-to-end lesson render (M5)", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe("narration fit + cost/farm guards", () => {
+  const sceneWith = (duration: number, segments: { t: number; text: string }[]): SceneSpec => ({
+    specVersion: 1,
+    width: 64,
+    height: 64,
+    fps: 10,
+    duration,
+    background: "#fff",
+    nodes: [{ id: "t", type: "text", x: 5, y: 30, text: "hi", fontSize: 10, fill: "#000" }],
+    narration: { segments },
+  });
+
+  it("fitNarration extends a too-short scene to fit the real speech", async () => {
+    if (!ffmpeg) return expect.unreachable("ffmpeg required");
+    const spec = sceneWith(1, [
+      { t: 0, text: "one two three" },
+      { t: 1.5, text: "four five six seven eight nine" },
+    ]);
+    const r = await service.render(spec, { fitNarration: true, deterministic: false });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.durationSec).toBeGreaterThan(1); // grew past the authored 1s to fit the narration
+  });
+
+  it("rejects a fitNarration scene whose fitted duration blows past the frame/duration limits", async () => {
+    const r = await service.render(sceneWith(1, [{ t: 1e9, text: "boom" }]), { fitNarration: true });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect("errors" in r && r.errors[0]?.code).toBe("LIMIT_EXCEEDED");
+  });
+
+  it("enforces the TTS character cost guard before any synthesis (incl. the measure pass)", async () => {
+    const big = "word ".repeat(5000); // 25000 chars > the 20000 guard
+    await expect(service.render(sceneWith(2, [{ t: 0, text: big }]), { fitNarration: true })).rejects.toThrow(/cost guard/);
+  });
+});
