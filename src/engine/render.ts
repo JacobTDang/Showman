@@ -120,6 +120,12 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
     case "polygon":
       drawPolygon(ctx, res);
       break;
+    case "arc":
+      drawArc(ctx, res);
+      break;
+    case "counter":
+      drawCounter(ctx, res);
+      break;
     case "text":
       drawText(ctx, res);
       break;
@@ -219,6 +225,41 @@ function drawPolygon(ctx: SKRSContext2D, res: NodeResolver): void {
   applyFillAndStroke(ctx, fill, stroke, strokeWidth);
 }
 
+interface GlyphDefaults {
+  weight: number | string;
+  align: TextAlign;
+  baseline: TextBaseline;
+}
+
+/** Paint a string with the node's resolved font/paint props. Shared by text + counter. */
+function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, defaults: GlyphDefaults): void {
+  const fontSize = Math.max(0, res.num("fontSize", SHAPE_DEFAULTS.fontSize));
+  // Only render with a pinned family; fall back to the default otherwise so an
+  // unregistered family can never silently pull in a host font (defense in depth;
+  // the validator already rejects unregistered families).
+  const requested = res.str("fontFamily") ?? DEFAULT_FONT_FAMILY;
+  const family = isRegisteredFamily(requested) ? requested : DEFAULT_FONT_FAMILY;
+  const weightRaw = res.raw("fontWeight");
+  const weight = typeof weightRaw === "number" || typeof weightRaw === "string" ? weightRaw : defaults.weight;
+  const fill = res.color("fill") ?? SHAPE_DEFAULTS.fill;
+  const stroke = res.color("stroke");
+  const strokeWidth = Math.max(0, res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth));
+
+  ctx.font = `${weight} ${fontSize}px "${family}"`;
+  ctx.textAlign = (res.str("align") as TextAlign) ?? defaults.align;
+  ctx.textBaseline = (res.str("baseline") as TextBaseline) ?? defaults.baseline;
+
+  if (fill !== undefined && fill !== "transparent") {
+    ctx.fillStyle = normalizeColor(fill);
+    ctx.fillText(str, 0, 0);
+  }
+  if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
+    ctx.strokeStyle = normalizeColor(stroke);
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeText(str, 0, 0);
+  }
+}
+
 function drawText(ctx: SKRSContext2D, res: NodeResolver): void {
   let text = res.str("text") ?? "";
   if (text.length === 0) return;
@@ -229,29 +270,53 @@ function drawText(ctx: SKRSContext2D, res: NodeResolver): void {
     text = text.slice(0, visible);
     if (text.length === 0) return;
   }
-  const fontSize = Math.max(0, res.num("fontSize", SHAPE_DEFAULTS.fontSize));
-  // Only render with a pinned family; fall back to the default otherwise so an
-  // unregistered family can never silently pull in a host font. (The validator
-  // already rejects unregistered families; this is defense in depth.)
-  const requested = res.str("fontFamily") ?? DEFAULT_FONT_FAMILY;
-  const family = isRegisteredFamily(requested) ? requested : DEFAULT_FONT_FAMILY;
-  const weightRaw = res.raw("fontWeight");
-  const weight = typeof weightRaw === "number" || typeof weightRaw === "string" ? weightRaw : SHAPE_DEFAULTS.fontWeight;
+  paintGlyphs(ctx, res, text, { weight: SHAPE_DEFAULTS.fontWeight, align: "left", baseline: "top" });
+}
+
+function drawCounter(ctx: SKRSContext2D, res: NodeResolver): void {
+  const value = res.num("value", 0);
+  const decimalsRaw = res.raw("decimals");
+  const decimals = typeof decimalsRaw === "number" ? Math.max(0, Math.floor(decimalsRaw)) : 0;
+  const prefix = res.str("prefix") ?? "";
+  const suffix = res.str("suffix") ?? "";
+  const str = `${prefix}${value.toFixed(decimals)}${suffix}`;
+  paintGlyphs(ctx, res, str, { weight: 700, align: "center", baseline: "middle" });
+}
+
+function drawArc(ctx: SKRSContext2D, res: NodeResolver): void {
+  const radius = Math.max(0, res.num("radius", 50));
+  const inner = Math.max(0, Math.min(res.num("innerRadius", 0), radius));
+  const startDeg = res.num("startAngle", 0);
+  const endDeg = res.num("endAngle", 360);
   const fill = res.color("fill") ?? SHAPE_DEFAULTS.fill;
   const stroke = res.color("stroke");
   const strokeWidth = Math.max(0, res.num("strokeWidth", SHAPE_DEFAULTS.strokeWidth));
+  const cx = radius;
+  const cy = radius;
 
-  ctx.font = `${weight} ${fontSize}px "${family}"`;
-  ctx.textAlign = (res.str("align") as TextAlign) ?? "left";
-  ctx.textBaseline = (res.str("baseline") as TextBaseline) ?? "top";
+  // Degrees clockwise from 12 o'clock -> canvas radians (0 = 3 o'clock, +cw).
+  const toRad = (d: number): number => ((d - 90) * Math.PI) / 180;
+  const sweep = endDeg - startDeg;
+  if (Math.abs(sweep) < 1e-6) return; // nothing to draw (e.g. a fraction at 0)
+  const full = Math.abs(sweep) >= 360;
+  const a0 = toRad(startDeg);
+  const a1 = toRad(endDeg);
+  const ccw = a1 < a0;
 
-  if (fill !== undefined && fill !== "transparent") {
-    ctx.fillStyle = normalizeColor(fill);
-    ctx.fillText(text, 0, 0);
+  ctx.beginPath();
+  if (full) {
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    if (inner > 0) ctx.arc(cx, cy, inner, 0, Math.PI * 2, true); // hole (ring)
+  } else if (inner > 0) {
+    // Annular sector: outer arc forward, inner arc back.
+    ctx.arc(cx, cy, radius, a0, a1, ccw);
+    ctx.arc(cx, cy, inner, a1, a0, !ccw);
+    ctx.closePath();
+  } else {
+    // Pie slice: center -> outer arc -> close.
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, a0, a1, ccw);
+    ctx.closePath();
   }
-  if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
-    ctx.strokeStyle = normalizeColor(stroke);
-    ctx.lineWidth = strokeWidth;
-    ctx.strokeText(text, 0, 0);
-  }
+  applyFillAndStroke(ctx, fill, stroke, strokeWidth);
 }

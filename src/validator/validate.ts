@@ -438,6 +438,42 @@ class Validator {
       nonNegNum("strokeWidth");
       colorProp("fill");
       colorProp("stroke");
+    } else if (type === "arc") {
+      nonNegNum("radius");
+      nonNegNum("innerRadius");
+      nonNegNum("strokeWidth");
+      for (const k of ["startAngle", "endAngle"]) {
+        if (node[k] !== undefined && !isFiniteNumber(node[k])) this.numTypeError(path, k, node[k], nodeId);
+      }
+      colorProp("fill");
+      colorProp("stroke");
+    } else if (type === "counter") {
+      if (node.value !== undefined && !isFiniteNumber(node.value)) this.numTypeError(path, "value", node.value, nodeId);
+      if (node.decimals !== undefined && (!Number.isInteger(node.decimals) || (node.decimals as number) < 0)) {
+        this.err({
+          path: `${path}.decimals`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "decimals",
+          code: "OUT_OF_RANGE",
+          message: `decimals must be an integer >= 0; got ${JSON.stringify(node.decimals)}.`,
+        });
+      }
+      for (const k of ["prefix", "suffix"]) {
+        if (node[k] !== undefined && typeof node[k] !== "string") {
+          this.err({
+            path: `${path}.${k}`,
+            ...(nodeId ? { nodeId } : {}),
+            property: k,
+            code: "INVALID_TYPE",
+            message: `${k} must be a string.`,
+          });
+        }
+      }
+      nonNegNum("fontSize");
+      nonNegNum("strokeWidth");
+      colorProp("fill");
+      colorProp("stroke");
+      this.validateFontProps(node, path, nodeId);
     } else if (type === "text") {
       if (typeof node.text !== "string" || node.text.length === 0) {
         this.err({
@@ -463,36 +499,41 @@ class Validator {
           });
         }
       }
-      if (node.fontFamily !== undefined) {
-        const fam = node.fontFamily;
-        if (typeof fam !== "string" || !(REGISTERED_FONT_FAMILIES as readonly string[]).includes(fam)) {
-          this.err({
-            path: `${path}.fontFamily`,
-            ...(nodeId ? { nodeId } : {}),
-            property: "fontFamily",
-            code: "INVALID_VALUE",
-            message: `fontFamily must be one of the engine's pinned families (${REGISTERED_FONT_FAMILIES.join(
-              ", ",
-            )}); got ${JSON.stringify(fam)}. A non-pinned font would fall back to host system fonts and break cross-machine determinism.`,
-          });
-        }
-      }
-      if (node.fontWeight !== undefined) {
-        const w = node.fontWeight;
-        const ok = w === "normal" || w === "bold" || (isFiniteNumber(w) && w >= 1 && w <= 1000);
-        if (!ok) {
-          this.err({
-            path: `${path}.fontWeight`,
-            ...(nodeId ? { nodeId } : {}),
-            property: "fontWeight",
-            code: "INVALID_VALUE",
-            message: `fontWeight must be a number 1..1000 or "normal"/"bold"; got ${JSON.stringify(w)}.`,
-          });
-        }
-      }
-      this.enumProp(node, "align", TEXT_ALIGN, path, nodeId);
-      this.enumProp(node, "baseline", TEXT_BASELINE, path, nodeId);
+      this.validateFontProps(node, path, nodeId);
     }
+  }
+
+  /** Shared font validation for text + counter nodes: pinned family, weight, align, baseline. */
+  private validateFontProps(node: Record<string, unknown>, path: string, nodeId: string | undefined): void {
+    if (node.fontFamily !== undefined) {
+      const fam = node.fontFamily;
+      if (typeof fam !== "string" || !(REGISTERED_FONT_FAMILIES as readonly string[]).includes(fam)) {
+        this.err({
+          path: `${path}.fontFamily`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "fontFamily",
+          code: "INVALID_VALUE",
+          message: `fontFamily must be one of the engine's pinned families (${REGISTERED_FONT_FAMILIES.join(
+            ", ",
+          )}); got ${JSON.stringify(fam)}. A non-pinned font would fall back to host system fonts and break cross-machine determinism.`,
+        });
+      }
+    }
+    if (node.fontWeight !== undefined) {
+      const w = node.fontWeight;
+      const ok = w === "normal" || w === "bold" || (isFiniteNumber(w) && w >= 1 && w <= 1000);
+      if (!ok) {
+        this.err({
+          path: `${path}.fontWeight`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "fontWeight",
+          code: "INVALID_VALUE",
+          message: `fontWeight must be a number 1..1000 or "normal"/"bold"; got ${JSON.stringify(w)}.`,
+        });
+      }
+    }
+    this.enumProp(node, "align", TEXT_ALIGN, path, nodeId);
+    this.enumProp(node, "baseline", TEXT_BASELINE, path, nodeId);
   }
 
   private validateTracks(node: Record<string, unknown>, type: NodeType, path: string, nodeId: string | undefined): void {

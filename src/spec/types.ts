@@ -133,6 +133,54 @@ export interface PolygonNode extends BaseNodeProps {
   strokeWidth?: number;
 }
 
+export interface ArcNode extends BaseNodeProps {
+  id: string;
+  type: "arc";
+  /** Outer radius in px. Bounding box is 2*radius; center at local (radius, radius). Default 50. Animatable. */
+  radius?: number;
+  /** Inner radius (>0 makes a ring/annular sector; 0 is a pie slice). Clamped below `radius`. Default 0. Animatable. */
+  innerRadius?: number;
+  /** Start angle in degrees, clockwise from 12 o'clock. Default 0. Animatable. */
+  startAngle?: number;
+  /** End angle in degrees. Visible sweep is `endAngle - startAngle` (a filling fraction). Default 360. Animatable. */
+  endAngle?: number;
+  /** Fill color. Default `"#000000"`. Animatable. */
+  fill?: Color;
+  /** Stroke color. Default none. Animatable. */
+  stroke?: Color;
+  /** Stroke width in px. Default 0. Animatable. */
+  strokeWidth?: number;
+}
+
+export interface CounterNode extends BaseNodeProps {
+  id: string;
+  type: "counter";
+  /** The number shown. Animate this for a count-up / odometer effect. Default 0. Animatable. */
+  value?: number;
+  /** Fixed decimal places. Default 0. */
+  decimals?: number;
+  /** Text shown before the number (e.g. `"$"`). Default `""`. */
+  prefix?: string;
+  /** Text shown after the number (e.g. `"%"`, `" points"`). Default `""`. */
+  suffix?: string;
+  /** Font size in px. Default 48. Animatable. */
+  fontSize?: number;
+  /** Font family. Default `"Nunito"` (pinned). */
+  fontFamily?: string;
+  /** Font weight. Default 700. */
+  fontWeight?: number | "normal" | "bold";
+  /** Horizontal alignment relative to `(x, y)`. Default `"center"`. */
+  align?: "left" | "center" | "right";
+  /** Vertical baseline relative to `(x, y)`. Default `"middle"`. */
+  baseline?: "top" | "middle" | "alphabetic" | "bottom";
+  /** Fill color. Default `"#000000"`. Animatable. */
+  fill?: Color;
+  /** Stroke color. Default none. Animatable. */
+  stroke?: Color;
+  /** Stroke width in px. Default 0. Animatable. */
+  strokeWidth?: number;
+}
+
 export interface TextNode extends BaseNodeProps {
   id: string;
   type: "text";
@@ -169,7 +217,7 @@ export interface GroupNode extends BaseNodeProps {
 }
 
 /** A node in the scene tree. */
-export type Node = RectNode | EllipseNode | PolygonNode | TextNode | GroupNode;
+export type Node = RectNode | EllipseNode | PolygonNode | ArcNode | CounterNode | TextNode | GroupNode;
 
 export type NodeType = Node["type"];
 

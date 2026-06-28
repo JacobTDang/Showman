@@ -21,7 +21,7 @@ export const SPEC_VERSION = 1 as const;
 export const REGISTERED_FONT_FAMILIES = ["Nunito", "Fredoka"] as const;
 
 /** Every supported node type. */
-export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "polygon", "text", "group"];
+export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "polygon", "arc", "counter", "text", "group"];
 
 /** The kind of value an animatable property carries. */
 export type PropertyKind = "number" | "color";
@@ -44,6 +44,9 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
   height: "number",
   radius: "number",
   innerRadius: "number",
+  startAngle: "number",
+  endAngle: "number",
+  value: "number",
   strokeWidth: "number",
   fontSize: "number",
   reveal: "number",
@@ -63,6 +66,22 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
   rect: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth", "radius"],
   ellipse: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth"],
   polygon: [...COMMON_KEYS, "sides", "radius", "innerRadius", "fill", "stroke", "strokeWidth"],
+  arc: [...COMMON_KEYS, "radius", "innerRadius", "startAngle", "endAngle", "fill", "stroke", "strokeWidth"],
+  counter: [
+    ...COMMON_KEYS,
+    "value",
+    "decimals",
+    "prefix",
+    "suffix",
+    "fontSize",
+    "fontFamily",
+    "fontWeight",
+    "align",
+    "baseline",
+    "fill",
+    "stroke",
+    "strokeWidth",
+  ],
   text: [...COMMON_KEYS, "text", "reveal", "fontSize", "fontFamily", "fontWeight", "align", "baseline", "fill", "stroke", "strokeWidth"],
   group: [...COMMON_KEYS, "children"],
 };
@@ -73,6 +92,8 @@ export const ANIMATABLE_BY_TYPE: Readonly<Record<NodeType, readonly string[]>> =
   rect: [...TRANSFORM_ANIM, "width", "height", "radius", "strokeWidth", "fill", "stroke"],
   ellipse: [...TRANSFORM_ANIM, "width", "height", "strokeWidth", "fill", "stroke"],
   polygon: [...TRANSFORM_ANIM, "radius", "innerRadius", "strokeWidth", "fill", "stroke"],
+  arc: [...TRANSFORM_ANIM, "radius", "innerRadius", "startAngle", "endAngle", "strokeWidth", "fill", "stroke"],
+  counter: [...TRANSFORM_ANIM, "value", "fontSize", "strokeWidth", "fill", "stroke"],
   text: [...TRANSFORM_ANIM, "fontSize", "reveal", "strokeWidth", "fill", "stroke"],
   group: [...TRANSFORM_ANIM],
 };
