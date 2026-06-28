@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci --omit=optional
+      - run: npm ci
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
@@ -34,7 +34,7 @@ jobs:
           cache: npm
       - name: Install ffmpeg (encoder dependency)
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: npm ci --omit=optional
+      - run: npm ci
       - run: npm test
       - run: npm run build
 
@@ -58,6 +58,7 @@ jobs:
         run: npm run test:kokoro
         env:
           RUN_KOKORO_LIVE: "1"
+          KOKORO_DEVICE: cpu # CI runners have no GPU/CUDA runtime; go straight to CPU
           HF_HOME: ~/.cache/huggingface
 
   go:
