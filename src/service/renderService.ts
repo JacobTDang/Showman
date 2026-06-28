@@ -12,7 +12,7 @@ import type { SceneSpec, NarrationTrack } from "../spec/types.js";
 import { validateScene } from "../validator/validate.js";
 import type { ValidationError } from "../validator/validate.js";
 import { renderFrame } from "../engine/render.js";
-import { totalFrames } from "../spec/schema.js";
+import { totalFrames, LIMITS } from "../spec/schema.js";
 import { encodeSceneToFile } from "../encode/encodeVideo.js";
 import { describeScene, type SchemaDescription } from "../spec/describe.js";
 import type { ObjectStorage, StoredObject } from "./storage.js";
@@ -181,13 +181,39 @@ export class RenderService {
     const wantNarration = !!scene.narration?.segments?.length && options.narrate !== false && !!this.tts;
     const wantCaptions = !!scene.narration?.segments?.length && options.captions !== false;
 
+    // Cost/abuse guard: cap total narration characters BEFORE any (paid) TTS call — including
+    // the measureNarration pass below (which synthesizes every segment to measure it).
+    if (wantNarration) {
+      const maxChars = Number(process.env.SHOWMAN_TTS_MAX_CHARS) || 20000;
+      const chars = narrationCharCount(scene.narration!);
+      if (chars > maxChars) {
+        throw new Error(`Narration is ${chars} characters, over the TTS cost guard of ${maxChars} (raise SHOWMAN_TTS_MAX_CHARS to allow).`);
+      }
+    }
+
     // Optionally extend the scene so real narration audio isn't truncated by the fixed-length
-    // mix buffer (opt-in; measureNarration reuses cached clips, so it's cheap).
+    // mix buffer (opt-in; measureNarration reuses cached clips, so it's cheap). The fitted
+    // duration is derived from untrusted segment times, so re-enforce the farm-protection limits.
     let renderScene = scene;
     if (options.fitNarration && wantNarration && this.tts) {
       const { requiredDuration } = await measureNarration(this.tts, scene.narration!);
       const fitted = fitSceneDuration(scene.duration, requiredDuration);
-      if (fitted > scene.duration) renderScene = { ...scene, duration: fitted };
+      if (Number.isFinite(fitted) && fitted > scene.duration) {
+        if (fitted > LIMITS.maxDuration || totalFrames(scene.fps, fitted) > LIMITS.maxFrames) {
+          return {
+            ok: false,
+            errors: [
+              {
+                path: "duration",
+                property: "duration",
+                code: "LIMIT_EXCEEDED",
+                message: `Narration-fitted duration ${fitted.toFixed(1)}s exceeds limits (maxDuration ${LIMITS.maxDuration}s, maxFrames ${LIMITS.maxFrames}).`,
+              },
+            ],
+          };
+        }
+        renderScene = { ...scene, duration: fitted };
+      }
     }
 
     const key = this.jobKey(renderScene, options);
@@ -196,8 +222,15 @@ export class RenderService {
     const fps = renderScene.fps;
     const frameCount = totalFrames(renderScene.fps, renderScene.duration);
     if (existing) {
-      // The video hash doesn't include caption state, so (re)generate the sidecars on demand.
-      const caps = wantCaptions ? await this.putCaptions(captionKey, renderScene.narration!, frameCount / fps) : undefined;
+      let caps: { captions: StoredObject; captionsSrt: StoredObject } | undefined;
+      if (wantCaptions) {
+        // Preserve the accurate sidecars from the original render (their cue times track the
+        // real synthesized durations); only (re)generate if one is missing.
+        const srtKey = captionKey.replace(/\.vtt$/, ".srt");
+        const [vtt, srt] = await Promise.all([this.storage.stat(captionKey), this.storage.stat(srtKey)]);
+        caps =
+          vtt && srt ? { captions: vtt, captionsSrt: srt } : await this.putCaptions(captionKey, renderScene.narration!, frameCount / fps);
+      }
       return {
         ok: true,
         video: existing,
@@ -228,14 +261,6 @@ export class RenderService {
       let videoPath = tmp;
       let segmentDurations: number[] | undefined;
       if (wantNarration && this.tts) {
-        // Cost/abuse guard: cap total narration characters per render before any (paid) TTS call.
-        const maxChars = Number(process.env.SHOWMAN_TTS_MAX_CHARS) || 20000;
-        const chars = narrationCharCount(renderScene.narration!);
-        if (chars > maxChars) {
-          throw new Error(
-            `Narration is ${chars} characters, over the TTS cost guard of ${maxChars} (raise SHOWMAN_TTS_MAX_CHARS to allow).`,
-          );
-        }
         const synth = await synthesizeNarration(this.tts, renderScene.narration!, frameCount / fps, undefined, {
           concurrency: options.ttsConcurrency ?? 4,
         });

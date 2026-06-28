@@ -10,9 +10,9 @@
  */
 
 import type { NarrationTrack } from "../spec/types.js";
-import { SAMPLE_RATE, pcmToWav, silencePcm, tonePcm, mixInto } from "./wav.js";
+import { SAMPLE_RATE, pcmToWav, silencePcm, tonePcm } from "./wav.js";
 import { mapLimit } from "./concurrency.js";
-import { normalizePcm, softLimit } from "./loudness.js";
+import { normalizePcm, softLimitMix } from "./loudness.js";
 
 export interface SynthesizedSpeech {
   pcm: Int16Array;
@@ -63,7 +63,11 @@ export async function synthesizeNarration(
   sampleRate = SAMPLE_RATE,
   opts: { concurrency?: number; normalize?: boolean } = {},
 ): Promise<{ wav: Buffer; segmentDurations: number[] }> {
-  const total = new Int16Array(Math.max(1, Math.round(sceneDuration * sampleRate)));
+  const len = Math.max(1, Math.round(sceneDuration * sampleRate));
+  // Accumulate in float (no per-add clamp) so overlapping clips are summed faithfully and
+  // the limiter below can actually compress them — a fixed Int16 buffer would hard-clip on
+  // each add before the limiter ever sees the sum.
+  const acc = new Float64Array(len);
   const segments = [...(narration.segments ?? [])].sort((a, b) => a.t - b.t);
   const normalize = opts.normalize ?? true;
   // Synthesize segments (optionally in parallel). Placement is by start time, so the
@@ -75,11 +79,16 @@ export async function synthesizeNarration(
   for (let i = 0; i < segments.length; i++) {
     const speech = clips[i]!;
     // Per-clip peak normalization keeps every line at a consistent, comfortable level.
-    mixInto(total, normalize ? normalizePcm(speech.pcm) : speech.pcm, Math.round(segments[i]!.t * sampleRate));
+    const pcm = normalize ? normalizePcm(speech.pcm) : speech.pcm;
+    const offset = Math.round(segments[i]!.t * sampleRate);
+    for (let j = 0; j < pcm.length; j++) {
+      const k = offset + j;
+      if (k >= 0 && k < len) acc[k]! += pcm[j]!;
+    }
     segmentDurations.push(speech.durationSec);
   }
-  // Soft-limit the mixed track so overlapping clips don't hard-clip into distortion.
-  return { wav: pcmToWav(softLimit(total), sampleRate), segmentDurations };
+  // Soft-limit the summed track down to Int16 so overlaps compress instead of distorting.
+  return { wav: pcmToWav(softLimitMix(acc), sampleRate), segmentDurations };
 }
 
 /** Total characters across all narration segments — a per-render cost/abuse guard input. */
@@ -103,7 +112,10 @@ export async function measureNarration(
   for (const seg of segments) {
     const speech = await provider.synthesize(seg.text, narration.voice ? { voice: narration.voice } : undefined);
     segmentDurations.push(speech.durationSec);
-    requiredDuration = Math.max(requiredDuration, seg.t + speech.durationSec);
+    // Ignore a non-finite/negative start time so a pathological segment can't blow up the
+    // required duration (RenderService re-checks the fitted duration against the frame limits).
+    const start = Number.isFinite(seg.t) && seg.t > 0 ? seg.t : 0;
+    requiredDuration = Math.max(requiredDuration, start + speech.durationSec);
   }
   return { segmentDurations, requiredDuration };
 }
