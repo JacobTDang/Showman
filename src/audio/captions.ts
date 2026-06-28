@@ -7,6 +7,7 @@
  */
 
 import type { NarrationTrack } from "../spec/types.js";
+import { wrapCaption, minReadableDuration } from "./captionFormat.js";
 
 export interface Cue {
   start: number;
@@ -30,8 +31,11 @@ export function captionsFromNarration(narration: NarrationTrack, sceneDuration: 
     const hardEnd = next ? next.t : sceneDuration; // no overlap with the following cue
     const dur = segmentDurations?.[i] ?? seg.duration;
     const naturalEnd = dur !== undefined ? seg.t + dur : hardEnd;
-    const end = Math.min(Math.max(seg.t + 0.3, naturalEnd), hardEnd, sceneDuration);
-    if (end > seg.t) cues.push({ start: seg.t, end, text: seg.text });
+    // Keep a cue up at least long enough to read (a floor that only EXTENDS short cues),
+    // still clamped so it never overlaps the next cue or the scene end.
+    const minEnd = seg.t + minReadableDuration(seg.text);
+    const end = Math.min(Math.max(naturalEnd, minEnd), hardEnd, sceneDuration);
+    if (end > seg.t) cues.push({ start: seg.t, end, text: wrapCaption(seg.text) });
   });
   return cues;
 }

@@ -11,6 +11,8 @@
 
 import type { NarrationTrack } from "../spec/types.js";
 import { SAMPLE_RATE, pcmToWav, silencePcm, tonePcm, mixInto } from "./wav.js";
+import { mapLimit } from "./concurrency.js";
+import { normalizePcm, softLimit } from "./loudness.js";
 
 export interface SynthesizedSpeech {
   pcm: Int16Array;
@@ -59,16 +61,25 @@ export async function synthesizeNarration(
   narration: NarrationTrack,
   sceneDuration: number,
   sampleRate = SAMPLE_RATE,
+  opts: { concurrency?: number; normalize?: boolean } = {},
 ): Promise<{ wav: Buffer; segmentDurations: number[] }> {
   const total = new Int16Array(Math.max(1, Math.round(sceneDuration * sampleRate)));
   const segments = [...(narration.segments ?? [])].sort((a, b) => a.t - b.t);
+  const normalize = opts.normalize ?? true;
+  // Synthesize segments (optionally in parallel). Placement is by start time, so the
+  // result is byte-identical regardless of concurrency — order just affects speed.
+  const clips = await mapLimit(segments, Math.max(1, opts.concurrency ?? 1), (seg) =>
+    provider.synthesize(seg.text, narration.voice ? { voice: narration.voice } : undefined),
+  );
   const segmentDurations: number[] = [];
-  for (const seg of segments) {
-    const speech = await provider.synthesize(seg.text, narration.voice ? { voice: narration.voice } : undefined);
-    mixInto(total, speech.pcm, Math.round(seg.t * sampleRate));
+  for (let i = 0; i < segments.length; i++) {
+    const speech = clips[i]!;
+    // Per-clip peak normalization keeps every line at a consistent, comfortable level.
+    mixInto(total, normalize ? normalizePcm(speech.pcm) : speech.pcm, Math.round(segments[i]!.t * sampleRate));
     segmentDurations.push(speech.durationSec);
   }
-  return { wav: pcmToWav(total, sampleRate), segmentDurations };
+  // Soft-limit the mixed track so overlapping clips don't hard-clip into distortion.
+  return { wav: pcmToWav(softLimit(total), sampleRate), segmentDurations };
 }
 
 /** Total characters across all narration segments — a per-render cost/abuse guard input. */
