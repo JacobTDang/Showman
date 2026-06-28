@@ -89,6 +89,32 @@ describe("KokoroTtsProvider", () => {
     expect(new KokoroTtsProvider({ model: "m", voice: "af_heart" }).id).toBe(`kokoro:m:af_heart:${SAMPLE_RATE}`);
   });
 
+  it("falls back to the default voice when an unknown voice is requested (and memoizes it)", async () => {
+    const calls = { generate: 0, lastVoice: undefined as string | undefined };
+    const module: KokoroModule = {
+      KokoroTTS: {
+        from_pretrained: async () => ({
+          generate: async (_t: string, o: { voice?: string }) => {
+            calls.generate++;
+            if (o.voice !== "af_heart") throw new Error(`Voice "${o.voice ?? ""}" not found`);
+            calls.lastVoice = o.voice;
+            return { audio: new Float32Array(2400), sampling_rate: 24000 };
+          },
+        }),
+      },
+    };
+    const tts = new KokoroTtsProvider({ load: async () => module, log: silent });
+
+    const s = await tts.synthesize("hi", { voice: "child-friendly" });
+    expect(s.pcm.length).toBeGreaterThan(0); // did not crash
+    expect(calls.lastVoice).toBe("af_heart"); // fell back to the default
+
+    // A second call with the same bad voice skips it entirely (memoized) — one generate, no throw+retry.
+    const before = calls.generate;
+    await tts.synthesize("again", { voice: "child-friendly" });
+    expect(calls.generate).toBe(before + 1);
+  });
+
   it("gives a clear error when kokoro-js is not installed", async () => {
     const tts = new KokoroTtsProvider({
       load: async () => {

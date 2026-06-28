@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:live": "vitest run --config vitest.live.config.ts",
+    "test:kokoro": "vitest run --config vitest.live.config.ts test/audio/kokoroTts.live.test.ts",
     "test:golden": "vitest run test/golden",
     "golden:update": "tsx scripts/update-golden.ts",
     "demo": "tsx scripts/render-lesson.ts",
@@ -44,5 +45,8 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.62.0",
     "vitest": "^2.1.8"
+  },
+  "optionalDependencies": {
+    "kokoro-js": "^1.2.1"
   }
 }
