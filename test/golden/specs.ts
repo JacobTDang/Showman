@@ -12,6 +12,7 @@
 
 import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
+import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine } from "../../src/math/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -132,10 +133,78 @@ function countingLesson(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 640, height: 360, fps: 30, duration: 3, seed: 7, background: "#fdf6e3", nodes };
 }
 
+/** The three new engine primitives in one frame: an arc, a polyline, a counter. */
+const mathPrimitives: SceneSpec = {
+  specVersion: SPEC_VERSION,
+  width: 320,
+  height: 170,
+  fps: 1,
+  duration: 1,
+  seed: 1,
+  background: "#ffffff",
+  nodes: [
+    { id: "arc", type: "arc", x: 20, y: 25, radius: 60, startAngle: 0, endAngle: 270, fill: "#2a9d8f" },
+    {
+      id: "poly",
+      type: "polyline",
+      x: 165,
+      y: 35,
+      points: [
+        { x: 0, y: 80 },
+        { x: 40, y: 0 },
+        { x: 80, y: 80 },
+        { x: 120, y: 10 },
+      ],
+      stroke: "#e63946",
+      strokeWidth: 5,
+    },
+    { id: "count", type: "counter", x: 165, y: 145, value: 42, prefix: "Score: ", fontSize: 28, fill: "#1d6f72" },
+  ],
+};
+
+/** The headline algebra visual: a coordinate plane with a line and a parabola. */
+function mathGraph(): SceneSpec {
+  const plane = coordinatePlane({
+    id: "p",
+    x: 20,
+    y: 20,
+    width: 240,
+    height: 200,
+    xMin: -4,
+    xMax: 4,
+    yMin: -4,
+    yMax: 4,
+    theme: "ocean",
+    step: 2,
+  });
+  const line = plotLine(plane, { m: 1, b: 1 }, { stroke: "#1d6f72", strokeWidth: 4 });
+  const parab = plotFunction(plane, (x) => 0.4 * x * x - 3, { samples: 48 }, { stroke: "#ef6c35", strokeWidth: 4, id: "parab" });
+  return {
+    specVersion: SPEC_VERSION,
+    width: 280,
+    height: 240,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#eaf6fb",
+    nodes: [plane.node, line, parab],
+  };
+}
+
+/** A fraction pie (3/8) and a number line — the most-used number visuals. */
+function mathNumber(): SceneSpec {
+  const pie = fractionCircle({ id: "fc", x: 20, y: 30, radius: 70, numerator: 3, denominator: 8, theme: "berry" });
+  const nl = numberLine({ id: "nl", x: 190, y: 90, width: 200, from: 0, to: 5, theme: "berry" });
+  return { specVersion: SPEC_VERSION, width: 420, height: 180, fps: 1, duration: 1, seed: 1, background: "#fff5f8", nodes: [pie, nl.node] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   // frame 0: only title + subtitle visible (apples still hidden); frame 60 (t=2): fully composed.
   { name: "lesson", spec: countingLesson(), frames: [0, 60] },
+  { name: "math-primitives", spec: mathPrimitives, frames: [0] },
+  { name: "math-graph", spec: mathGraph(), frames: [0] },
+  { name: "math-number", spec: mathNumber(), frames: [0] },
 ];
 
 /** The committed filename for a golden frame. */

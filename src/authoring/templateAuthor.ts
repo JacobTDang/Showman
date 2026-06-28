@@ -8,6 +8,8 @@
 import { AnthropicSpecAuthor, type SpecAuthor } from "./agent.js";
 import { OpenRouterSpecAuthor } from "./openRouterAuthor.js";
 import { buildCountingLesson, buildLessonFromOutline, type CountingLessonOptions } from "../lessons/templates.js";
+import { buildMathLesson } from "../math/lessons.js";
+import { parseMathBrief } from "./mathBrief.js";
 import { THEMES } from "../theme/themes.js";
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -99,15 +101,24 @@ export class TemplateAuthor implements SpecAuthor {
   constructor(private readonly opts: TemplateAuthorOptions = {}) {}
 
   async propose(brief: string): Promise<unknown> {
+    // A math brief ("graph y = 2x + 1", "show 3/4 as a pie", …) routes to a math lesson.
+    const dims = {
+      ...(this.opts.width !== undefined ? { width: this.opts.width } : {}),
+      ...(this.opts.height !== undefined ? { height: this.opts.height } : {}),
+      ...(this.opts.fps !== undefined ? { fps: this.opts.fps } : {}),
+    };
+    const mathIntent = parseMathBrief(brief);
+    if (mathIntent) {
+      return buildMathLesson(mathIntent.topic, { ...mathIntent.params, ...dims });
+    }
+
     const parsed = parseBrief(brief);
     const base: CountingLessonOptions = {
       count: parsed.count,
       topic: parsed.topic,
       theme: parsed.theme,
       itemShape: parsed.shape,
-      ...(this.opts.width !== undefined ? { width: this.opts.width } : {}),
-      ...(this.opts.height !== undefined ? { height: this.opts.height } : {}),
-      ...(this.opts.fps !== undefined ? { fps: this.opts.fps } : {}),
+      ...dims,
     };
     return buildCountingLesson(base);
   }
