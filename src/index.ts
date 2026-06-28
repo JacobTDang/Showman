@@ -118,6 +118,8 @@ export { OpenAiTtsProvider } from "./audio/providers/openaiTts.js";
 export type { OpenAiTtsOptions } from "./audio/providers/openaiTts.js";
 export { ElevenLabsTtsProvider } from "./audio/providers/elevenLabsTts.js";
 export type { ElevenLabsTtsOptions } from "./audio/providers/elevenLabsTts.js";
+export { KokoroTtsProvider } from "./audio/providers/kokoroTts.js";
+export type { KokoroTtsOptions } from "./audio/providers/kokoroTts.js";
 export { createTts, createDefaultTts } from "./audio/ttsFactory.js";
 export type { TtsEnv } from "./audio/ttsFactory.js";
 export { muxAudioVideo } from "./audio/mux.js";

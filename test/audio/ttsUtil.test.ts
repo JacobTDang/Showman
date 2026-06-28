@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { pcmBytesToInt16, int16ToBytes, resamplePcm, normalizeTtsText, chunkText, withRetry } from "../../src/audio/ttsUtil.js";
+import {
+  pcmBytesToInt16,
+  int16ToBytes,
+  float32ToInt16,
+  resamplePcm,
+  normalizeTtsText,
+  chunkText,
+  withRetry,
+} from "../../src/audio/ttsUtil.js";
 
 describe("pcmBytesToInt16", () => {
   it("decodes little-endian 16-bit samples", () => {
@@ -14,6 +22,13 @@ describe("pcmBytesToInt16", () => {
   it("round-trips through int16ToBytes", () => {
     const pcm = new Int16Array([0, 1, -1, 32767, -32768, 256]);
     expect(Array.from(pcmBytesToInt16(int16ToBytes(pcm)))).toEqual(Array.from(pcm));
+  });
+});
+
+describe("float32ToInt16", () => {
+  it("scales [-1,1] to 16-bit and clamps out-of-range", () => {
+    const out = float32ToInt16(new Float32Array([0, 1, -1, 0.5, 2, -2]));
+    expect(Array.from(out)).toEqual([0, 32767, -32767, 16384, 32767, -32767]);
   });
 });
 

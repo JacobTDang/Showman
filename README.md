@@ -86,9 +86,11 @@ npm run math-gallery   # render every builder onto one contact sheet -> out/math
 One call turns a plain-English brief into a finished, narrated, captioned video.
 With `ANTHROPIC_API_KEY`/`OPENROUTER_API_KEY` set it uses an LLM author; otherwise an
 offline template author parses the brief (count, topic, theme, shape, **and math
-intents** like "graph y = 2x + 1") deterministically. Set `OPENAI_API_KEY` or
-`ELEVENLABS_API_KEY` for a **real spoken voice** (otherwise an offline tone) — clips
-are cached on disk so repeats are free and reproducible.
+intents** like "graph y = 2x + 1") deterministically. For a **real spoken voice**
+(otherwise an offline tone): `OPENAI_API_KEY`/`ELEVENLABS_API_KEY` (cloud), or
+**free & local** Kokoro — `npm install kokoro-js` + `SHOWMAN_TTS_PROVIDER=kokoro`
+(runs on your GPU: CUDA → WebGPU → CPU). Clips are cached on disk so repeats are
+free and reproducible.
 
 ```bash
 npm run brief -- "teach counting to four balloons in a magical fairy land"

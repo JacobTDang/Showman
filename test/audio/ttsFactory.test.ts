@@ -27,6 +27,10 @@ describe("createTts selection (pure, no network)", () => {
     expect(id(createTts({ SHOWMAN_TTS_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: "y" }))).toMatch(/^elevenlabs:/);
   });
 
+  it("selects local Kokoro on override (no key needed)", () => {
+    expect(id(createTts({ SHOWMAN_TTS_PROVIDER: "kokoro" }))).toMatch(/^kokoro:/);
+  });
+
   it("threads voice + model into the provider id", () => {
     expect(id(createTts({ OPENAI_API_KEY: "x", SHOWMAN_TTS_VOICE: "fable", SHOWMAN_TTS_MODEL: "tts-1" }))).toBe("openai:tts-1:fable:22050");
   });

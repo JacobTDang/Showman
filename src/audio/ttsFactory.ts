@@ -11,6 +11,7 @@ import { SilentTtsProvider, ToneTtsProvider } from "./tts.js";
 import { CachingTtsProvider } from "./ttsCache.js";
 import { OpenAiTtsProvider } from "./providers/openaiTts.js";
 import { ElevenLabsTtsProvider } from "./providers/elevenLabsTts.js";
+import { KokoroTtsProvider } from "./providers/kokoroTts.js";
 
 export type TtsEnv = Record<string, string | undefined>;
 
@@ -38,12 +39,16 @@ export function createTts(env: TtsEnv = process.env): TtsProvider {
         ...(model ? { model } : {}),
       }),
     );
+  // Local, free, GPU-accelerated; the optional kokoro-js package is lazy-loaded on first use.
+  const kokoro = (): TtsProvider => cache(new KokoroTtsProvider({ ...(voice ? { voice } : {}), ...(model ? { model } : {}) }));
 
   switch (forced) {
     case "openai":
       return openai();
     case "elevenlabs":
       return eleven();
+    case "kokoro":
+      return kokoro();
     case "tone":
       return new ToneTtsProvider();
     case "silent":

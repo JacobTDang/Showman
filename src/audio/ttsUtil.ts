@@ -22,6 +22,16 @@ export function int16ToBytes(pcm: Int16Array): Uint8Array {
   return bytes;
 }
 
+/** Convert float audio samples in [-1, 1] (e.g. Kokoro/ONNX output) to 16-bit PCM, clamped. */
+export function float32ToInt16(samples: Float32Array): Int16Array {
+  const out = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]!));
+    out[i] = Math.round(s * 32767);
+  }
+  return out;
+}
+
 /** Linear-resample mono PCM from srcRate to dstRate. Identity (returns input) when rates match. */
 export function resamplePcm(pcm: Int16Array, srcRate: number, dstRate: number): Int16Array {
   if (!Number.isFinite(srcRate) || !Number.isFinite(dstRate) || srcRate <= 0 || dstRate <= 0) return pcm;
