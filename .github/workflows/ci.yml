@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --omit=optional
       - run: npm run lint
       - run: npm run format:check
       - run: npm run typecheck
@@ -34,9 +34,31 @@ jobs:
           cache: npm
       - name: Install ffmpeg (encoder dependency)
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: npm ci
+      - run: npm ci --omit=optional
       - run: npm test
       - run: npm run build
+
+  kokoro:
+    name: Kokoro local TTS (real model)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Cache the Kokoro model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-kokoro-82m-v1-onnx-q8
+      - name: Install deps (incl. the optional kokoro-js + onnxruntime)
+        run: npm ci
+      - name: Kokoro live test (downloads the ~86MB model on a cache miss, runs on CPU)
+        run: npm run test:kokoro
+        env:
+          RUN_KOKORO_LIVE: "1"
+          HF_HOME: ~/.cache/huggingface
 
   go:
     name: Lint + vet + test (Go gateway)

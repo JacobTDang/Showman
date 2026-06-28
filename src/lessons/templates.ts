@@ -161,7 +161,7 @@ export function buildCountingLesson(opts: CountingLessonOptions = {}): SceneSpec
     seed: 7,
     background: theme.palette.bg,
     nodes,
-    narration: { segments: narration, voice: "child-friendly" },
+    narration: { segments: narration },
   };
 }
 

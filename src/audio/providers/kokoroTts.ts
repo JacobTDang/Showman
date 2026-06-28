@@ -66,6 +66,7 @@ export class KokoroTtsProvider implements TtsProvider {
   private readonly load: () => Promise<KokoroModule>;
   private readonly log: (msg: string) => void;
   private enginePromise: Promise<KokoroEngine> | undefined;
+  private readonly badVoices = new Set<string>();
   readonly id: string;
 
   constructor(opts: KokoroTtsOptions = {}) {
@@ -120,7 +121,19 @@ export class KokoroTtsProvider implements TtsProvider {
       return { pcm: silencePcm(0.3, this.sampleRate), sampleRate: this.sampleRate, durationSec: 0.3 };
     }
     const engine = await this.engine();
-    const out = await engine.generate(t, { voice: opts?.voice ?? this.voice });
+    const requested = opts?.voice ?? this.voice;
+    // A narration `voice` is a hint; if Kokoro doesn't know it, fall back to the
+    // configured default rather than failing the whole render.
+    const voice = this.badVoices.has(requested) ? this.voice : requested;
+    let out: { audio: Float32Array; sampling_rate: number };
+    try {
+      out = await engine.generate(t, { voice });
+    } catch (err) {
+      if (voice === this.voice) throw err;
+      this.badVoices.add(voice);
+      this.log(`[kokoro] voice "${voice}" not available, using "${this.voice}"`);
+      out = await engine.generate(t, { voice: this.voice });
+    }
     const pcm = resamplePcm(float32ToInt16(out.audio), out.sampling_rate, this.sampleRate);
     return { pcm, sampleRate: this.sampleRate, durationSec: pcm.length / this.sampleRate };
   }
