@@ -99,6 +99,7 @@ export type { PolygonNode, PolylineNode, ArcNode, CounterNode, NarrationSegment 
 export { THEMES, DEFAULT_THEME, getTheme, swatch } from "./theme/themes.js";
 export type { Theme, Palette } from "./theme/themes.js";
 export * as motion from "./motion/presets.js";
+export * as math from "./math/index.js";
 export { captionsFromNarration, toVTT, toSRT } from "./audio/captions.js";
 export type { Cue } from "./audio/captions.js";
 export { SilentTtsProvider, ToneTtsProvider, synthesizeNarration, estimateSpeechDuration } from "./audio/tts.js";
