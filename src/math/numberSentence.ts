@@ -12,7 +12,7 @@
  */
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
-import { getTheme, idGen, clamp, approxTextWidth, swatch } from "./shared.js";
+import { getTheme, idGen, clamp, approxTextWidth, swatch, finiteNum } from "./shared.js";
 
 /** The arithmetic operators a number sentence understands. */
 export type MathOp = "+" | "-" | "×" | "÷";
@@ -83,32 +83,39 @@ export function buildNumberSentence(opts: NumberSentenceOptions): GroupNode {
   const prefix = opts.id ?? "numsent";
   const nid = idGen(prefix);
   const showDots = opts.showDots !== false;
-  const glyph = OP_GLYPH[opts.op];
+  // Guard against an out-of-union operator so layout never reads `.length` of undefined.
+  const glyph = OP_GLYPH[opts.op] ?? OP_GLYPH["+"];
+
+  // Sanitize operand/answer numbers: a ÷ 0 from the caller yields Infinity/NaN, which
+  // would make the counter `value` (and so the spec) non-finite. Clamp to finite numbers.
+  const a = finiteNum(opts.a, 0);
+  const b = finiteNum(opts.b, 0);
+  const result = finiteNum(opts.result, 0);
 
   // Tokens in left → right reading order. Operands get counting dots; the answer
   // is highlighted in the accent color but carries no dots.
   const tokens: Token[] = [
     {
       kind: "num",
-      text: String(opts.a),
-      value: opts.a,
+      text: String(a),
+      value: a,
       font: NUM_FONT,
       color: theme.palette.text,
-      dots: showDots ? dotCount(opts.a) : 0,
+      dots: showDots ? dotCount(a) : 0,
       swatchIndex: 0,
     },
     { kind: "sym", text: glyph, value: 0, font: OP_FONT, color: theme.palette.primary, dots: 0, swatchIndex: 0 },
     {
       kind: "num",
-      text: String(opts.b),
-      value: opts.b,
+      text: String(b),
+      value: b,
       font: NUM_FONT,
       color: theme.palette.text,
-      dots: showDots ? dotCount(opts.b) : 0,
+      dots: showDots ? dotCount(b) : 0,
       swatchIndex: 1,
     },
     { kind: "sym", text: "=", value: 0, font: OP_FONT, color: theme.palette.primary, dots: 0, swatchIndex: 0 },
-    { kind: "num", text: String(opts.result), value: opts.result, font: NUM_FONT, color: theme.palette.accent, dots: 0, swatchIndex: 2 },
+    { kind: "num", text: String(result), value: result, font: NUM_FONT, color: theme.palette.accent, dots: 0, swatchIndex: 2 },
   ];
 
   const children: Node[] = [];
@@ -167,5 +174,5 @@ export function buildNumberSentence(opts: NumberSentenceOptions): GroupNode {
     cx += w + GAP;
   }
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

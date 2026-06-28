@@ -10,7 +10,7 @@
  */
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
-import { getTheme, idGen, fmtTick, swatch, type Theme } from "./shared.js";
+import { getTheme, idGen, fmtTick, swatch, finiteNum, posSize, type Theme } from "./shared.js";
 
 /** A single part of the tape: its size plus an optional label/color override. */
 export interface TapeSegment {
@@ -46,16 +46,16 @@ export function buildTapeDiagram(opts: TapeDiagramOptions): GroupNode {
   const theme: Theme = getTheme(opts.theme);
   const prefix = opts.id ?? "tape";
   const nid = idGen(prefix);
-  const w = opts.width ?? 420;
-  const h = opts.height ?? 56;
-  const segments = opts.segments;
+  const w = posSize(opts.width, 420);
+  const h = posSize(opts.height, 56);
+  const segments = Array.isArray(opts.segments) ? opts.segments : [];
 
   // Reserve vertical room above the bar for the brace + total label.
   const hasBrace = opts.totalLabel !== undefined;
   const topPad = hasBrace ? 44 : 0;
 
-  // Sum of (non-negative) values; when zero we fall back to equal widths.
-  const total = segments.reduce((s, seg) => s + Math.max(0, seg.value), 0);
+  // Sum of (finite, non-negative) values; when zero we fall back to equal widths.
+  const total = segments.reduce((s, seg) => s + finiteNum(seg.value, 0, 0), 0);
 
   const children: Node[] = [];
 
@@ -63,7 +63,7 @@ export function buildTapeDiagram(opts: TapeDiagramOptions): GroupNode {
   let cursorX = 0;
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]!;
-    const v = Math.max(0, seg.value);
+    const v = finiteNum(seg.value, 0, 0);
     const segW = total > 0 ? (v / total) * w : w / segments.length;
     const fill: Color = seg.color ?? swatch(theme, i);
 
@@ -132,5 +132,5 @@ export function buildTapeDiagram(opts: TapeDiagramOptions): GroupNode {
     });
   }
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

@@ -10,7 +10,7 @@
  */
 
 import type { Node, GroupNode } from "../spec/types.js";
-import { getTheme, idGen } from "./shared.js";
+import { getTheme, idGen, posSize, intCount, finiteNum } from "./shared.js";
 
 export interface BaseTenBlocksOptions {
   id?: string;
@@ -37,10 +37,12 @@ export function buildBaseTenBlocks(opts: BaseTenBlocksOptions): GroupNode {
   const prefix = opts.id ?? "baseten";
   const nid = idGen(prefix);
 
-  const unit = opts.unit ?? 16;
-  const hundreds = Math.max(0, Math.floor(opts.hundreds ?? 0));
-  const tens = Math.max(0, Math.floor(opts.tens ?? 0));
-  const ones = Math.max(0, Math.floor(opts.ones ?? 0));
+  const unit = posSize(opts.unit, 16);
+  // Each hundreds flat expands to ~20 nodes, a tens rod ~11, a ones unit ~2; cap the
+  // counts well below the scene node limit so even maxed-out inputs stay a valid spec.
+  const hundreds = intCount(opts.hundreds, 0, 250);
+  const tens = intCount(opts.tens, 0, 250);
+  const ones = intCount(opts.ones, 0, 250);
 
   const fill = theme.palette.secondary; // place-value blocks share one fill
   const outline = theme.palette.text; // darker border around each block
@@ -102,5 +104,5 @@ export function buildBaseTenBlocks(opts: BaseTenBlocksOptions): GroupNode {
   placeCategory(tens, unit, flatSide, 1, 10); // rods: 1 col × 10 rows
   placeCategory(ones, unit, unit, 1, 1); // units: a single cell
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

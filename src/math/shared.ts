@@ -29,3 +29,24 @@ export function clamp(v: number, lo: number, hi: number): number {
 export function approxTextWidth(text: string, fontSize: number): number {
   return text.length * fontSize * 0.58;
 }
+
+// ── Input sanitizers ─────────────────────────────────────────────────────────
+// Builders must never emit non-finite or negative dimensions (an invalid spec, or
+// — if validation is skipped — a native renderer panic), and must never loop over an
+// unbounded/zero/NaN count or step (a hang). These coerce option values to safe ranges.
+
+/** A finite number clamped to [min, max]; falls back when non-finite. `??` does NOT catch NaN/Infinity. */
+export function finiteNum(v: unknown, fallback: number, min = -Infinity, max = Infinity): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+}
+
+/** A finite, strictly-positive size in [min, max] (for widths, radii, font/cell/unit sizes). */
+export function posSize(v: unknown, fallback: number, min = 1, max = 100000): number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.min(max, Math.max(min, v)) : fallback;
+}
+
+/** A finite, non-negative integer count, capped to avoid infinite loops / OOM. */
+export function intCount(v: unknown, fallback: number, max = 1000): number {
+  const n = typeof v === "number" && Number.isFinite(v) ? Math.floor(v) : fallback;
+  return Math.min(max, Math.max(0, n));
+}

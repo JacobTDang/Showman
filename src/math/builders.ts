@@ -9,7 +9,7 @@
  */
 
 import type { Node, GroupNode, PolylineNode, Color } from "../spec/types.js";
-import { getTheme, idGen, fmtTick, clamp, type Theme } from "./shared.js";
+import { getTheme, idGen, fmtTick, clamp, finiteNum, posSize, intCount, type Theme } from "./shared.js";
 
 // ───────────────────────── Coordinate plane + graphing (algebra) ─────────────────────────
 
@@ -49,21 +49,34 @@ export function coordinatePlane(opts: PlaneOptions): Plane {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "plane";
   const nid = idGen(prefix);
-  const x = opts.x ?? 0;
-  const y = opts.y ?? 0;
-  const w = opts.width ?? 360;
-  const h = opts.height ?? 300;
-  const { xMin, xMax, yMin, yMax } = opts;
-  const step = opts.step ?? 1;
+  const x = finiteNum(opts.x, 0);
+  const y = finiteNum(opts.y, 0);
+  const w = posSize(opts.width, 360);
+  const h = posSize(opts.height, 300);
+  // Sanitize the data range: every coord must be finite, and a zero/degenerate span
+  // would make toLocal divide by zero → non-finite point coords (an invalid spec).
+  const xMin = finiteNum(opts.xMin, 0);
+  const xMax = finiteNum(opts.xMax, 10);
+  const yMin = finiteNum(opts.yMin, 0);
+  const yMax = finiteNum(opts.yMax, 10);
+  const spanX = xMax - xMin !== 0 ? xMax - xMin : 1;
+  const spanY = yMax - yMin !== 0 ? yMax - yMin : 1;
+  // A non-positive/non-finite step would make the tick loops spin forever.
+  const stepRaw = finiteNum(opts.step, 1);
+  const step = stepRaw > 0 ? stepRaw : 1;
   const toLocal = (dx: number, dy: number) => ({
-    x: ((dx - xMin) / (xMax - xMin)) * w,
-    y: h - ((dy - yMin) / (yMax - yMin)) * h,
+    x: ((dx - xMin) / spanX) * w,
+    y: h - ((dy - yMin) / spanY) * h,
   });
 
   const children: Node[] = [];
   const ticks = (min: number, max: number) => {
     const out: number[] = [];
-    for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(Math.round(v / step) * step);
+    // Bound the iteration count so a tiny step over a huge range can't hang / OOM.
+    let count = 0;
+    for (let v = Math.ceil(min / step) * step; v <= max + 1e-9 && count < 1000; v += step, count++) {
+      out.push(Math.round(v / step) * step);
+    }
     return out;
   };
 
@@ -191,21 +204,29 @@ export function plotFunction(
   opts: { samples?: number; xMin?: number; xMax?: number } = {},
   style: PlotStyle = {},
 ): PolylineNode {
-  const samples = opts.samples ?? 80;
-  const xMin = opts.xMin ?? plane.range.xMin;
-  const xMax = opts.xMax ?? plane.range.xMax;
+  const samples = intCount(opts.samples, 80);
+  const xMin = finiteNum(opts.xMin, plane.range.xMin);
+  const xMax = finiteNum(opts.xMax, plane.range.xMax);
   // Skip out-of-range samples so a curve/line clips cleanly at the box edge instead
   // of flattening along it; fall back to clamped points if nothing is in range.
   const eps = (plane.range.yMax - plane.range.yMin) * 1e-9;
   const inRange: { x: number; y: number }[] = [];
   const clamped: { x: number; y: number }[] = [];
   for (let i = 0; i <= samples; i++) {
-    const dx = xMin + ((xMax - xMin) * i) / samples;
+    const dx = samples > 0 ? xMin + ((xMax - xMin) * i) / samples : xMin;
     const dyRaw = fn(dx);
+    // Drop non-finite results (asymptotes, 1/0, log of negatives) from BOTH arrays so
+    // no NaN/Infinity coordinate can reach the spec.
+    if (!Number.isFinite(dyRaw)) continue;
     clamped.push(plane.toLocal(dx, clamp(dyRaw, plane.range.yMin, plane.range.yMax)));
     if (dyRaw >= plane.range.yMin - eps && dyRaw <= plane.range.yMax + eps) inRange.push(plane.toLocal(dx, dyRaw));
   }
-  const points = inRange.length >= 2 ? inRange : clamped;
+  let points = inRange.length >= 2 ? inRange : clamped;
+  // A polyline needs >= 2 finite points; if the function was non-finite almost
+  // everywhere, fall back to a minimal flat segment so the spec stays valid.
+  if (points.length < 2) {
+    points = [plane.toLocal(xMin, plane.range.yMin), plane.toLocal(xMax, plane.range.yMin)];
+  }
   return {
     id: style.id ?? `${plane.idPrefix}-fn`,
     type: "polyline",
@@ -230,10 +251,10 @@ export function plotPoints(
   style: { radius?: number; fill?: Color; id?: string } = {},
 ): Node[] {
   const nid = idGen(style.id ?? `${plane.idPrefix}-pt`);
-  const r = style.radius ?? 6;
+  const r = posSize(style.radius, 6);
   const out: Node[] = [];
   for (const p of points) {
-    const loc = plane.toLocal(p.x, p.y);
+    const loc = plane.toLocal(finiteNum(p.x, 0), finiteNum(p.y, 0));
     out.push({
       id: nid(),
       type: "ellipse",
@@ -287,12 +308,16 @@ export function numberLine(opts: NumberLineOptions): NumberLine {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "numline";
   const nid = idGen(prefix);
-  const x = opts.x ?? 0;
-  const y = opts.y ?? 0;
-  const w = opts.width ?? 400;
-  const { from, to } = opts;
-  const step = opts.step ?? 1;
-  const toX = (v: number) => ((v - from) / (to - from)) * w;
+  const x = finiteNum(opts.x, 0);
+  const y = finiteNum(opts.y, 0);
+  const w = posSize(opts.width, 400);
+  const from = finiteNum(opts.from, 0);
+  const to = finiteNum(opts.to, 10);
+  // Guard the denominator of toX: from==to (or non-finite) would divide by zero.
+  const span = to - from !== 0 ? to - from : 1;
+  const stepRaw = finiteNum(opts.step, 1);
+  const step = stepRaw > 0 ? stepRaw : 1;
+  const toX = (v: number) => ((v - from) / span) * w;
 
   const children: Node[] = [
     {
@@ -307,7 +332,8 @@ export function numberLine(opts: NumberLineOptions): NumberLine {
       lineCap: "round",
     },
   ];
-  for (let v = from; v <= to + 1e-9; v += step) {
+  let tickCount = 0;
+  for (let v = from; v <= to + 1e-9 && tickCount < 1000; v += step, tickCount++) {
     const px = toX(v);
     children.push({
       id: nid(),
@@ -354,9 +380,11 @@ export function fractionCircle(opts: FractionOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "frac";
   const nid = idGen(prefix);
-  const r = opts.radius ?? 70;
-  const denom = Math.max(1, Math.floor(opts.denominator));
-  const num = clamp(Math.floor(opts.numerator), 0, denom);
+  const r = posSize(opts.radius, 70);
+  // intCount keeps the divider loop bounded and the denominator a finite integer >= 1
+  // (Math.max(1, Math.floor(NaN)) is NaN — not safe on its own).
+  const denom = Math.max(1, intCount(opts.denominator, 1));
+  const num = clamp(Math.floor(finiteNum(opts.numerator, 0)), 0, denom);
   const fill = opts.fill ?? theme.palette.accent;
   const cx = r;
   const cy = r;
@@ -392,7 +420,7 @@ export function fractionCircle(opts: FractionOptions): GroupNode {
       strokeWidth: 2,
     });
   }
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }
 
 /** A fraction as a divided bar: `denominator` cells, first `numerator` filled. */
@@ -400,10 +428,11 @@ export function fractionBar(opts: FractionOptions & { width?: number; height?: n
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "fracbar";
   const nid = idGen(prefix);
-  const w = opts.width ?? 280;
-  const h = opts.height ?? 64;
-  const denom = Math.max(1, Math.floor(opts.denominator));
-  const num = clamp(Math.floor(opts.numerator), 0, denom);
+  const w = posSize(opts.width, 280);
+  const h = posSize(opts.height, 64);
+  // intCount keeps the cell loop bounded and the denominator a finite integer >= 1.
+  const denom = Math.max(1, intCount(opts.denominator, 1));
+  const num = clamp(Math.floor(finiteNum(opts.numerator, 0)), 0, denom);
   const fill = opts.fill ?? theme.palette.accent;
   const cellW = w / denom;
 
@@ -421,5 +450,5 @@ export function fractionBar(opts: FractionOptions & { width?: number; height?: n
       strokeWidth: 2,
     });
   }
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

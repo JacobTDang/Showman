@@ -7,7 +7,7 @@
  */
 
 import type { Node, GroupNode } from "../spec/types.js";
-import { getTheme, idGen, clamp } from "./shared.js";
+import { getTheme, idGen, clamp, finiteNum, posSize, intCount } from "./shared.js";
 
 // ───────────────────────── Ten-frame ─────────────────────────
 
@@ -31,9 +31,9 @@ export function buildTenFrame(opts: TenFrameOptions): GroupNode {
   const prefix = opts.id ?? "tenframe";
   const nid = idGen(prefix);
   const cols = 5;
-  const total = Math.max(0, Math.floor(opts.total ?? 10));
-  const filled = clamp(Math.floor(opts.filled), 0, total);
-  const cell = opts.cellSize ?? 48;
+  const total = intCount(opts.total, 10);
+  const filled = clamp(intCount(opts.filled, 0), 0, total);
+  const cell = posSize(opts.cellSize, 48);
   // Counter radius — comfortably fills the cell so its center reads as `primary`.
   const r = cell * 0.32;
 
@@ -71,5 +71,5 @@ export function buildTenFrame(opts: TenFrameOptions): GroupNode {
     }
   }
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

@@ -10,7 +10,7 @@
  */
 
 import type { Node, GroupNode } from "../spec/types.js";
-import { getTheme, idGen, swatch, clamp } from "./shared.js";
+import { getTheme, idGen, swatch, clamp, finiteNum, posSize, intCount } from "./shared.js";
 
 // ───────────────────────── Bar graph (data) ─────────────────────────
 
@@ -43,10 +43,13 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "bargraph";
   const nid = idGen(prefix);
-  const w = opts.width ?? 360;
-  const h = opts.height ?? 220;
-  const bars = opts.bars;
-  const n = Math.max(1, bars.length);
+  const w = posSize(opts.width, 360);
+  const h = posSize(opts.height, 220);
+  // Degenerate `bars` (non-array / empty) yields a valid baseline-only group; cap
+  // the count so an absurdly large array can't blow the loop / node budget.
+  const bars = Array.isArray(opts.bars) ? opts.bars : [];
+  const count = intCount(bars.length, 0);
+  const n = Math.max(1, count);
 
   // Reserve vertical space: value readouts above the tallest bar, category labels
   // below the baseline. What's left between them is the plotting height.
@@ -56,8 +59,8 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
   const plotHeight = Math.max(0, baselineY - topPad);
 
   // Largest value maps to a full-height bar (guard against a zero/negative max).
-  const dataMax = bars.reduce((m, b) => Math.max(m, b.value), 0);
-  const maxValue = opts.maxValue ?? dataMax;
+  const dataMax = bars.slice(0, count).reduce((m, b) => Math.max(m, finiteNum(b?.value, 0, 0)), 0);
+  const maxValue = finiteNum(opts.maxValue, dataMax);
   const denom = maxValue > 0 ? maxValue : 1;
 
   const colW = w / n; // each bar gets an equal column
@@ -78,12 +81,16 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
     },
   ];
 
-  bars.forEach((bar, i) => {
+  for (let i = 0; i < count; i++) {
+    const bar = bars[i];
+    const value = finiteNum(bar?.value, 0, 0); // finite, non-negative
     const cx = colW * i + colW / 2; // column center
-    const ratio = clamp(bar.value / denom, 0, 1);
+    const ratio = clamp(value / denom, 0, 1);
     const barH = ratio * plotHeight;
     const barY = baselineY - barH;
-    const fill = bar.color ?? swatch(theme, i);
+    const fill = bar?.color ?? swatch(theme, i);
+    // Text nodes require a non-empty string; fall back so a blank label stays valid.
+    const label = typeof bar?.label === "string" && bar.label.length > 0 ? bar.label : " ";
 
     // the bar
     children.push({
@@ -103,8 +110,8 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
       type: "counter",
       x: cx,
       y: barY - 6,
-      value: bar.value,
-      decimals: Number.isInteger(bar.value) ? 0 : 1,
+      value,
+      decimals: Number.isInteger(value) ? 0 : 1,
       fontSize: 18,
       fontFamily: theme.headingFont,
       fontWeight: theme.headingWeight,
@@ -119,7 +126,7 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
       type: "text",
       x: cx,
       y: baselineY + 8,
-      text: bar.label,
+      text: label,
       fontSize: 15,
       fontFamily: theme.bodyFont,
       fontWeight: theme.bodyWeight,
@@ -127,7 +134,7 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
       align: "center",
       baseline: "top",
     });
-  });
+  }
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

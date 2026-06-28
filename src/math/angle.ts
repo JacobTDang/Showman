@@ -8,7 +8,7 @@
  */
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
-import { getTheme, idGen } from "./shared.js";
+import { getTheme, idGen, finiteNum, posSize } from "./shared.js";
 
 // ───────────────────────── Geometry angle ─────────────────────────
 
@@ -41,9 +41,11 @@ export function buildAngle(opts: AngleOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "angle";
   const nid = idGen(prefix);
-  const rayLength = opts.rayLength ?? 90;
+  const rayLength = posSize(opts.rayLength, 90);
   const color = opts.color ?? theme.palette.primary;
-  const degrees = opts.degrees;
+  // Clamp the opening into a finite 0..360 range so rays, arc angles, and the
+  // label never go non-finite (NaN/Infinity would produce an invalid spec).
+  const degrees = finiteNum(opts.degrees, 0, 0, 360);
 
   // Ray B endpoint in local pixels: CCW math angle θ → screen y is negative (up).
   const rad = (degrees * Math.PI) / 180;
@@ -122,5 +124,5 @@ export function buildAngle(opts: AngleOptions): GroupNode {
     },
   ];
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

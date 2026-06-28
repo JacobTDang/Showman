@@ -11,7 +11,17 @@
  */
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
-import { getTheme, idGen, approxTextWidth } from "./shared.js";
+import { getTheme, idGen, approxTextWidth, finiteNum, posSize } from "./shared.js";
+
+/**
+ * Coerce an arbitrary part field to a renderable string. Real string runs pass
+ * through unchanged (so valid output is byte-identical); non-strings (numbers,
+ * null/undefined, NaN) become a safe string so `.length` width math never goes
+ * non-finite and we never emit a non-string `text` field.
+ */
+function asStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
 
 /**
  * One piece of an expression:
@@ -41,7 +51,7 @@ export function buildMathExpr(opts: MathExprOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "expr";
   const nid = idGen(prefix);
-  const fs = opts.fontSize ?? 40;
+  const fs = posSize(opts.fontSize, 40);
   const fill = opts.fill ?? theme.palette.text;
   const font = theme.bodyFont;
 
@@ -54,52 +64,68 @@ export function buildMathExpr(opts: MathExprOptions): GroupNode {
   const children: Node[] = [];
   let cursor = 0; // advancing x along the midline (local space)
 
-  for (const part of opts.parts) {
+  // Tolerate a non-array `parts` (NaN/undefined/number/etc.) → empty, valid group.
+  const parts = Array.isArray(opts.parts) ? opts.parts : [];
+
+  for (const part of parts) {
+    // Skip non-object / malformed entries rather than throwing on `.kind`.
+    if (part == null || typeof part !== "object") continue;
+
     if (part.kind === "text") {
-      children.push({
-        id: nid(),
-        type: "text",
-        x: cursor,
-        y: 0,
-        text: part.text,
-        fontSize: fs,
-        fontFamily: font,
-        fill,
-        align: "left",
-        baseline: "middle",
-      });
-      cursor += approxTextWidth(part.text, fs);
+      const t = asStr(part.text);
+      // Empty runs would make an invalid (empty-text) node; skip but still advance.
+      if (t.length > 0) {
+        children.push({
+          id: nid(),
+          type: "text",
+          x: cursor,
+          y: 0,
+          text: t,
+          fontSize: fs,
+          fontFamily: font,
+          fill,
+          align: "left",
+          baseline: "middle",
+        });
+      }
+      cursor += approxTextWidth(t, fs);
     } else if (part.kind === "frac") {
-      const numW = approxTextWidth(part.num, fs);
-      const denW = approxTextWidth(part.den, fs);
+      const num = asStr(part.num);
+      const den = asStr(part.den);
+      const numW = approxTextWidth(num, fs);
+      const denW = approxTextWidth(den, fs);
       const w = Math.max(numW, denW);
       const cx = cursor + w / 2; // numerator/denominator share this center
       // numerator (above the rule)
-      children.push({
-        id: nid(),
-        type: "text",
-        x: cx,
-        y: -fracRise,
-        text: part.num,
-        fontSize: fs,
-        fontFamily: font,
-        fill,
-        align: "center",
-        baseline: "middle",
-      });
+      if (num.length > 0) {
+        children.push({
+          id: nid(),
+          type: "text",
+          x: cx,
+          y: -fracRise,
+          text: num,
+          fontSize: fs,
+          fontFamily: font,
+          fill,
+          align: "center",
+          baseline: "middle",
+        });
+      }
       // denominator (below the rule)
-      children.push({
-        id: nid(),
-        type: "text",
-        x: cx,
-        y: fracRise,
-        text: part.den,
-        fontSize: fs,
-        fontFamily: font,
-        fill,
-        align: "center",
-        baseline: "middle",
-      });
+      if (den.length > 0) {
+        children.push({
+          id: nid(),
+          type: "text",
+          x: cx,
+          y: fracRise,
+          text: den,
+          fontSize: fs,
+          fontFamily: font,
+          fill,
+          align: "center",
+          baseline: "middle",
+        });
+      }
       // horizontal divider rule on the midline
       children.push({
         id: nid(),
@@ -113,16 +139,18 @@ export function buildMathExpr(opts: MathExprOptions): GroupNode {
         lineCap: "round",
       });
       cursor += w + fracPad;
-    } else {
+    } else if (part.kind === "pow") {
       // pow: base on the midline, exp raised + shrunk to a superscript
-      const baseW = approxTextWidth(part.base, fs);
-      if (part.base.length > 0) {
+      const base = asStr(part.base);
+      const exp = asStr(part.exp);
+      const baseW = approxTextWidth(base, fs);
+      if (base.length > 0) {
         children.push({
           id: nid(),
           type: "text",
           x: cursor,
           y: 0,
-          text: part.base,
+          text: base,
           fontSize: fs,
           fontFamily: font,
           fill,
@@ -131,21 +159,24 @@ export function buildMathExpr(opts: MathExprOptions): GroupNode {
         });
       }
       const supFs = fs * supScale;
-      children.push({
-        id: nid(),
-        type: "text",
-        x: cursor + baseW,
-        y: -supRise,
-        text: part.exp,
-        fontSize: supFs,
-        fontFamily: font,
-        fill,
-        align: "left",
-        baseline: "middle",
-      });
-      cursor += baseW + approxTextWidth(part.exp, supFs);
+      if (exp.length > 0) {
+        children.push({
+          id: nid(),
+          type: "text",
+          x: cursor + baseW,
+          y: -supRise,
+          text: exp,
+          fontSize: supFs,
+          fontFamily: font,
+          fill,
+          align: "left",
+          baseline: "middle",
+        });
+      }
+      cursor += baseW + approxTextWidth(exp, supFs);
     }
+    // Unknown kinds are ignored (no-op) — keeps the group valid for degenerate input.
   }
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

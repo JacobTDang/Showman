@@ -121,6 +121,32 @@ with **zero internal workers** has its job rendered entirely by external pull
 workers. `docker compose up --scale shard-worker=8` scales the fleet. (A Redis-backed
 `Queue` is the alternative for very large fleets — same interface.)
 
+## Math toolkit — counting → algebra  ✅
+
+> Extends the engine into a beautiful math-animation library, built breadth-first
+> with lightweight notation, all the way up to functions/quadratics.
+
+- [x] **Engine primitives** — `arc` + `counter` (fractions, clocks, count-ups) and
+      `polyline` (connected points with an animatable draw-on `progress`), the keystone
+      that draws axes, function curves, segments, braces, and tape diagrams.
+- [x] **Math motion presets** — `src/math/presets.ts`: `drawOn`, `shadeIn`, `countUp`,
+      `hop`, `fillStagger`.
+- [x] **Composite builders** — `src/math/`: `coordinatePlane` + `plotLine`/`plotFunction`
+      (graphs evaluated at build time → points), `numberLine`, `fractionCircle`/`Bar`,
+      `tenFrame`, `baseTenBlocks`, `dotPattern`, `arrayGrid`, `numberSentence`, `mathExpr`
+      (lightweight `a/b`, `x²`), `balanceScale`, `tapeDiagram`, `barGraph`, `angle`.
+- [x] **Narrated lessons** — `src/math/lessons.ts`: graphing, quadratic, addition,
+      multiplication, fraction, place-value, equation, data + a `buildMathLesson(topic,…)`
+      dispatcher.
+- [x] **Author intents** — `src/authoring/mathBrief.ts`: a brief like "graph y = 2x + 1"
+      or "show 3/4 as a pie" routes (no LLM) to the right lesson.
+- [x] **Verification** — per-builder pixel/validity unit tests, three new CI golden
+      frames (math primitives, a graph, a fraction + number line), and
+      `npm run math-gallery` (a contact sheet of every builder).
+
+**Status:** 286 tests pass; verify gate green. Built via a 10-way parallel agent
+fan-out (one builder per file) then an adversarial edge-case hardening pass.
+
 ### Build order
 Critical path **M0 → M1 → M2 → M3**, then M4, then M5, harden in M6. Optional:
 pull a thin slice of M5 (theming + one storytelling primitive) forward as an

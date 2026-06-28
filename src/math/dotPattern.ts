@@ -8,7 +8,7 @@
  */
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
-import { getTheme, idGen, clamp } from "./shared.js";
+import { getTheme, idGen, clamp, finiteNum, posSize, intCount } from "./shared.js";
 
 // ───────────────────────── Dot pattern (subitizing) ─────────────────────────
 
@@ -72,8 +72,8 @@ export function buildDotPattern(opts: DotPatternOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "dots";
   const nid = idGen(prefix);
-  const size = opts.size ?? 120;
-  const n = clamp(Math.round(opts.n), 1, 10);
+  const size = posSize(opts.size, 120);
+  const n = clamp(intCount(opts.n, 1, 10), 1, 10);
   const color = opts.color ?? theme.palette.primary;
 
   // Dice grids breathe more than the denser ten-frame, so scale the dot accordingly.
@@ -89,5 +89,5 @@ export function buildDotPattern(opts: DotPatternOptions): GroupNode {
     fill: color,
   }));
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

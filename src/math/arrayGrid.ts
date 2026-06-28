@@ -8,7 +8,7 @@
  */
 
 import type { GroupNode, Node, Color } from "../spec/types.js";
-import { getTheme, idGen } from "./shared.js";
+import { getTheme, idGen, finiteNum, posSize, intCount } from "./shared.js";
 
 export interface ArrayGridOptions {
   id?: string;
@@ -33,10 +33,17 @@ export function buildArrayGrid(opts: ArrayGridOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "array";
   const nid = idGen(prefix);
-  const rows = Math.max(1, Math.floor(opts.rows));
-  const cols = Math.max(1, Math.floor(opts.cols));
-  const gap = opts.gap ?? 40;
-  const r = opts.dotRadius ?? 12;
+  let rows = Math.max(1, intCount(opts.rows, 1));
+  let cols = Math.max(1, intCount(opts.cols, 1));
+  // Cap the total dot count so the scene never blows past the renderer/validator
+  // node budget (rows*cols emitted as children). Normal small grids are unaffected.
+  const MAX_DOTS = 4096;
+  if (rows * cols > MAX_DOTS) {
+    cols = Math.max(1, Math.min(cols, Math.floor(MAX_DOTS / rows)));
+    if (rows * cols > MAX_DOTS) rows = Math.max(1, Math.floor(MAX_DOTS / cols));
+  }
+  const gap = posSize(opts.gap, 40);
+  const r = posSize(opts.dotRadius, 12);
   const fill = opts.color ?? theme.palette.accent;
 
   const children: Node[] = [];
@@ -58,5 +65,5 @@ export function buildArrayGrid(opts: ArrayGridOptions): GroupNode {
     }
   }
 
-  return { id: prefix, type: "group", x: opts.x ?? 0, y: opts.y ?? 0, children };
+  return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };
 }

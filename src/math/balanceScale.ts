@@ -11,7 +11,7 @@
  */
 
 import type { Node, GroupNode } from "../spec/types.js";
-import { getTheme, idGen, clamp } from "./shared.js";
+import { getTheme, idGen, clamp, finiteNum, posSize } from "./shared.js";
 
 export interface BalanceScaleOptions {
   /** Weight on the left pan — drives the tilt. */
@@ -45,8 +45,14 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
   const theme = getTheme(opts.theme);
   const prefix = opts.id ?? "balance";
   const nid = idGen(prefix);
-  const w = opts.width ?? 320;
+  const w = posSize(opts.width, 320);
   const cx = w / 2;
+
+  // Sanitize the weights: non-finite inputs (NaN/Infinity) would poison the tilt
+  // (clamp does NOT catch NaN) and the pan counters. Finite weights pass through
+  // unchanged, so valid inputs render identically.
+  const left = finiteNum(opts.left, 0);
+  const right = finiteNum(opts.right, 0);
 
   // ── Vertical layout (local coords; the group origin is top-left) ──
   const pivotY = 44; // beam center line == rotation pivot
@@ -64,8 +70,8 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
   // ── Tilt: the heavier side sinks. In canvas space (y grows downward) a
   // positive rotation drops the RIGHT side, so map (right - left) -> rotation,
   // normalize by the total weight, and clamp to ±MAX_TILT. Equal weights => 0°. ──
-  const total = Math.abs(opts.left) + Math.abs(opts.right);
-  const ratio = total === 0 ? 0 : (opts.right - opts.left) / total;
+  const total = Math.abs(left) + Math.abs(right);
+  const ratio = total === 0 ? 0 : (right - left) / total;
   const tilt = clamp(ratio * MAX_TILT, -MAX_TILT, MAX_TILT);
 
   /** One hanging pan: a string, the tray, the weight counter, and an optional caption. */
@@ -151,8 +157,8 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
         stroke: theme.palette.text,
         strokeWidth: 2,
       },
-      ...pan(leftX, opts.left, opts.leftLabel),
-      ...pan(rightX, opts.right, opts.rightLabel),
+      ...pan(leftX, left, opts.leftLabel),
+      ...pan(rightX, right, opts.rightLabel),
     ],
   };
 
@@ -188,8 +194,8 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
   return {
     id: prefix,
     type: "group",
-    x: opts.x ?? 0,
-    y: opts.y ?? 0,
+    x: finiteNum(opts.x, 0),
+    y: finiteNum(opts.y, 0),
     children: [ground, fulcrum, beamGroup],
   };
 }
