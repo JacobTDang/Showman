@@ -14,14 +14,17 @@ multiple lenses (the strongest signal).
 
 ---
 
-## The one thing: a real narration voice 🎙️ (convergent — 3 lenses)
+## ✅ Shipped: a real narration voice 🎙️ (was the convergent #1)
 
-Showman's whole promise is *narrated* videos, yet the only TTS providers are
-`SilentTtsProvider` and `ToneTtsProvider` (placeholder tones). A **real neural-TTS
-adapter** behind the existing `TtsProvider` interface — with a small catalog of warm,
-child-friendly voices — is the single highest-leverage addition. Everything else is
-polish on top of a video that, today, can't actually speak. **[H/M]** · depends on:
-the `TtsProvider` seam in `src/audio/tts.ts` (already designed for this).
+**Done.** Real cloud TTS behind the existing `TtsProvider` interface:
+`OpenAiTtsProvider` + `ElevenLabsTtsProvider` (raw-PCM, resampled to 22050), a
+content-addressed disk `CachingTtsProvider` (reproducible + free on repeat +
+idempotent across distributed retries), `createDefaultTts()` env selection (mirrors
+`createDefaultAuthor`), a per-render cost guard, and `measureNarration`/
+`fitSceneDuration` so real speech isn't truncated. Network-free unit tests +
+ffmpeg integration test in CI; live tests gated behind keys. Set `OPENAI_API_KEY`
+or `ELEVENLABS_API_KEY` and every lesson speaks. Next up: word-level karaoke timing
+and a voice catalog (Phase B).
 
 ---
 

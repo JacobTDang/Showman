@@ -6,22 +6,39 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { RenderService, LocalObjectStorage, ToneTtsProvider, RuleBasedModeration, buildCountingLesson, renderFrame } from "../src/index.js";
+import {
+  RenderService,
+  LocalObjectStorage,
+  createDefaultTts,
+  measureNarration,
+  fitSceneDuration,
+  RuleBasedModeration,
+  buildCountingLesson,
+  renderFrame,
+} from "../src/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "out");
 mkdirSync(outDir, { recursive: true });
 
 const storage = new LocalObjectStorage(join(outDir, "objects"));
+const tts = createDefaultTts(); // real voice if a key is set, else offline tone
 const service = new RenderService({
   storage,
   workDir: join(outDir, "tmp"),
-  tts: new ToneTtsProvider(),
+  tts,
   moderation: new RuleBasedModeration(),
   defaultConcurrency: 8,
 });
 
 const lesson = buildCountingLesson({ count: 5, topic: "stars", theme: "sunshine", itemShape: "star" });
+
+// Real speech rarely matches the authored beat estimate; measure it (clips are cached)
+// and extend the scene so the final line isn't cut off by the fixed-length audio buffer.
+if (lesson.narration?.segments?.length) {
+  const { requiredDuration } = await measureNarration(tts, lesson.narration);
+  lesson.duration = fitSceneDuration(lesson.duration, requiredDuration);
+}
 
 // A still where the whole lesson is composed.
 const stillFrame = Math.min(Math.round(lesson.duration * lesson.fps) - 1, Math.round(6 * lesson.fps));

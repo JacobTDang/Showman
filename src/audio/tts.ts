@@ -70,3 +70,34 @@ export async function synthesizeNarration(
   }
   return { wav: pcmToWav(total, sampleRate), segmentDurations };
 }
+
+/** Total characters across all narration segments — a per-render cost/abuse guard input. */
+export function narrationCharCount(narration: NarrationTrack): number {
+  return (narration.segments ?? []).reduce((n, s) => n + (s.text?.length ?? 0), 0);
+}
+
+/**
+ * Measure real per-segment speech durations and the total duration the scene needs so
+ * the last clip isn't truncated by `mixInto`'s fixed-length buffer. Synthesizes via the
+ * provider (wrap it in a CachingTtsProvider so the later `synthesizeNarration` reuses
+ * these clips for free). Durations are returned in ascending-`t` segment order.
+ */
+export async function measureNarration(
+  provider: TtsProvider,
+  narration: NarrationTrack,
+): Promise<{ segmentDurations: number[]; requiredDuration: number }> {
+  const segments = [...(narration.segments ?? [])].sort((a, b) => a.t - b.t);
+  const segmentDurations: number[] = [];
+  let requiredDuration = 0;
+  for (const seg of segments) {
+    const speech = await provider.synthesize(seg.text, narration.voice ? { voice: narration.voice } : undefined);
+    segmentDurations.push(speech.durationSec);
+    requiredDuration = Math.max(requiredDuration, seg.t + speech.durationSec);
+  }
+  return { segmentDurations, requiredDuration };
+}
+
+/** A scene duration that fits the narration audio (never shrinks the scene), with a small tail pad. */
+export function fitSceneDuration(currentDuration: number, requiredDuration: number, padSec = 0.4): number {
+  return Math.max(currentDuration, requiredDuration + padSec);
+}

@@ -16,7 +16,7 @@ import { totalFrames } from "../spec/schema.js";
 import { encodeSceneToFile } from "../encode/encodeVideo.js";
 import { describeScene, type SchemaDescription } from "../spec/describe.js";
 import type { ObjectStorage, StoredObject } from "./storage.js";
-import { synthesizeNarration, type TtsProvider } from "../audio/tts.js";
+import { synthesizeNarration, narrationCharCount, type TtsProvider } from "../audio/tts.js";
 import { muxAudioVideo } from "../audio/mux.js";
 import { captionsFromNarration, toVTT } from "../audio/captions.js";
 import { moderateScene, type ModerationProvider, type ModerationFinding } from "../safety/moderation.js";
@@ -218,6 +218,14 @@ export class RenderService {
       let videoPath = tmp;
       let segmentDurations: number[] | undefined;
       if (wantNarration && this.tts) {
+        // Cost/abuse guard: cap total narration characters per render before any (paid) TTS call.
+        const maxChars = Number(process.env.SHOWMAN_TTS_MAX_CHARS) || 20000;
+        const chars = narrationCharCount(scene.narration!);
+        if (chars > maxChars) {
+          throw new Error(
+            `Narration is ${chars} characters, over the TTS cost guard of ${maxChars} (raise SHOWMAN_TTS_MAX_CHARS to allow).`,
+          );
+        }
         const synth = await synthesizeNarration(this.tts, scene.narration!, frameCount / fps);
         segmentDurations = synth.segmentDurations;
         await muxAudioVideo(tmp, synth.wav, tmpMuxed, this.ffmpegPath ? { ffmpegPath: this.ffmpegPath } : {});

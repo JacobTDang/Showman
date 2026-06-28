@@ -102,8 +102,24 @@ export * as motion from "./motion/presets.js";
 export * as math from "./math/index.js";
 export { captionsFromNarration, toVTT, toSRT } from "./audio/captions.js";
 export type { Cue } from "./audio/captions.js";
-export { SilentTtsProvider, ToneTtsProvider, synthesizeNarration, estimateSpeechDuration } from "./audio/tts.js";
+export {
+  SilentTtsProvider,
+  ToneTtsProvider,
+  synthesizeNarration,
+  estimateSpeechDuration,
+  measureNarration,
+  fitSceneDuration,
+  narrationCharCount,
+} from "./audio/tts.js";
 export type { TtsProvider, SynthesizedSpeech } from "./audio/tts.js";
+export { CachingTtsProvider } from "./audio/ttsCache.js";
+export type { CachingTtsOptions } from "./audio/ttsCache.js";
+export { OpenAiTtsProvider } from "./audio/providers/openaiTts.js";
+export type { OpenAiTtsOptions } from "./audio/providers/openaiTts.js";
+export { ElevenLabsTtsProvider } from "./audio/providers/elevenLabsTts.js";
+export type { ElevenLabsTtsOptions } from "./audio/providers/elevenLabsTts.js";
+export { createTts, createDefaultTts } from "./audio/ttsFactory.js";
+export type { TtsEnv } from "./audio/ttsFactory.js";
 export { muxAudioVideo } from "./audio/mux.js";
 export { pcmToWav, silencePcm, tonePcm, SAMPLE_RATE } from "./audio/wav.js";
 export { RuleBasedModeration, moderateScene, collectSceneTexts } from "./safety/moderation.js";

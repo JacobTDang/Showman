@@ -16,7 +16,7 @@ import {
   DirectBackend,
   AuthoringAgent,
   createDefaultAuthor,
-  ToneTtsProvider,
+  createDefaultTts,
   RuleBasedModeration,
   renderFrame,
 } from "../src/index.js";
@@ -32,7 +32,7 @@ const storage = new LocalObjectStorage(join(outDir, "objects"));
 const service = new RenderService({
   storage,
   workDir: join(outDir, "tmp"),
-  tts: new ToneTtsProvider(),
+  tts: createDefaultTts(), // real voice if OPENAI_API_KEY/ELEVENLABS_API_KEY is set, else offline tone
   moderation: new RuleBasedModeration(),
   defaultConcurrency: 8,
 });
