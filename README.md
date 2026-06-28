@@ -11,7 +11,9 @@ lines, fractions, ten-frames, arrays, place value, equations on a balance scale,
 bar graphs, and lightweight math notation (`a/b`, `x²`).
 
 All milestones **M0–M6** are implemented. See [MILESTONES.md](./MILESTONES.md) for
-the breakdown and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the vision.
+the breakdown, [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the vision, and
+[docs/PRODUCT_ROADMAP.md](./docs/PRODUCT_ROADMAP.md) for what's next (a PM feature map:
+real voice, camera, interactivity, …).
 
 ![A counting lesson frame](docs/lesson-frame.png)
 
