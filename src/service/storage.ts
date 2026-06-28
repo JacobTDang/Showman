@@ -45,9 +45,12 @@ export class LocalObjectStorage implements ObjectStorage {
 
   localPath(key: string): string {
     // Guard against path traversal: a key like "../../etc/passwd" must not escape
-    // the storage root. Reject anything that resolves outside it.
+    // the storage root. Normalize backslashes to forward slashes first so detection
+    // is consistent across platforms (on POSIX, "\" is a valid filename char, not a
+    // separator, so an un-normalized "..\\..\\x" would slip through there).
     const rootResolved = resolve(this.root);
-    const full = resolve(rootResolved, key);
+    const normalizedKey = key.replace(/\\/g, "/");
+    const full = resolve(rootResolved, normalizedKey);
     if (full !== rootResolved && !full.startsWith(rootResolved + sep)) {
       throw new Error(`invalid object key (path traversal): ${JSON.stringify(key)}`);
     }
