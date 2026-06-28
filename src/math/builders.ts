@@ -9,20 +9,7 @@
  */
 
 import type { Node, GroupNode, PolylineNode, Color } from "../spec/types.js";
-import { getTheme, type Theme } from "../theme/themes.js";
-
-function idGen(prefix: string): () => string {
-  let n = 0;
-  return () => `${prefix}-${n++}`;
-}
-
-function fmtTick(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, v));
-}
+import { getTheme, idGen, fmtTick, clamp, type Theme } from "./shared.js";
 
 // ───────────────────────── Coordinate plane + graphing (algebra) ─────────────────────────
 
@@ -207,12 +194,18 @@ export function plotFunction(
   const samples = opts.samples ?? 80;
   const xMin = opts.xMin ?? plane.range.xMin;
   const xMax = opts.xMax ?? plane.range.xMax;
-  const points: { x: number; y: number }[] = [];
+  // Skip out-of-range samples so a curve/line clips cleanly at the box edge instead
+  // of flattening along it; fall back to clamped points if nothing is in range.
+  const eps = (plane.range.yMax - plane.range.yMin) * 1e-9;
+  const inRange: { x: number; y: number }[] = [];
+  const clamped: { x: number; y: number }[] = [];
   for (let i = 0; i <= samples; i++) {
     const dx = xMin + ((xMax - xMin) * i) / samples;
-    const dy = clamp(fn(dx), plane.range.yMin, plane.range.yMax); // keep the curve inside the box
-    points.push(plane.toLocal(dx, dy));
+    const dyRaw = fn(dx);
+    clamped.push(plane.toLocal(dx, clamp(dyRaw, plane.range.yMin, plane.range.yMax)));
+    if (dyRaw >= plane.range.yMin - eps && dyRaw <= plane.range.yMax + eps) inRange.push(plane.toLocal(dx, dyRaw));
   }
+  const points = inRange.length >= 2 ? inRange : clamped;
   return {
     id: style.id ?? `${plane.idPrefix}-fn`,
     type: "polyline",
@@ -225,9 +218,9 @@ export function plotFunction(
   };
 }
 
-/** Plot a straight line y = mx + b. */
+/** Plot a straight line y = mx + b (sampled finely so it clips to the box edges). */
 export function plotLine(plane: Plane, line: { m: number; b: number }, style: PlotStyle = {}): PolylineNode {
-  return plotFunction(plane, (x) => line.m * x + line.b, { samples: 2 }, { id: `${plane.idPrefix}-line`, ...style });
+  return plotFunction(plane, (x) => line.m * x + line.b, { samples: 64 }, { id: `${plane.idPrefix}-line`, ...style });
 }
 
 /** Plot data points as dots (with optional labels). */

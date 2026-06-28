@@ -55,7 +55,7 @@ describe("coordinate plane + graphing", () => {
     const spec = scene([plane.node, line, parab, ...pts]);
     expect(validateScene(spec).valid).toBe(true);
     expect(parab.points.length).toBeGreaterThan(10); // sampled curve
-    expect(line.points.length).toBe(3); // 2 samples => 3 points
+    expect(line.points.length).toBeGreaterThanOrEqual(2); // a drawable segment (finely sampled, clipped to the box)
   });
 
   it("a plotted line actually draws on the plane", () => {
