@@ -8,7 +8,7 @@
 import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import type { SceneSpec } from "../spec/types.js";
+import type { SceneSpec, NarrationTrack } from "../spec/types.js";
 import { validateScene } from "../validator/validate.js";
 import type { ValidationError } from "../validator/validate.js";
 import { renderFrame } from "../engine/render.js";
@@ -16,9 +16,9 @@ import { totalFrames } from "../spec/schema.js";
 import { encodeSceneToFile } from "../encode/encodeVideo.js";
 import { describeScene, type SchemaDescription } from "../spec/describe.js";
 import type { ObjectStorage, StoredObject } from "./storage.js";
-import { synthesizeNarration, narrationCharCount, type TtsProvider } from "../audio/tts.js";
+import { synthesizeNarration, narrationCharCount, measureNarration, fitSceneDuration, type TtsProvider } from "../audio/tts.js";
 import { muxAudioVideo } from "../audio/mux.js";
-import { captionsFromNarration, toVTT } from "../audio/captions.js";
+import { captionsFromNarration, toVTT, toSRT } from "../audio/captions.js";
 import { moderateScene, type ModerationProvider, type ModerationFinding } from "../safety/moderation.js";
 
 export interface RenderOptions {
@@ -28,10 +28,14 @@ export interface RenderOptions {
   concurrency?: number;
   /** Synthesize + mux narration audio if the spec has a narration track. Default true. */
   narrate?: boolean;
-  /** Emit a WebVTT caption sidecar from the narration. Default true. */
+  /** Emit WebVTT + SRT caption sidecars from the narration. Default true. */
   captions?: boolean;
   /** Run the content-safety gate before rendering. Default true (when a provider is configured). */
   moderate?: boolean;
+  /** Extend the scene duration to fit real narration audio (avoids a truncated last line). Default false. */
+  fitNarration?: boolean;
+  /** Max narration segments synthesized concurrently. Default 4. */
+  ttsConcurrency?: number;
 }
 
 export interface PreviewSuccess {
@@ -53,6 +57,8 @@ export interface RenderSuccess {
   video: StoredObject;
   /** WebVTT caption sidecar, when narration captions were generated. */
   captions?: StoredObject;
+  /** SubRip (.srt) caption sidecar, alongside the WebVTT one. */
+  captionsSrt?: StoredObject;
   hasAudio: boolean;
   width: number;
   height: number;
@@ -175,26 +181,30 @@ export class RenderService {
     const wantNarration = !!scene.narration?.segments?.length && options.narrate !== false && !!this.tts;
     const wantCaptions = !!scene.narration?.segments?.length && options.captions !== false;
 
-    const key = this.jobKey(scene, options);
+    // Optionally extend the scene so real narration audio isn't truncated by the fixed-length
+    // mix buffer (opt-in; measureNarration reuses cached clips, so it's cheap).
+    let renderScene = scene;
+    if (options.fitNarration && wantNarration && this.tts) {
+      const { requiredDuration } = await measureNarration(this.tts, scene.narration!);
+      const fitted = fitSceneDuration(scene.duration, requiredDuration);
+      if (fitted > scene.duration) renderScene = { ...scene, duration: fitted };
+    }
+
+    const key = this.jobKey(renderScene, options);
     const captionKey = key.replace(/\.mp4$/, ".vtt");
     const existing = await this.storage.stat(key);
-    const fps = scene.fps;
-    const frameCount = totalFrames(scene.fps, scene.duration);
+    const fps = renderScene.fps;
+    const frameCount = totalFrames(renderScene.fps, renderScene.duration);
     if (existing) {
-      let captions = wantCaptions ? await this.storage.stat(captionKey) : null;
-      // The video hash doesn't include caption state, so a video cached before
-      // captions were requested won't have the sidecar — regenerate it on demand.
-      if (wantCaptions && !captions) {
-        const vtt = toVTT(captionsFromNarration(scene.narration!, frameCount / fps));
-        captions = await this.storage.put(captionKey, Buffer.from(vtt, "utf8"), "text/vtt");
-      }
+      // The video hash doesn't include caption state, so (re)generate the sidecars on demand.
+      const caps = wantCaptions ? await this.putCaptions(captionKey, renderScene.narration!, frameCount / fps) : undefined;
       return {
         ok: true,
         video: existing,
-        ...(captions ? { captions } : {}),
+        ...(caps ?? {}),
         hasAudio: wantNarration,
-        width: scene.width,
-        height: scene.height,
+        width: renderScene.width,
+        height: renderScene.height,
         fps,
         frameCount,
         durationSec: frameCount / fps,
@@ -205,7 +215,7 @@ export class RenderService {
     const tmp = join(this.workDir, `${randomUUID()}.mp4`);
     const tmpMuxed = join(this.workDir, `${randomUUID()}.mp4`);
     try {
-      await encodeSceneToFile(scene, {
+      await encodeSceneToFile(renderScene, {
         outPath: tmp,
         deterministic: options.deterministic ?? false,
         crf: options.crf ?? 18,
@@ -220,33 +230,32 @@ export class RenderService {
       if (wantNarration && this.tts) {
         // Cost/abuse guard: cap total narration characters per render before any (paid) TTS call.
         const maxChars = Number(process.env.SHOWMAN_TTS_MAX_CHARS) || 20000;
-        const chars = narrationCharCount(scene.narration!);
+        const chars = narrationCharCount(renderScene.narration!);
         if (chars > maxChars) {
           throw new Error(
             `Narration is ${chars} characters, over the TTS cost guard of ${maxChars} (raise SHOWMAN_TTS_MAX_CHARS to allow).`,
           );
         }
-        const synth = await synthesizeNarration(this.tts, scene.narration!, frameCount / fps);
+        const synth = await synthesizeNarration(this.tts, renderScene.narration!, frameCount / fps, undefined, {
+          concurrency: options.ttsConcurrency ?? 4,
+        });
         segmentDurations = synth.segmentDurations;
         await muxAudioVideo(tmp, synth.wav, tmpMuxed, this.ffmpegPath ? { ffmpegPath: this.ffmpegPath } : {});
         videoPath = tmpMuxed;
       }
 
       const video = await this.storage.put(key, readFileSync(videoPath), "video/mp4");
-
-      let captions: StoredObject | undefined;
-      if (wantCaptions) {
-        const vtt = toVTT(captionsFromNarration(scene.narration!, frameCount / fps, segmentDurations));
-        captions = await this.storage.put(captionKey, Buffer.from(vtt, "utf8"), "text/vtt");
-      }
+      const caps = wantCaptions
+        ? await this.putCaptions(captionKey, renderScene.narration!, frameCount / fps, segmentDurations)
+        : undefined;
 
       return {
         ok: true,
         video,
-        ...(captions ? { captions } : {}),
+        ...(caps ?? {}),
         hasAudio: wantNarration,
-        width: scene.width,
-        height: scene.height,
+        width: renderScene.width,
+        height: renderScene.height,
         fps,
         frameCount,
         durationSec: frameCount / fps,
@@ -256,5 +265,22 @@ export class RenderService {
       rmSync(tmp, { force: true });
       rmSync(tmpMuxed, { force: true });
     }
+  }
+
+  /** Write the WebVTT + SRT caption sidecars from a narration track and return both refs. */
+  private async putCaptions(
+    captionKey: string,
+    narration: NarrationTrack,
+    sceneDuration: number,
+    segmentDurations?: number[],
+  ): Promise<{ captions: StoredObject; captionsSrt: StoredObject }> {
+    const cues = captionsFromNarration(narration, sceneDuration, segmentDurations);
+    const captions = await this.storage.put(captionKey, Buffer.from(toVTT(cues), "utf8"), "text/vtt");
+    const captionsSrt = await this.storage.put(
+      captionKey.replace(/\.vtt$/, ".srt"),
+      Buffer.from(toSRT(cues), "utf8"),
+      "application/x-subrip",
+    );
+    return { captions, captionsSrt };
   }
 }

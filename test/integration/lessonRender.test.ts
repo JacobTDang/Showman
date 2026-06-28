@@ -73,6 +73,12 @@ describe("end-to-end lesson render (M5)", () => {
     const vtt = (await storage.get(result.captions!.key)).toString("utf8");
     expect(vtt.startsWith("WEBVTT")).toBe(true);
     expect(vtt).toContain("We counted 3 apples!");
+
+    // An SRT sidecar is emitted alongside the VTT.
+    expect(result.captionsSrt).toBeDefined();
+    const srt = (await storage.get(result.captionsSrt!.key)).toString("utf8");
+    expect(srt).toContain("-->");
+    expect(srt).toContain("We counted 3 apples!");
   });
 
   it("blocks an unsafe scene at the content-safety gate (release blocker)", async () => {

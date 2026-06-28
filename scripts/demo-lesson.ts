@@ -54,4 +54,5 @@ if (!result.ok) {
 }
 writeFileSync(join(outDir, "lesson-narrated.mp4"), await storage.get(result.video.key));
 if (result.captions) writeFileSync(join(outDir, "lesson-narrated.vtt"), await storage.get(result.captions.key));
+if (result.captionsSrt) writeFileSync(join(outDir, "lesson-narrated.srt"), await storage.get(result.captionsSrt.key));
 console.log(`Wrote out/lesson-narrated.mp4 (audio=${result.hasAudio}, captions=${!!result.captions}), out/lesson-frame.png`);
