@@ -26,10 +26,13 @@ describe("forceDiagram", () => {
     expect(kids(d).some((n) => n.id === "fd-lbl-0")).toBe(true);
     expect(validateScene(scene([d]))).toMatchObject({ valid: true });
   });
-  it("points an angle-0 force to the right and draws components/animation when asked", () => {
+  it("uses the math-angle / screen-y convention (0° = +x, 90° = up) and draws components/animation", () => {
     const d = forceDiagram({ ...opts, showComponents: true, animate: true });
-    const lbl = kids(d).find((n) => n.id === "fd-lbl-0") as { x: number };
-    expect(lbl.x).toBeGreaterThan(opts.x); // 0° points +x
+    const lbl0 = kids(d).find((n) => n.id === "fd-lbl-0") as { x: number; y: number };
+    const lbl1 = kids(d).find((n) => n.id === "fd-lbl-1") as { x: number; y: number };
+    expect(lbl0.x).toBeGreaterThan(opts.x); // 0° points +x (right)
+    expect(lbl1.y).toBeLessThan(opts.y); // 90° points UP (screen y is down → smaller y) — guards the -sin sign
+    expect(lbl1.x).toBeCloseTo(opts.x, 0); // 90° has no x component
     expect(kids(d).some((n) => n.id === "fd-cx-0")).toBe(true); // x component
     const arrow = kids(d).find((n) => n.id === "fd-f0") as GroupNode;
     const line = arrow.children.find((c) => c.id.endsWith("-line")) as { tracks?: { property: string }[] };

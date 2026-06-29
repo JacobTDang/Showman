@@ -36,12 +36,17 @@ describe("bar graph", () => {
     expect((shortest.height ?? 0) / (tallest.height ?? 1)).toBeCloseTo(2 / 5, 5);
   });
 
-  it("respects an explicit maxValue", () => {
-    const g = buildBarGraph({ id: "bg", height: 220, maxValue: 10, bars });
-    const rects = g.children.filter((c): c is Extract<Node, { type: "rect" }> => c.type === "rect");
-    const tallest = rects[1]!; // value 5 against max 10 => half height
-    expect(tallest.height ?? 0).toBeGreaterThan(0);
-    expect(tallest.height ?? 0).toBeLessThan(220);
+  it("respects an explicit maxValue (a taller axis makes the same bar shorter)", () => {
+    const barH = (maxValue?: number): number => {
+      const g = buildBarGraph({ id: "bg", height: 220, ...(maxValue !== undefined ? { maxValue } : {}), bars });
+      const rects = g.children.filter((c): c is Extract<Node, { type: "rect" }> => c.type === "rect");
+      return rects[1]!.height ?? 0; // the value-5 bar
+    };
+    const def = barH(); // default max = data max (5)
+    const capped = barH(10); // max 10 → value 5 is half as tall
+    expect(capped).toBeGreaterThan(0);
+    expect(capped).toBeLessThan(def); // the explicit max is actually applied
+    expect(capped / def).toBeCloseTo(0.5, 1); // (5/10) vs (5/5)
   });
 
   it("renders each bar's interior in its color", () => {

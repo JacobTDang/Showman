@@ -21,10 +21,31 @@ function stripComments(src: string): string {
 }
 
 /**
- * The render core is a pure function of (spec, frame, seed). If any engine module
- * reached for ambient entropy — the wall clock or Math.random — that guarantee
- * would silently break and every "identical bytes" claim downstream with it. This
- * test fails the build if such a call is ever introduced.
+ * Orchestration / IO directories where reading the wall clock or doing network IO is legitimate
+ * (job timestamps, lease deadlines, request timeouts). Everything ELSE in src — the whole render
+ * path and every pure builder — must be a pure function of (spec, frame, seed).
+ */
+const ORCHESTRATION_DIRS = new Set(["distributed", "service", "mcp", "authoring", "audio", "encode", "assets", "telemetry"]);
+
+/** Every src file on the pure-render path: all of src minus the orchestration/IO dirs above. */
+function pureRenderFiles(): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(SRC, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!ORCHESTRATION_DIRS.has(entry.name)) out.push(...tsFiles(join(SRC, entry.name)));
+    } else if (entry.name.endsWith(".ts")) {
+      out.push(join(SRC, entry.name));
+    }
+  }
+  return out;
+}
+
+/**
+ * The render core is a pure function of (spec, frame, seed). If any module on the render path —
+ * the engine, the validator, OR any builder (math, chart, chem, code, physics, brand, items, …) —
+ * reached for ambient entropy (the wall clock or Math.random), that guarantee would silently break
+ * and every "identical bytes" claim downstream with it. This test fails the build if such a call is
+ * ever introduced anywhere outside the explicit orchestration allowlist.
  */
 describe("engine purity", () => {
   const forbidden: { pattern: RegExp; why: string }[] = [
@@ -35,9 +56,9 @@ describe("engine purity", () => {
     { pattern: /process\.hrtime/, why: "process.hrtime is ambient time; not allowed in the engine" },
   ];
 
-  it("no engine source touches the clock or Math.random", () => {
-    const files = tsFiles(join(SRC, "engine")).concat(tsFiles(join(SRC, "validator")), tsFiles(join(SRC, "spec")));
-    expect(files.length).toBeGreaterThan(0);
+  it("no render-path source (engine, validator, or any builder) touches the clock or Math.random", () => {
+    const files = pureRenderFiles();
+    expect(files.length).toBeGreaterThan(20); // the full render path, not just 3 dirs
     const violations: string[] = [];
     for (const file of files) {
       const text = stripComments(readFileSync(file, "utf8"));
