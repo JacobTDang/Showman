@@ -14,7 +14,7 @@ import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
-import { reaction, energyDiagram, phScale } from "../../src/chem/index.js";
+import { reaction, energyDiagram, phScale, phaseDiagram } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
@@ -694,6 +694,20 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "projectile", spec: projectileCase(), frames: [18] },
   { name: "energy-diagram", spec: energyDiagramCase(), frames: [0] },
   { name: "fields", spec: fieldsCase(), frames: [0] },
+  {
+    name: "phase-diagram",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 400,
+      height: 320,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#ffffff",
+      nodes: [phaseDiagram({ id: "pd", x: 50, y: 24, width: 310, height: 240 })],
+    },
+    frames: [0],
+  },
   {
     name: "ray-diagram",
     spec: {
