@@ -117,6 +117,8 @@ export type {
   CandlestickOptions,
   TickFormat,
 } from "./chart/index.js";
+export * as code from "./code/index.js";
+export type { CodeBlockOptions, CodeTheme, Language, TokenType, Token, CodeLine } from "./code/index.js";
 export * as motion from "./motion/index.js";
 export type { BlendMode } from "./spec/types.js";
 export * as math from "./math/index.js";
