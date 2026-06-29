@@ -13,7 +13,9 @@ export interface StyleCapsule {
   style: string;
   /** Frozen seed so a lesson's art is reproducible and coherent across assets. */
   seed: number;
-  /** Reference asset hashes (e.g. a character sheet) for cross-asset consistency. */
+  /** Reference asset hashes (e.g. a character sheet) for cross-asset consistency. They scope the
+   * asset cache key + provenance; only a provider with reference-image support forwards them to
+   * the model (HttpImageGenerator does not — see its note). */
   refs?: string[];
 }
 
