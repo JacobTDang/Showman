@@ -24,7 +24,7 @@ import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/
 import { makeRng } from "../../src/index.js";
 import { hintCard } from "../../src/pedagogy/index.js";
 import { penStroke } from "../../src/handwriting/index.js";
-import { projectile, energyBars, inclinedPlane, pointCharge, emSpectrum, rayDiagram } from "../../src/physics/index.js";
+import { projectile, energyBars, inclinedPlane, pointCharge, emSpectrum, rayDiagram, bohrAtom } from "../../src/physics/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -694,6 +694,20 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "projectile", spec: projectileCase(), frames: [18] },
   { name: "energy-diagram", spec: energyDiagramCase(), frames: [0] },
   { name: "fields", spec: fieldsCase(), frames: [0] },
+  {
+    name: "bohr-atom",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 300,
+      height: 300,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#ffffff",
+      nodes: [bohrAtom({ id: "a", x: 150, y: 150, shells: [2, 8, 1], symbol: "Na" })],
+    },
+    frames: [0],
+  },
   {
     name: "phase-diagram",
     spec: {

@@ -147,6 +147,9 @@ export type {
   LensOptions,
   RayDiagramOptions,
   SnellOptions,
+  BohrAtomOptions,
+  EnergyLevelsOptions,
+  PvDiagramOptions,
 } from "./physics/index.js";
 export type { MovingMarkerOptions } from "./math/index.js";
 export * as icon from "./icon/index.js";
