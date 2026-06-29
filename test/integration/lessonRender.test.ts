@@ -4,7 +4,14 @@ import { promisify } from "node:util";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RenderService, LocalObjectStorage, SilentTtsProvider, RuleBasedModeration, buildCountingLesson } from "../../src/index.js";
+import {
+  RenderService,
+  LocalObjectStorage,
+  SilentTtsProvider,
+  RuleBasedModeration,
+  buildCountingLesson,
+  interaction,
+} from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
@@ -147,5 +154,39 @@ describe("narration fit + cost/farm guards", () => {
   it("enforces the TTS character cost guard before any synthesis (incl. the measure pass)", async () => {
     const big = "word ".repeat(5000); // 25000 chars > the 20000 guard
     await expect(service.render(sceneWith(2, [{ t: 0, text: big }]), { fitNarration: true })).rejects.toThrow(/cost guard/);
+  });
+});
+
+describe("interaction sidecar", () => {
+  const withQuiz = (): SceneSpec => ({
+    specVersion: 1,
+    width: 64,
+    height: 64,
+    fps: 10,
+    duration: 2,
+    background: "#fff",
+    nodes: [{ id: "t", type: "text", x: 5, y: 30, text: "hi", fontSize: 10, fill: "#000" }],
+    interactions: interaction.interactionTrack(
+      interaction.pausePrompt({ id: "p1", t: 0.5, prompt: "Predict!" }),
+      interaction.mcq({ id: "q1", t: 1, prompt: "2+2?", choices: ["3", "4"], answer: 1, explanation: "It's 4." }),
+    ),
+  });
+
+  it("emits interactions.json alongside the video", async () => {
+    if (!ffmpeg) return expect.unreachable("ffmpeg required");
+    const r = await service.render(withQuiz(), { deterministic: false });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.interactions?.key).toMatch(/\.interactions\.json$/);
+    const track = JSON.parse((await storage.get(r.interactions!.key)).toString("utf8"));
+    expect(track.cues.map((c: { id: string }) => c.id).sort()).toEqual(["p1", "q1"]);
+  });
+
+  it("fails fast on an invalid interaction track (before encoding)", async () => {
+    const bad: SceneSpec = {
+      ...withQuiz(),
+      interactions: { cues: [interaction.mcq({ id: "x", t: 1, prompt: "?", choices: ["a", "b"], answer: 9 })] },
+    };
+    await expect(service.render(bad)).rejects.toThrow(/Invalid interactions/);
   });
 });

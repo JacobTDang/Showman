@@ -100,6 +100,8 @@ export { THEMES, DEFAULT_THEME, getTheme, swatch } from "./theme/themes.js";
 export type { Theme, Palette } from "./theme/themes.js";
 export * as motion from "./motion/presets.js";
 export * as math from "./math/index.js";
+export * as interaction from "./interaction/index.js";
+export type { InteractionTrack, InteractionCue, InteractionKind } from "./interaction/types.js";
 export { captionsFromNarration, toVTT, toSRT } from "./audio/captions.js";
 export type { Cue } from "./audio/captions.js";
 export {

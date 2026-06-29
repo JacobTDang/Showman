@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Showman Player</title>
+    <style>
+      :root {
+        --teal: #1d6f72;
+        --teal-2: #2a9d8f;
+        --amber: #ffb703;
+        --coral: #e63946;
+        --ink: #1d2b2b;
+        --paper: #fffdf7;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #eef6f6; color: var(--ink); }
+      .stage { position: relative; max-width: 920px; margin: 24px auto; border-radius: 18px; overflow: hidden; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15); background: #000; }
+      video { display: block; width: 100%; }
+      .overlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(15, 40, 40, 0.55); backdrop-filter: blur(2px); }
+      .overlay.show { display: flex; }
+      .card { width: min(86%, 560px); background: var(--paper); border-radius: 18px; padding: 24px 26px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); animation: pop 0.18s ease-out; }
+      @keyframes pop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      .prompt { font-size: 22px; font-weight: 700; margin: 0 0 16px; }
+      .choices { display: grid; gap: 10px; }
+      button.choice, .btn { font: inherit; font-size: 18px; font-weight: 600; padding: 13px 16px; border-radius: 12px; border: 2px solid var(--teal); background: #fff; color: var(--ink); cursor: pointer; text-align: left; transition: transform 0.06s; }
+      button.choice:hover, .btn:hover { transform: translateY(-1px); }
+      button.choice.correct { background: #d8f3e6; border-color: var(--teal-2); }
+      button.choice.wrong { background: #fde2e4; border-color: var(--coral); }
+      .row { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+      input[type="text"], input[type="number"] { font: inherit; font-size: 18px; padding: 12px; border-radius: 12px; border: 2px solid var(--teal); width: 100%; }
+      .btn.primary { background: var(--teal); color: #fff; border-color: var(--teal); text-align: center; }
+      .feedback { margin-top: 14px; font-size: 17px; font-weight: 600; min-height: 1px; }
+      .feedback.ok { color: var(--teal-2); }
+      .feedback.no { color: var(--coral); }
+      .hotspots { position: absolute; inset: 0; }
+      .hotspot { position: absolute; border: 3px dashed rgba(255, 255, 255, 0.0); border-radius: 10px; cursor: pointer; }
+      .hotspot:hover { border-color: rgba(255, 255, 255, 0.85); background: rgba(255, 183, 3, 0.18); }
+      .bar { max-width: 920px; margin: 0 auto; display: flex; gap: 14px; align-items: center; padding: 4px 8px 16px; }
+      .score { font-weight: 700; color: var(--teal); }
+      .muted { color: #5a7; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage">
+      <video id="video" playsinline preload="metadata"></video>
+      <div class="hotspots" id="hotspots" style="display: none"></div>
+      <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+    </div>
+    <div class="bar">
+      <span class="score" id="score">Score: 0 / 0</span>
+      <span class="muted" id="status"></span>
+    </div>
+
+    <script type="module">
+      // --- runtime logic (mirrors src/interaction/runtime.ts) ------------------------------
+      const norm = (s) => String(s).trim().toLowerCase();
+      function gradeCue(cue, response) {
+        switch (cue.kind) {
+          case "mcq": {
+            const i = typeof response === "number" ? response : -1;
+            const correct = i === cue.answer;
+            const per = !correct && cue.feedback && i >= 0 && i < cue.feedback.length ? cue.feedback[i] : undefined;
+            return { correct, graded: true, feedback: per || cue.explanation };
+          }
+          case "trueFalse":
+            return { correct: response === cue.answer, graded: true, feedback: cue.explanation };
+          case "numeric": {
+            const v = typeof response === "number" ? response : NaN;
+            return { correct: Number.isFinite(v) && Math.abs(v - cue.answer) <= (cue.tolerance ?? 0), graded: true, feedback: cue.explanation };
+          }
+          case "freeResponse": {
+            const s = norm(response ?? "");
+            return { correct: (cue.accept || []).some((a) => norm(a) === s), graded: true, feedback: cue.explanation };
+          }
+          case "hotspot": {
+            const r = cue.regions[response];
+            return { correct: !!(r && r.correct === true), graded: true, feedback: cue.explanation };
+          }
+          default:
+            return { correct: false, graded: false };
+        }
+      }
+      const sortedCues = (cues) => [...cues].sort((a, b) => a.t - b.t || a.id.localeCompare(b.id));
+      const dueCues = (cues, from, to) => sortedCues(cues).filter((c) => c.t > from && c.t <= to);
+      const pauses = (cue) => cue.pause !== false;
+
+      // --- DOM player ---------------------------------------------------------------------
+      const $ = (id) => document.getElementById(id);
+      const video = $("video"), overlay = $("overlay"), card = $("card"), hotspots = $("hotspots");
+      const params = new URLSearchParams(location.search);
+      const videoUrl = params.get("video") || "lesson.mp4";
+      const interUrl = params.get("interactions") || "lesson.interactions.json";
+
+      let cues = [], fired = new Set(), queue = [], lastT = -1; // below 0 so a cue at t=0 falls in the first (lastT, currentTime] window
+      let score = 0, answered = 0;
+      const setScore = () => ($("score").textContent = `Score: ${score} / ${answered}`);
+
+      video.src = videoUrl;
+      fetch(interUrl)
+        .then((r) => (r.ok ? r.json() : { cues: [] }))
+        .then((track) => { cues = track.cues || []; $("status").textContent = `${cues.length} interactions loaded`; })
+        .catch(() => ($("status").textContent = "no interactions found"));
+
+      video.addEventListener("timeupdate", () => {
+        if (overlay.classList.contains("show")) return;
+        const due = dueCues(cues, lastT, video.currentTime).filter((c) => !fired.has(c.id) && pauses(c));
+        lastT = video.currentTime;
+        if (due.length) { queue = due.slice(); presentNext(); }
+      });
+      video.addEventListener("seeking", () => (lastT = video.currentTime));
+
+      function presentNext() {
+        const cue = queue.shift();
+        if (!cue) { overlay.classList.remove("show"); video.play(); return; }
+        fired.add(cue.id);
+        video.pause();
+        renderCue(cue);
+        overlay.classList.add("show");
+      }
+
+      function finish(cue, result, response) {
+        const fb = document.createElement("div");
+        fb.className = "feedback " + (result.graded ? (result.correct ? "ok" : "no") : "ok");
+        fb.textContent = result.graded ? (result.correct ? "Correct! " : "Not quite. ") + (result.feedback || "") : result.feedback || "";
+        card.appendChild(fb);
+        if (result.graded) { answered++; if (result.correct) score++; setScore(); }
+        window.dispatchEvent(new CustomEvent("showman:result", { detail: { id: cue.id, kind: cue.kind, response, ...result } }));
+        const cont = document.createElement("button");
+        cont.className = "btn primary"; cont.style.marginTop = "14px"; cont.textContent = "Continue ▶";
+        cont.onclick = presentNext;
+        card.appendChild(cont);
+      }
+
+      function renderCue(cue) {
+        card.innerHTML = "";
+        hotspots.style.display = "none";
+        const p = document.createElement("p"); p.className = "prompt"; p.textContent = cue.prompt; card.appendChild(p);
+        const lock = (fn) => (...a) => { if (!card.dataset.done) { card.dataset.done = "1"; fn(...a); } };
+        card.dataset.done = "";
+
+        if (cue.kind === "mcq") {
+          const wrap = document.createElement("div"); wrap.className = "choices";
+          cue.choices.forEach((choice, i) => {
+            const b = document.createElement("button"); b.className = "choice"; b.textContent = choice;
+            b.onclick = lock(() => { const r = gradeCue(cue, i); b.classList.add(r.correct ? "correct" : "wrong");
+              if (!r.correct) { const c = wrap.children[cue.answer]; if (c) c.classList.add("correct"); } finish(cue, r, i); });
+            wrap.appendChild(b);
+          });
+          card.appendChild(wrap);
+        } else if (cue.kind === "trueFalse") {
+          const wrap = document.createElement("div"); wrap.className = "choices";
+          [["True", true], ["False", false]].forEach(([label, val]) => {
+            const b = document.createElement("button"); b.className = "choice"; b.textContent = label;
+            b.onclick = lock(() => { const r = gradeCue(cue, val); b.classList.add(r.correct ? "correct" : "wrong"); finish(cue, r, val); });
+            wrap.appendChild(b);
+          });
+          card.appendChild(wrap);
+        } else if (cue.kind === "numeric" || cue.kind === "freeResponse") {
+          const isNum = cue.kind === "numeric";
+          const row = document.createElement("div"); row.className = "row";
+          const input = document.createElement("input"); input.type = isNum ? "number" : "text"; input.step = "any";
+          const sub = document.createElement("button"); sub.className = "btn primary"; sub.textContent = "Check";
+          const go = lock(() => { const resp = isNum ? parseFloat(input.value) : input.value; finish(cue, gradeCue(cue, resp), resp); });
+          sub.onclick = go; input.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+          row.appendChild(input); row.appendChild(sub); card.appendChild(row);
+          if (cue.unit) { const u = document.createElement("span"); u.className = "muted"; u.textContent = cue.unit; row.appendChild(u); }
+          setTimeout(() => input.focus(), 30);
+        } else if (cue.kind === "hotspot") {
+          const sub = document.createElement("p"); sub.className = "muted"; sub.textContent = "Tap the right spot in the video."; card.appendChild(sub);
+          overlay.classList.remove("show"); // let clicks reach the frame
+          hotspots.style.display = "block"; hotspots.innerHTML = "";
+          const sx = video.clientWidth / (video.videoWidth || 1), sy = video.clientHeight / (video.videoHeight || 1);
+          cue.regions.forEach((rg, i) => {
+            const h = document.createElement("div"); h.className = "hotspot";
+            h.style.left = rg.x * sx + "px"; h.style.top = rg.y * sy + "px"; h.style.width = rg.w * sx + "px"; h.style.height = rg.h * sy + "px";
+            h.onclick = lock(() => { hotspots.style.display = "none"; overlay.classList.add("show"); finish(cue, gradeCue(cue, i), i); });
+            hotspots.appendChild(h);
+          });
+        } else { // pausePrompt
+          finish(cue, gradeCue(cue, null), null);
+        }
+      }
+
+      video.addEventListener("ended", () => {
+        card.innerHTML = `<p class="prompt">🎉 Great work!</p><p class="feedback ok">You scored ${score} / ${answered}.</p>`;
+        const b = document.createElement("button"); b.className = "btn primary"; b.style.marginTop = "14px"; b.textContent = "Watch again ↺";
+        b.onclick = () => { fired.clear(); score = 0; answered = 0; lastT = -1; setScore(); overlay.classList.remove("show"); video.currentTime = 0; video.play(); };
+        card.appendChild(b); overlay.classList.add("show");
+      });
+      setScore();
+    </script>
+  </body>
+</html>
