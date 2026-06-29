@@ -12,7 +12,7 @@
 
 import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
-import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph } from "../../src/math/index.js";
+import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -232,9 +232,16 @@ function pathMorph(): SceneSpec {
   };
 }
 
+/** LaTeX-quality typesetting (MathJax → glyph paths): the quadratic formula. */
+function mathTypeset(): SceneSpec {
+  const eq = buildMath({ id: "eq", latex: "x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}", x: 24, y: 28, size: 40, color: "#1d2b2b" });
+  return { specVersion: SPEC_VERSION, width: 470, height: 140, fps: 1, duration: 1, seed: 1, background: "#fffdf7", nodes: [eq] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
+  { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   // frame 0: only title + subtitle visible (apples still hidden); frame 60 (t=2): fully composed.
   { name: "lesson", spec: countingLesson(), frames: [0, 60] },
   { name: "math-primitives", spec: mathPrimitives, frames: [0] },

@@ -10,6 +10,7 @@ export * from "./presets.js";
 export * from "./builders.js";
 export * from "./morphUtil.js";
 export * from "./morph.js";
+export * from "./tex.js";
 export * from "./tenFrame.js";
 export * from "./baseTenBlocks.js";
 export * from "./dotPattern.js";
