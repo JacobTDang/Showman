@@ -64,3 +64,36 @@ export function niceCeil(v: number): number {
   const nice = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
   return nice * base;
 }
+
+/** Round a positive range to a "nice" 1/2/5 × 10^n number (Heckbert). */
+function niceNum(range: number, round: boolean): number {
+  if (range <= 0) return 1;
+  const exp = Math.floor(Math.log10(range));
+  const f = range / 10 ** exp;
+  const nf = round ? (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) : f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+  return nf * 10 ** exp;
+}
+
+/**
+ * Round axis ticks: given a data [min, max] and a target tick count, return a nice min/max/step and
+ * the round tick values (e.g. 0/20/40/60/80 instead of 0/13.6/27.2/…). The single biggest chart
+ * readability upgrade. Falls back to a sane [0..1]-ish axis for degenerate / flat / non-finite input.
+ */
+export function niceTicks(min: number, max: number, count = 5): { min: number; max: number; step: number; values: number[] } {
+  const n = Math.max(2, count);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+    const top = Number.isFinite(max) && max > 0 ? niceCeil(max) : 1;
+    const lo = Math.min(0, Number.isFinite(min) ? min : 0);
+    const step = (top - lo) / n || 1;
+    return { min: lo, max: top, step, values: Array.from({ length: n + 1 }, (_, i) => lo + step * i) };
+  }
+  const range = niceNum(max - min, false);
+  const step = niceNum(range / (n - 1), true);
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  const values: number[] = [];
+  for (let v = niceMin, i = 0; v <= niceMax + step * 0.5 && i < 1000; v += step, i++) {
+    values.push(Number(v.toFixed(10))); // trim fp drift (0.30000000004 → 0.3)
+  }
+  return { min: niceMin, max: niceMax, step, values };
+}

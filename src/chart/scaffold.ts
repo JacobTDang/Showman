@@ -7,8 +7,9 @@
 
 import type { Node, Color } from "../spec/types.js";
 import { getTheme } from "../theme/themes.js";
+import { mix } from "../engine/color.js";
 import { approxTextWidth } from "../math/shared.js";
-import { formatTick, niceCeil, type TickFormat } from "./format.js";
+import { formatTick, niceTicks, type TickFormat } from "./format.js";
 
 export interface ChartBox {
   x: number;
@@ -58,14 +59,14 @@ export function chartScaffold(opts: ScaffoldOptions): Scaffold {
   const theme = getTheme(opts.theme);
   const text = theme.palette.text;
   const muted = theme.palette.muted;
-  const grid = "#e2e8f0";
+  // Chrome colors derived from the theme so they recede on light AND dark surfaces (a fixed slate
+  // hex glares on a dark theme). Gridlines are faint; the baseline a touch stronger.
+  const grid = mix(theme.palette.bg, text, 0.1);
   const yTicks = Math.max(2, opts.y.ticks ?? 5);
-  const yMax = opts.padTop === false ? opts.y.max : niceCeil(opts.y.max);
-  const yMin = opts.y.min;
   const yFmt = opts.y.format ?? "number";
 
-  // Tick label widths → left inset.
-  const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / yTicks);
+  // Round, evenly-spaced ticks (0/20/40/… not 0/13.6/27.2/…) — applies to every chart type.
+  const { min: yMin, max: yMax, values: yTickVals } = niceTicks(opts.y.min, opts.y.max, yTicks);
   const maxLabelW = Math.max(...yTickVals.map((v) => approxTextWidth(formatTick(v, yFmt), LABEL_SIZE)), 10);
 
   const titleH = opts.title ? TITLE_SIZE * 1.7 : 0;
@@ -219,7 +220,7 @@ export function chartScaffold(opts: ScaffoldOptions): Scaffold {
       { x: plot.x, y: plot.y + plot.height },
       { x: plot.x + plot.width, y: plot.y + plot.height },
     ],
-    stroke: "#94a3b8",
+    stroke: mix(theme.palette.bg, text, 0.25),
     strokeWidth: 1.5,
   });
 

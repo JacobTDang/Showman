@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderFrame, validateScene, SPEC_VERSION, chart } from "../../src/index.js";
 import type { SceneSpec, Node, GroupNode } from "../../src/index.js";
 
-const { barChart, lineChart, areaChart, scatterChart, candlestick, formatTick, niceCeil, seriesColors } = chart;
+const { barChart, lineChart, areaChart, scatterChart, candlestick, formatTick, niceCeil, niceTicks, seriesColors } = chart;
 function scene(n: Node, w = 420, h = 300): SceneSpec {
   return { specVersion: SPEC_VERSION, width: w, height: h, fps: 1, duration: 1, seed: 1, background: "#ffffff", nodes: [n] };
 }
@@ -21,6 +21,14 @@ describe("formatting", () => {
     expect(niceCeil(180)).toBe(200);
     expect(niceCeil(42)).toBe(50);
     expect(niceCeil(8)).toBe(10);
+  });
+  it("niceTicks produces round, evenly-spaced labels", () => {
+    expect(niceTicks(0, 68, 5).values).toEqual([0, 20, 40, 60, 80]); // not 0/13.6/27.2/…
+    expect(niceTicks(0, 5, 5).values).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(niceTicks(-3, 7, 5).values).toEqual([-4, -2, 0, 2, 4, 6, 8]); // spans negatives
+    const flat = niceTicks(5, 5, 5); // degenerate (min == max) → still a sane axis, no NaN
+    expect(flat.values.every((v) => Number.isFinite(v))).toBe(true);
+    expect(flat.values.length).toBeGreaterThan(1);
   });
   it("palette yields n series colors", () => {
     expect(seriesColors("daylight", 3)).toHaveLength(3);
