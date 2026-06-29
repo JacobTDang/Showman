@@ -14,7 +14,7 @@ import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
-import { reaction, energyDiagram, phScale, phaseDiagram, lewisStructure, periodicTable } from "../../src/chem/index.js";
+import { reaction, energyDiagram, phScale, phaseDiagram, lewisStructure, periodicTable, vseprShape } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
@@ -704,6 +704,20 @@ export const GOLDEN_CASES: GoldenCase[] = [
       seed: 1,
       background: "#f8fafc",
       nodes: [periodicTable({ id: "pt", x: 16, y: 16, cellSize: 40, highlight: ["O", "Na", "Fe"] })],
+    },
+    frames: [0],
+  },
+  {
+    name: "vsepr",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 280,
+      height: 280,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#ffffff",
+      nodes: [vseprShape({ id: "v", x: 140, y: 140, geometry: "tetrahedral", center: "C", terminal: "H" })],
     },
     frames: [0],
   },
