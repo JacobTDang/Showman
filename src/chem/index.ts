@@ -13,3 +13,6 @@ export * from "./lewis.js";
 
 export * from "./elements.js";
 export * from "./periodicTable.js";
+
+export * from "./vsepr.js";
+export * from "./electronConfig.js";
