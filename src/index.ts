@@ -120,7 +120,17 @@ export type {
 export * as code from "./code/index.js";
 export type { CodeBlockOptions, CodeTheme, Language, TokenType, Token, CodeLine } from "./code/index.js";
 export * as physics from "./physics/index.js";
-export type { ForceDiagramOptions, Force, SymbolOptions, CircuitSymbol, WireOptions } from "./physics/index.js";
+export type {
+  ForceDiagramOptions,
+  Force,
+  SymbolOptions,
+  CircuitSymbol,
+  WireOptions,
+  ProjectileOptions,
+  EnergyBar,
+  EnergyBarsOptions,
+} from "./physics/index.js";
+export type { MovingMarkerOptions } from "./math/index.js";
 export * as icon from "./icon/index.js";
 export type { IconOptions, IconDef } from "./icon/index.js";
 export type { Camera } from "./spec/types.js";
