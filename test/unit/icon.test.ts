@@ -37,6 +37,12 @@ describe("icon", () => {
     expect(unknown.type).toBe("group");
     expect(unknown.children).toHaveLength(0);
   });
+  it("a non-positive size draws nothing (no Infinity strokeWidth) and stays valid (review fix)", () => {
+    const z = makeIcon({ id: "z", name: "check", x: 0, y: 0, size: 0 }) as { type: string; children?: unknown[] };
+    expect(z.type).toBe("group");
+    expect(z.children).toHaveLength(0);
+    expect(validateScene(scene([makeIcon({ name: "check", x: 0, y: 0, size: -4 })]))).toMatchObject({ valid: true });
+  });
   it("paints filled icons solid", () => {
     const star = makeIcon({ id: "s", name: "star", x: 0, y: 0, color: "#f59e0b" }) as { fill?: string; stroke?: string };
     expect(star.fill).toBe("#f59e0b");
