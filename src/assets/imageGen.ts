@@ -18,6 +18,8 @@ export interface HttpImageGeneratorOptions {
   model?: string;
   /** Output size, e.g. `"512x512"`. */
   size?: string;
+  /** Forward the request `seed` in the body (for SD-compatible endpoints; OpenAI rejects it). Default false. */
+  forwardSeed?: boolean;
   /** Injected fetch (for tests). Defaults to the global `fetch`. */
   fetchFn?: FetchFn;
 }
@@ -28,6 +30,7 @@ export class HttpImageGenerator implements AssetGenerator {
   private readonly apiUrl: string;
   private readonly model: string;
   private readonly size: string;
+  private readonly forwardSeed: boolean;
   private readonly fetchFn: FetchFn;
 
   constructor(opts: HttpImageGeneratorOptions) {
@@ -35,15 +38,28 @@ export class HttpImageGenerator implements AssetGenerator {
     this.apiUrl = opts.apiUrl ?? "https://api.openai.com/v1/images/generations";
     this.model = opts.model ?? "gpt-image-1";
     this.size = opts.size ?? "512x512";
+    this.forwardSeed = opts.forwardSeed ?? false;
     this.fetchFn = opts.fetchFn ?? fetch;
-    this.id = `http-image:${this.model}`;
+    // size affects output, so it's part of the cache-keying id (different size → different asset).
+    this.id = `http-image:${this.model}@${this.size}`;
   }
 
+  // NOTE: the OpenAI /images/generations endpoint accepts neither reference images nor a seed, so
+  // a capsule's `refs`/`seed` are NOT forwarded by default — they still scope the asset cache key
+  // and provenance. Set `forwardSeed` for an SD-compatible endpoint to get reproducible output;
+  // true reference-image (character-sheet) consistency needs an edits endpoint (out of scope here).
   async generate(req: AssetRequest): Promise<{ bytes: Buffer; contentType: string }> {
     const res = await this.fetchFn(this.apiUrl, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.model, prompt: req.prompt, n: 1, size: this.size, response_format: "b64_json" }),
+      body: JSON.stringify({
+        model: this.model,
+        prompt: req.prompt,
+        n: 1,
+        size: this.size,
+        response_format: "b64_json",
+        ...(this.forwardSeed && req.seed !== undefined ? { seed: req.seed } : {}),
+      }),
     });
     if (!res.ok) throw new Error(`Image generation failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
     const json = (await res.json()) as { data?: { b64_json?: string; url?: string }[] };
@@ -72,5 +88,6 @@ export function createImageGenerator(env: NodeJS.ProcessEnv = process.env): Asse
     ...(env.SHOWMAN_IMAGE_API_URL ? { apiUrl: env.SHOWMAN_IMAGE_API_URL } : {}),
     ...(env.SHOWMAN_IMAGE_MODEL ? { model: env.SHOWMAN_IMAGE_MODEL } : {}),
     ...(env.SHOWMAN_IMAGE_SIZE ? { size: env.SHOWMAN_IMAGE_SIZE } : {}),
+    ...(env.SHOWMAN_IMAGE_FORWARD_SEED === "1" ? { forwardSeed: true } : {}),
   });
 }
