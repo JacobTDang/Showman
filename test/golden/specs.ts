@@ -238,10 +238,41 @@ function mathTypeset(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 470, height: 140, fps: 1, duration: 1, seed: 1, background: "#fffdf7", nodes: [eq] };
 }
 
+/** Compositing: a multiply blend (overlapping discs) + a circular clip "spotlight" group.
+ * (Blur is deliberately omitted — ctx.filter's cross-platform byte-identity is unproven, so blur
+ * is treated as visually- not byte-deterministic; blend + clip are plain Skia ops like the rest.) */
+function compositing(): SceneSpec {
+  return {
+    specVersion: SPEC_VERSION,
+    width: 320,
+    height: 160,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#fffdf7",
+    nodes: [
+      { id: "c1", type: "ellipse", x: 20, y: 30, width: 90, height: 90, fill: "#e63946" },
+      { id: "c2", type: "ellipse", x: 65, y: 30, width: 90, height: 90, fill: "#2a9d8f", blend: "multiply" },
+      {
+        id: "spot",
+        type: "group",
+        x: 185,
+        y: 18,
+        clip: { width: 124, height: 124, radius: 62 },
+        children: [
+          { id: "bg", type: "rect", x: -10, y: -10, width: 160, height: 160, fill: "#264653" },
+          { id: "star", type: "path", x: 12, y: 12, d: STAR_D, fill: "#ffb703" },
+        ],
+      },
+    ],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
+  { name: "compositing", spec: compositing(), frames: [0] },
   // frame 0: only title + subtitle visible (apples still hidden); frame 60 (t=2): fully composed.
   { name: "lesson", spec: countingLesson(), frames: [0, 60] },
   { name: "math-primitives", spec: mathPrimitives, frames: [0] },

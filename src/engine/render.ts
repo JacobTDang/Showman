@@ -93,6 +93,23 @@ export function renderFrame(spec: SceneSpec, frameIndex: number): RenderResult {
 }
 
 /** Draw a node (and its subtree) at time `t`, applying its transform. */
+type CompositeOp = SKRSContext2D["globalCompositeOperation"];
+/** Friendly blend-mode names → canvas composite operations (normal is the default, omitted). */
+const BLEND_MAP: Record<string, CompositeOp> = {
+  multiply: "multiply",
+  screen: "screen",
+  overlay: "overlay",
+  darken: "darken",
+  lighten: "lighten",
+  add: "lighter",
+  difference: "difference",
+  exclusion: "exclusion",
+  "soft-light": "soft-light",
+  "hard-light": "hard-light",
+  "color-dodge": "color-dodge",
+  "color-burn": "color-burn",
+};
+
 function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void {
   if (depth > LIMITS.maxTreeDepth) {
     throw new Error(`scene tree exceeds max depth ${LIMITS.maxTreeDepth} at node "${node.id}"`);
@@ -112,8 +129,13 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
     ctx.scale(tf.scaleX, tf.scaleY);
     ctx.translate(-tf.anchorX, -tf.anchorY);
   }
-
+  // Compositing: blend mode + (animatable) blur apply to this node and its subtree.
+  if (node.blend && node.blend !== "normal" && BLEND_MAP[node.blend]) ctx.globalCompositeOperation = BLEND_MAP[node.blend]!;
   const res = new NodeResolver(node, t);
+  // Clamp like every other geometric input: a non-finite or huge blur must degrade to a no-op,
+  // never reach ctx.filter (where "blur(NaNpx)" / an enormous radius can crash the process).
+  const blurPx = res.num("blur", 0);
+  if (Number.isFinite(blurPx) && blurPx > 0) ctx.filter = `blur(${Math.min(blurPx, 200)}px)`;
   switch (node.type) {
     case "rect":
       drawRect(ctx, res);
@@ -142,11 +164,24 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
     case "text":
       drawText(ctx, res);
       break;
-    case "group":
+    case "group": {
+      if (node.clip) {
+        const { width, height } = node.clip;
+        const r = Math.min(Math.max(0, node.clip.radius ?? 0), width / 2, height / 2);
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.arcTo(width, 0, width, height, r);
+        ctx.arcTo(width, height, 0, height, r);
+        ctx.arcTo(0, height, 0, 0, r);
+        ctx.arcTo(0, 0, width, 0, r);
+        ctx.closePath();
+        ctx.clip();
+      }
       for (const child of node.children) {
         drawNode(rc, child, t, depth + 1);
       }
       break;
+    }
     default: {
       // Exhaustiveness guard: a node type added to the spec but not handled here
       // must fail loudly, not silently render nothing.

@@ -378,6 +378,58 @@ class Validator {
         });
       }
     }
+    if (node.blend !== undefined) {
+      this.enumProp(
+        node,
+        "blend",
+        [
+          "normal",
+          "multiply",
+          "screen",
+          "overlay",
+          "darken",
+          "lighten",
+          "add",
+          "difference",
+          "exclusion",
+          "soft-light",
+          "hard-light",
+          "color-dodge",
+          "color-burn",
+        ],
+        path,
+        nodeId,
+      );
+    }
+    if (node.blur !== undefined && (!isFiniteNumber(node.blur) || node.blur < 0)) {
+      this.err({
+        path: `${path}.blur`,
+        ...(nodeId ? { nodeId } : {}),
+        property: "blur",
+        code: "OUT_OF_RANGE",
+        message: `blur must be a number ≥ 0.`,
+      });
+    }
+    if (node.type === "group" && node.clip !== undefined) {
+      const c = node.clip;
+      if (!isObject(c) || !isFiniteNumber(c.width) || !isFiniteNumber(c.height) || (c.width as number) <= 0 || (c.height as number) <= 0) {
+        this.err({
+          path: `${path}.clip`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "clip",
+          code: "INVALID_VALUE",
+          message: `clip must be { width: positive number, height: positive number, radius?: number≥0 }.`,
+        });
+      } else if (c.radius !== undefined && (!isFiniteNumber(c.radius) || (c.radius as number) < 0)) {
+        this.err({
+          path: `${path}.clip.radius`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "clip",
+          code: "OUT_OF_RANGE",
+          message: `clip.radius must be ≥ 0.`,
+        });
+      }
+    }
   }
 
   private validateTypeProps(node: Record<string, unknown>, type: NodeType, path: string, nodeId: string | undefined): void {
@@ -779,6 +831,15 @@ class Validator {
               property,
               code: "INVALID_TYPE",
               message: `Keyframe value for "${property}" must be a finite number; got ${JSON.stringify(kf.value)}.`,
+            });
+          } else if ((property === "blur" || property === "opacity") && kf.value < 0) {
+            // keep the animated range consistent with the static checks
+            this.err({
+              path: `${kp}.value`,
+              ...(nodeId ? { nodeId } : {}),
+              property,
+              code: "OUT_OF_RANGE",
+              message: `Keyframe value for "${property}" must be ≥ 0; got ${kf.value}.`,
             });
           }
         } else {
