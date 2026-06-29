@@ -152,6 +152,31 @@ export interface PolylineNode extends BaseNodeProps {
   lineJoin?: "miter" | "round" | "bevel";
   /** Draw-on progress 0..1: draws only the first portion of the path length. Default 1. Animatable. */
   progress?: number;
+  /** Optional target points (same length as `points`) for shape morphing. */
+  morphTo?: { x: number; y: number }[];
+  /** Morph amount 0..1 — interpolates `points` toward `morphTo`. Default 0. Animatable. */
+  morph?: number;
+}
+
+export interface PathNode extends BaseNodeProps {
+  id: string;
+  type: "path";
+  /** SVG path data, e.g. "M0 0 L10 10 C … Z". Rendered via Skia (M/L/H/V/C/S/Q/T/A/Z, abs + rel). */
+  d: string;
+  /** Fill color. Default none. Animatable. */
+  fill?: Color;
+  /** Stroke color (defaults to black only when there is no fill). Animatable. */
+  stroke?: Color;
+  /** Stroke width in px. Default 2. Animatable. */
+  strokeWidth?: number;
+  /** Fill rule for self-intersecting paths. Default `"nonzero"`. */
+  fillRule?: "nonzero" | "evenodd";
+  /** Line cap style. Default `"round"`. */
+  lineCap?: "butt" | "round" | "square";
+  /** Line join style. Default `"round"`. */
+  lineJoin?: "miter" | "round" | "bevel";
+  /** Draw-on 0..1: strokes only the first portion of the path length (fill appears at 1). Default 1. Animatable. */
+  progress?: number;
 }
 
 export interface ArcNode extends BaseNodeProps {
@@ -238,7 +263,7 @@ export interface GroupNode extends BaseNodeProps {
 }
 
 /** A node in the scene tree. */
-export type Node = RectNode | EllipseNode | PolygonNode | PolylineNode | ArcNode | CounterNode | TextNode | GroupNode;
+export type Node = RectNode | EllipseNode | PolygonNode | PolylineNode | PathNode | ArcNode | CounterNode | TextNode | GroupNode;
 
 export type NodeType = Node["type"];
 

@@ -24,6 +24,8 @@ const REQUIRED_BY_TYPE: Record<string, string[]> = {
   ellipse: [],
   text: ["text"],
   group: ["children"],
+  polyline: ["points"],
+  path: ["d"],
 };
 
 export interface SchemaDescription {

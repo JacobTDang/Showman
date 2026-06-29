@@ -12,7 +12,7 @@
 
 import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
-import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine } from "../../src/math/index.js";
+import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph } from "../../src/math/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -198,8 +198,43 @@ function mathNumber(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 420, height: 180, fps: 1, duration: 1, seed: 1, background: "#fff5f8", nodes: [pie, nl.node] };
 }
 
+const STAR_D = "M50 0 L61 35 L98 35 L68 57 L79 91 L50 70 L21 91 L32 57 L2 35 L39 35 Z";
+const CIRCLE_D = "M50 0 C77.6 0 100 22.4 100 50 C100 77.6 77.6 100 50 100 C22.4 100 0 77.6 0 50 C0 22.4 22.4 0 50 0 Z";
+
+/** Path import + shape morphing: a circle→star mid-morph, an SVG heart, and a star being drawn on. */
+function pathMorph(): SceneSpec {
+  const morph = {
+    ...buildMorph({ from: CIRCLE_D, to: STAR_D, x: 15, y: 30, samples: 64, fill: "#2a9d8f", stroke: "#1d6f72", strokeWidth: 3 }),
+    morph: 0.5,
+  };
+  return {
+    specVersion: SPEC_VERSION,
+    width: 340,
+    height: 170,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#eaf6fb",
+    nodes: [
+      morph,
+      {
+        id: "heart",
+        type: "path",
+        x: 135,
+        y: 35,
+        d: "M50 28 C 35 4, -2 18, 50 64 C 102 18, 65 4, 50 28 Z",
+        fill: "#e63946",
+        stroke: "#a01a28",
+        strokeWidth: 3,
+      },
+      { id: "star", type: "path", x: 235, y: 35, d: STAR_D, fill: "#ffb703", stroke: "#fb8500", strokeWidth: 3, progress: 0.6 },
+    ],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
+  { name: "path-morph", spec: pathMorph(), frames: [0] },
   // frame 0: only title + subtitle visible (apples still hidden); frame 60 (t=2): fully composed.
   { name: "lesson", spec: countingLesson(), frames: [0, 60] },
   { name: "math-primitives", spec: mathPrimitives, frames: [0] },

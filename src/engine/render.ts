@@ -8,7 +8,8 @@
  * pillar).
  */
 
-import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
+import { createCanvas, Path2D, type SKRSContext2D } from "@napi-rs/canvas";
+import { flattenPath } from "./svgPath.js";
 import type { Node, SceneSpec } from "../spec/types.js";
 import { LIMITS, SCENE_DEFAULTS, SHAPE_DEFAULTS } from "../spec/schema.js";
 import { ensureFontsRegistered, DEFAULT_FONT_FAMILY, isRegisteredFamily } from "./fonts.js";
@@ -124,6 +125,9 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
       break;
     case "polyline":
       drawPolyline(ctx, res);
+      break;
+    case "path":
+      drawPath(ctx, res);
       break;
     case "arc":
       drawArc(ctx, res);
@@ -291,7 +295,14 @@ function drawCounter(ctx: SKRSContext2D, res: NodeResolver): void {
 function drawPolyline(ctx: SKRSContext2D, res: NodeResolver): void {
   const raw = res.raw("points");
   if (!Array.isArray(raw) || raw.length < 2) return;
-  const points = raw as Array<{ x: number; y: number }>;
+  let points = raw as Array<{ x: number; y: number }>;
+  // Shape morph: lerp each point toward its morphTo counterpart by `morph` (0..1).
+  const morph = Math.max(0, Math.min(1, res.num("morph", 0)));
+  const morphTo = res.raw("morphTo");
+  if (morph > 0 && Array.isArray(morphTo) && morphTo.length === points.length) {
+    const to = morphTo as Array<{ x: number; y: number }>;
+    points = points.map((p, i) => ({ x: p.x + (to[i]!.x - p.x) * morph, y: p.y + (to[i]!.y - p.y) * morph }));
+  }
   const stroke = res.color("stroke") ?? "#000000";
   const strokeWidth = Math.max(0, res.num("strokeWidth", 2));
   const fill = res.color("fill");
@@ -339,6 +350,73 @@ function drawPolyline(ctx: SKRSContext2D, res: NodeResolver): void {
     ctx.strokeStyle = normalizeColor(stroke);
     ctx.stroke();
   }
+}
+
+function drawPath(ctx: SKRSContext2D, res: NodeResolver): void {
+  const d = res.raw("d");
+  if (typeof d !== "string" || d.trim() === "") return;
+  const fill = res.color("fill");
+  const stroke = res.color("stroke") ?? (fill === undefined ? "#000000" : undefined);
+  const strokeWidth = Math.max(0, res.num("strokeWidth", 2));
+  const progress = Math.max(0, Math.min(1, res.num("progress", 1)));
+  if (progress <= 0) return;
+  ctx.lineCap = (res.str("lineCap") as LineCap) ?? "round";
+  ctx.lineJoin = (res.str("lineJoin") as LineJoin) ?? "round";
+  ctx.lineWidth = strokeWidth;
+
+  // Fully drawn: crisp Skia fill + stroke straight from the path data.
+  if (progress >= 1) {
+    let path: Path2D;
+    try {
+      path = new Path2D(d);
+    } catch {
+      return; // malformed path data — render nothing rather than throw
+    }
+    if (fill !== undefined && fill !== "transparent") {
+      ctx.fillStyle = normalizeColor(fill);
+      ctx.fill(path, res.raw("fillRule") === "evenodd" ? "evenodd" : "nonzero");
+    }
+    if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
+      ctx.strokeStyle = normalizeColor(stroke);
+      ctx.stroke(path);
+    }
+    return;
+  }
+
+  // Draw-on (progress < 1): flatten the path and stroke the first `progress` of its length
+  // (the "handwriting" effect); fill is withheld until fully drawn.
+  if (stroke === undefined || stroke === "transparent" || strokeWidth <= 0) return;
+  const subpaths = flattenPath(d);
+  let total = 0;
+  for (const sp of subpaths)
+    for (let i = 1; i < sp.length; i++) {
+      const l = Math.hypot(sp[i]!.x - sp[i - 1]!.x, sp[i]!.y - sp[i - 1]!.y);
+      if (Number.isFinite(l)) total += l; // a stray non-finite point can't wipe the whole stroke
+    }
+  const target = progress * total;
+  ctx.strokeStyle = normalizeColor(stroke);
+  ctx.beginPath();
+  let acc = 0;
+  for (const sp of subpaths) {
+    if (sp.length < 2) continue;
+    ctx.moveTo(sp[0]!.x, sp[0]!.y);
+    let done = false;
+    for (let i = 1; i < sp.length; i++) {
+      const l = Math.hypot(sp[i]!.x - sp[i - 1]!.x, sp[i]!.y - sp[i - 1]!.y);
+      if (!Number.isFinite(l)) continue; // skip a degenerate segment rather than break the reveal
+      if (acc + l <= target) {
+        ctx.lineTo(sp[i]!.x, sp[i]!.y);
+        acc += l;
+      } else {
+        const f = l > 0 ? (target - acc) / l : 0;
+        ctx.lineTo(sp[i - 1]!.x + (sp[i]!.x - sp[i - 1]!.x) * f, sp[i - 1]!.y + (sp[i]!.y - sp[i - 1]!.y) * f);
+        done = true;
+        break;
+      }
+    }
+    if (done) break;
+  }
+  ctx.stroke();
 }
 
 function drawArc(ctx: SKRSContext2D, res: NodeResolver): void {

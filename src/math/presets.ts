@@ -31,6 +31,20 @@ export function drawOn(opts: TimingOptions = {}): Track[] {
   ];
 }
 
+/** Morph a shape from its source to its target (animate the polyline `morph` 0 → 1). */
+export function morphIn(opts: TimingOptions = {}): Track[] {
+  const { t0, t1 } = window(opts);
+  return [
+    {
+      property: "morph",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: opts.easing ?? "easeInOutCubic" },
+      ],
+    },
+  ];
+}
+
 export interface ShadeInOptions extends TimingOptions {
   from?: number;
   to?: number;
