@@ -55,3 +55,22 @@ describe("codeBlock", () => {
     expect(Buffer.from(renderFrame(s, 0).pixels).equals(Buffer.from(renderFrame(s, 0).pixels))).toBe(true);
   });
 });
+
+describe("code review fixes", () => {
+  it("an empty/whitespace title produces no title node and a valid scene", () => {
+    const c = codeBlock({ id: "c", x: 0, y: 0, code: "x = 1", title: "  " });
+    expect(kids(c).some((n) => n.id === "c-title")).toBe(false);
+    expect(validateScene(scene(c, 320, 120))).toMatchObject({ valid: true });
+  });
+  it("handles astral characters (emoji) without breaking validation", () => {
+    const c = codeBlock({ id: "c", x: 0, y: 0, code: 'const s = "😀" + x', lang: "ts", chrome: false });
+    expect(validateScene(scene(c, 420, 120))).toMatchObject({ valid: true });
+  });
+  it("truncates a long title to fit the card", () => {
+    const long = "a-really-really-long-filename-that-overflows-the-card.tsx";
+    const c = codeBlock({ id: "c", x: 0, y: 0, code: "x", title: long, fontSize: 16 });
+    const title = kids(c).find((n) => n.id === "c-title") as { text?: string } | undefined;
+    if (title) expect((title.text ?? "").length).toBeLessThan(long.length);
+    expect(validateScene(scene(c, 260, 120))).toMatchObject({ valid: true });
+  });
+});

@@ -15,6 +15,8 @@ export interface CodeBlockOptions {
   id?: string;
   x: number;
   y: number;
+  /** Source code (one block). Keep it under ~990 lines — each line emits ≥2 nodes and the scene
+   * has a node-count limit; split very long listings across blocks. */
   code: string;
   lang?: Language;
   theme?: CodeTheme;
@@ -55,11 +57,13 @@ export function codeBlock(opts: CodeBlockOptions): GroupNode {
   const chrome = opts.chrome ?? true;
 
   const lines = tokenize(opts.code, opts.lang ?? "js");
+  // Count columns by code point (not UTF-16 unit) so emoji/surrogates occupy one monospace cell.
+  const cols = (s: string): number => [...s].length;
   const maxCols = lines.reduce(
     (m, ln) =>
       Math.max(
         m,
-        ln.reduce((s, t) => s + t.text.length, 0),
+        ln.reduce((s, t) => s + cols(t.text), 0),
       ),
     0,
   );
@@ -93,19 +97,27 @@ export function codeBlock(opts: CodeBlockOptions): GroupNode {
     dots.forEach((c, i) =>
       children.push({ id: `${id}-dot-${i}`, type: "ellipse", x: opts.x + pad + i * 18 - 5, y: dotY - 5, width: 10, height: 10, fill: c }),
     );
-    if (opts.title !== undefined) {
-      children.push({
-        id: `${id}-title`,
-        type: "text",
-        x: opts.x + width / 2,
-        y: dotY,
-        text: opts.title,
-        fontFamily: FONT,
-        fontSize: Math.round(fontSize * 0.78),
-        fill: theme.gutter,
-        align: "center",
-        baseline: "middle",
-      });
+    if (opts.title !== undefined && opts.title.trim() !== "") {
+      // Truncate the centered title so it can't overlap the dots or overflow the card.
+      const titleSize = Math.round(fontSize * 0.78);
+      const titleCw = charWidth(titleSize);
+      const maxChars = Math.floor((width - 2 * (pad + 50)) / titleCw);
+      let title = opts.title;
+      if (maxChars >= 1 && [...title].length > maxChars) title = `${[...title].slice(0, maxChars - 1).join("")}…`;
+      if (maxChars >= 1) {
+        children.push({
+          id: `${id}-title`,
+          type: "text",
+          x: opts.x + width / 2,
+          y: dotY,
+          text: title,
+          fontFamily: FONT,
+          fontSize: titleSize,
+          fill: theme.gutter,
+          align: "center",
+          baseline: "middle",
+        });
+      }
     }
   }
 
@@ -153,7 +165,7 @@ export function codeBlock(opts: CodeBlockOptions): GroupNode {
           baseline: "middle",
         });
       }
-      col += tok.text.length;
+      col += cols(tok.text);
     });
     if (opts.animate) {
       const start = Math.min(2.2, li * 0.12);
