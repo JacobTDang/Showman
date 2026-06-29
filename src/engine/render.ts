@@ -15,6 +15,7 @@ import type { Node, SceneSpec } from "../spec/types.js";
 import { LIMITS, SCENE_DEFAULTS, SHAPE_DEFAULTS } from "../spec/schema.js";
 import { ensureFontsRegistered, DEFAULT_FONT_FAMILY, isRegisteredFamily } from "./fonts.js";
 import { normalizeColor } from "./color.js";
+import { wrapText } from "./textLayout.js";
 import { makeRng, type Rng } from "./rng.js";
 import { NodeResolver, resolveTransform } from "./resolve.js";
 
@@ -300,43 +301,6 @@ function paintLine(
   }
 }
 
-/** Break `str` into display lines: split on explicit "\n", then greedily word-wrap to `maxWidth`
- * (px) when given, hard-breaking any single word that is itself too wide. Pure given the font/ctx. */
-function wrapLines(ctx: SKRSContext2D, str: string, maxWidth: number | undefined): string[] {
-  const paragraphs = str.split("\n");
-  if (maxWidth === undefined || !(maxWidth > 0)) return paragraphs;
-  const fits = (s: string): boolean => ctx.measureText(s).width <= maxWidth;
-  const out: string[] = [];
-  for (const para of paragraphs) {
-    let line = "";
-    for (const word of para.split(" ")) {
-      const candidate = line === "" ? word : `${line} ${word}`;
-      if (fits(candidate)) {
-        line = candidate;
-        continue;
-      }
-      if (line !== "") out.push(line);
-      if (fits(word)) {
-        line = word;
-        continue;
-      }
-      // A single word wider than maxWidth — hard-break it by character.
-      let chunk = "";
-      for (const ch of word) {
-        if (chunk !== "" && !fits(chunk + ch)) {
-          out.push(chunk);
-          chunk = ch;
-        } else {
-          chunk += ch;
-        }
-      }
-      line = chunk;
-    }
-    out.push(line);
-  }
-  return out;
-}
-
 function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, defaults: GlyphDefaults): void {
   const fontSize = Math.max(0, res.num("fontSize", SHAPE_DEFAULTS.fontSize));
   // Only render with a pinned family; fall back to the default otherwise so an
@@ -363,7 +327,7 @@ function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, default
   if (!str.includes("\n") && (maxWidth === undefined || !(maxWidth > 0))) {
     paintLine(ctx, str, 0, fill, stroke, strokeWidth);
   } else {
-    const lines = wrapLines(ctx, str, maxWidth);
+    const lines = wrapText(str, maxWidth, (s) => ctx.measureText(s).width);
     const lineHeightPx = Math.max(0, res.num("lineHeight", 1.25)) * fontSize;
     const n = lines.length;
     const base = ctx.textBaseline;

@@ -74,4 +74,34 @@ describe("slide templates", () => {
     const bullet = nodes[1] as { tracks?: unknown[] };
     expect(Array.isArray(bullet.tracks)).toBe(true);
   });
+
+  it("composes multiple slides without id collisions via idPrefix (review fix)", () => {
+    const nodes = [
+      ...titleSlide({ title: "Module 1", idPrefix: "s1" }),
+      ...bulletSlide({ title: "Topics", bullets: ["a", "b"], idPrefix: "s2" }),
+    ];
+    expect(validateScene(asScene(nodes)).valid).toBe(true);
+    const ids = nodes.map((n) => (n as { id: string }).id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps a long bullet list inside the frame (review fix)", () => {
+    const bullets = Array.from(
+      { length: 14 },
+      (_, i) => `Long bullet number ${i + 1} that may well wrap onto two lines within the content column of the slide`,
+    );
+    const nodes = bulletSlide({ title: "Many points", bullets, width: 1280, height: 720 });
+    for (const n of nodes) expect((n as { y: number }).y).toBeLessThan(700); // nothing starts off-frame
+    const ids = nodes.map((n) => (n as { id: string }).id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("places the subtitle below a wrapping title (review fix)", () => {
+    const longTitle = "A deliberately long lecture title that certainly wraps to multiple lines across the frame width here today";
+    const short = titleSlide({ title: "Hi", subtitle: "Sub", width: 1280, height: 720 });
+    const long = titleSlide({ title: longTitle, subtitle: "Sub", width: 1280, height: 720 });
+    const gapShort = (short[1] as { y: number }).y - (short[0] as { y: number }).y;
+    const gapLong = (long[1] as { y: number }).y - (long[0] as { y: number }).y;
+    expect(gapLong).toBeGreaterThan(gapShort); // subtitle pushed down past the wrapped title
+  });
 });
