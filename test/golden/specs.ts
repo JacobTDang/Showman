@@ -16,6 +16,7 @@ import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, bu
 import { flowchart, table } from "../../src/diagram/index.js";
 import { reaction } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
+import { codeBlock } from "../../src/code/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -479,6 +480,23 @@ function chartCase(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 412, height: 260, fps: 1, duration: 1, seed: 1, background: "#ffffff", nodes: [node] };
 }
 
+/** Code block: a syntax-highlighted editor card (shadow off for golden determinism — text + rects
+ * only). Tokenizer output + colored monospace runs; deterministic cross-platform. */
+function codeCase(): SceneSpec {
+  const node = codeBlock({
+    id: "cb",
+    x: 16,
+    y: 14,
+    code: "function add(a, b) {\n  return a + b; // sum\n}",
+    lang: "ts",
+    title: "add.ts",
+    fontSize: 18,
+    highlightLines: [2],
+    shadow: false,
+  });
+  return { specVersion: SPEC_VERSION, width: 380, height: 150, fps: 1, duration: 1, seed: 1, background: "#e2e8f0", nodes: [node] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -486,6 +504,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "diagram", spec: diagram(), frames: [0] },
   { name: "chemistry", spec: chemistry(), frames: [0] },
   { name: "chart", spec: chartCase(), frames: [0] },
+  { name: "code", spec: codeCase(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
