@@ -13,6 +13,7 @@
 import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
+import { flowchart, table } from "../../src/diagram/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -399,10 +400,34 @@ function paint(): SceneSpec {
   };
 }
 
+/** Diagram substrate: a small flowchart (boxes + auto-routed arrow + label) beside a data table —
+ * the adult/college vocabulary. Pure builders over primitives + text; deterministic like the rest. */
+function diagram(): SceneSpec {
+  const fc = flowchart({
+    nodes: [
+      { id: "a", x: 20, y: 26, width: 130, height: 50, shape: "rounded", label: "Request", fill: "#dbeafe" },
+      { id: "b", x: 24, y: 132, width: 122, height: 60, shape: "diamond", label: "Auth?", fill: "#fef9c3" },
+    ],
+    edges: [{ from: "a", to: "b", label: "in" }],
+  });
+  const t = table({
+    x: 210,
+    y: 34,
+    rows: [
+      ["Key", "Val"],
+      ["a", "1"],
+      ["b", "2"],
+    ],
+    columnAlign: ["left", "center"],
+  });
+  return { specVersion: SPEC_VERSION, width: 400, height: 220, fps: 1, duration: 1, seed: 1, background: "#f8fafc", nodes: [fc, t.node] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
   { name: "paint", spec: paint(), frames: [0] },
+  { name: "diagram", spec: diagram(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },

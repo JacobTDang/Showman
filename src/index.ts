@@ -104,6 +104,8 @@ export { THEMES, DEFAULT_THEME, getTheme, swatch, monoFamily } from "./theme/the
 export type { Theme, Palette } from "./theme/themes.js";
 export * as layout from "./layout/index.js";
 export type { Box } from "./layout/layout.js";
+export * as diagram from "./diagram/index.js";
+export type { ConnectorOptions, ArrowHead, Routing, BoxOptions, BoxShape, TableOptions, FlowchartOptions } from "./diagram/index.js";
 export * as motion from "./motion/index.js";
 export type { BlendMode } from "./spec/types.js";
 export * as math from "./math/index.js";
