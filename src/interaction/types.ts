@@ -15,6 +15,8 @@ interface BaseCue {
   prompt: string;
   /** Pause the video until the learner responds. Default true. */
   pause?: boolean;
+  /** Knowledge-component (skill / objective) id this cue assesses — feeds the learner model. */
+  kc?: string;
 }
 
 /** Multiple choice. `answer` indexes `choices`; `feedback[i]` is optional per-choice (misconception) text. */
