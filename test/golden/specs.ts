@@ -15,6 +15,7 @@ import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
 import { reaction } from "../../src/chem/index.js";
+import { lineChart } from "../../src/chart/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -440,12 +441,51 @@ function chemistry(): SceneSpec {
   };
 }
 
+/** Chart suite: a two-series line chart — axes, gridlines, formatted ticks, legend, and lines.
+ * All vector + text (no shadow blur), so it's deterministic cross-platform like the math goldens. */
+function chartCase(): SceneSpec {
+  const node = lineChart({
+    id: "lc",
+    x: 16,
+    y: 14,
+    width: 380,
+    height: 230,
+    theme: "daylight",
+    title: "Growth",
+    showPoints: true,
+    series: [
+      {
+        name: "Users",
+        points: [
+          { x: 0, y: 10 },
+          { x: 1, y: 24 },
+          { x: 2, y: 22 },
+          { x: 3, y: 40 },
+          { x: 4, y: 62 },
+        ],
+      },
+      {
+        name: "Revenue",
+        points: [
+          { x: 0, y: 5 },
+          { x: 1, y: 12 },
+          { x: 2, y: 30 },
+          { x: 3, y: 36 },
+          { x: 4, y: 55 },
+        ],
+      },
+    ],
+  });
+  return { specVersion: SPEC_VERSION, width: 412, height: 260, fps: 1, duration: 1, seed: 1, background: "#ffffff", nodes: [node] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
   { name: "paint", spec: paint(), frames: [0] },
   { name: "diagram", spec: diagram(), frames: [0] },
   { name: "chemistry", spec: chemistry(), frames: [0] },
+  { name: "chart", spec: chartCase(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },

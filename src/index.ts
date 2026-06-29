@@ -108,6 +108,15 @@ export * as diagram from "./diagram/index.js";
 export type { ConnectorOptions, ArrowHead, Routing, BoxOptions, BoxShape, TableOptions, FlowchartOptions } from "./diagram/index.js";
 export * as chem from "./chem/index.js";
 export type { ChemEquationOptions, MoleculeOptions, Atom, Bond, ReactionOptions } from "./chem/index.js";
+export * as chart from "./chart/index.js";
+export type {
+  BarChartOptions,
+  LineChartOptions,
+  AreaChartOptions,
+  ScatterChartOptions,
+  CandlestickOptions,
+  TickFormat,
+} from "./chart/index.js";
 export * as motion from "./motion/index.js";
 export type { BlendMode } from "./spec/types.js";
 export * as math from "./math/index.js";
