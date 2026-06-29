@@ -23,7 +23,11 @@ import {
   buildTapeDiagram,
   buildBarGraph,
   buildAngle,
+  buildMorph,
 } from "../src/math/index.js";
+
+const CIRCLE_D = "M50 0 C77.6 0 100 22.4 100 50 C100 77.6 77.6 100 50 100 C22.4 100 0 77.6 0 50 C0 22.4 22.4 0 50 0 Z";
+const STAR_D = "M50 0 L61 35 L98 35 L68 57 L79 91 L50 70 L21 91 L32 57 L2 35 L39 35 Z";
 
 const THEME = "ocean";
 const theme = getTheme(THEME);
@@ -145,6 +149,44 @@ const cells: Cell[] = [
           { kind: "pow", base: "", exp: "2" },
         ],
       }),
+  },
+  {
+    label: "morph  ○ → ★",
+    x: 1400,
+    y: 600,
+    build: () =>
+      [0, 0.5, 1].map((v, k) => ({
+        ...buildMorph({
+          from: CIRCLE_D,
+          to: STAR_D,
+          x: 1400 + k * 115,
+          y: 660,
+          samples: 64,
+          fill: theme.palette.primary,
+          stroke: "#1d6f72",
+          strokeWidth: 3,
+        }),
+        id: `mph${k}`,
+        morph: v,
+      })),
+  },
+  {
+    label: "SVG path import + draw-on",
+    x: 1400,
+    y: 880,
+    build: (): Node[] => [
+      {
+        id: "gx-heart",
+        type: "path",
+        x: 1400,
+        y: 920,
+        d: "M50 28 C 35 4, -2 18, 50 64 C 102 18, 65 4, 50 28 Z",
+        fill: "#e63946",
+        stroke: "#a01a28",
+        strokeWidth: 3,
+      },
+      { id: "gx-star-draw", type: "path", x: 1540, y: 920, d: STAR_D, stroke: theme.palette.primary, strokeWidth: 5, progress: 0.6 },
+    ],
   },
 ];
 

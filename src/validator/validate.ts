@@ -484,6 +484,73 @@ class Validator {
       }
       this.enumProp(node, "lineCap", ["butt", "round", "square"], path, nodeId);
       this.enumProp(node, "lineJoin", ["miter", "round", "bevel"], path, nodeId);
+      if (node.morphTo !== undefined) {
+        const mt = node.morphTo;
+        if (!Array.isArray(mt)) {
+          this.err({
+            path: `${path}.morphTo`,
+            ...(nodeId ? { nodeId } : {}),
+            property: "morphTo",
+            code: "INVALID_TYPE",
+            message: `morphTo must be an array of { x, y } points.`,
+          });
+        } else {
+          if (Array.isArray(node.points) && mt.length !== node.points.length) {
+            this.err({
+              path: `${path}.morphTo`,
+              ...(nodeId ? { nodeId } : {}),
+              property: "morphTo",
+              code: "OUT_OF_RANGE",
+              message: `morphTo must have the same length as points (${node.points.length}); got ${mt.length}.`,
+            });
+          }
+          mt.forEach((p, i) => {
+            if (!isObject(p) || !isFiniteNumber(p.x) || !isFiniteNumber(p.y)) {
+              this.err({
+                path: `${path}.morphTo[${i}]`,
+                ...(nodeId ? { nodeId } : {}),
+                property: "morphTo",
+                code: "INVALID_TYPE",
+                message: `Each morphTo point must be { x: number, y: number }.`,
+              });
+            }
+          });
+        }
+      }
+      if (node.morph !== undefined && (!isFiniteNumber(node.morph) || node.morph < 0 || node.morph > 1)) {
+        this.err({
+          path: `${path}.morph`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "morph",
+          code: "OUT_OF_RANGE",
+          message: `morph must be a number between 0 and 1; got ${JSON.stringify(node.morph)}.`,
+        });
+      }
+    } else if (type === "path") {
+      if (typeof node.d !== "string" || node.d.trim() === "") {
+        this.err({
+          path: `${path}.d`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "d",
+          code: "MISSING_FIELD",
+          message: `path "${nodeId ?? "?"}" must have a non-empty "d" SVG path string.`,
+        });
+      }
+      nonNegNum("strokeWidth");
+      colorProp("fill");
+      colorProp("stroke");
+      if (node.progress !== undefined && (!isFiniteNumber(node.progress) || node.progress < 0 || node.progress > 1)) {
+        this.err({
+          path: `${path}.progress`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "progress",
+          code: "OUT_OF_RANGE",
+          message: `progress must be a number between 0 and 1; got ${JSON.stringify(node.progress)}.`,
+        });
+      }
+      this.enumProp(node, "fillRule", ["nonzero", "evenodd"], path, nodeId);
+      this.enumProp(node, "lineCap", ["butt", "round", "square"], path, nodeId);
+      this.enumProp(node, "lineJoin", ["miter", "round", "bevel"], path, nodeId);
     } else if (type === "arc") {
       nonNegNum("radius");
       nonNegNum("innerRadius");

@@ -21,7 +21,7 @@ export const SPEC_VERSION = 1 as const;
 export const REGISTERED_FONT_FAMILIES = ["Nunito", "Fredoka"] as const;
 
 /** Every supported node type. */
-export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "polygon", "polyline", "arc", "counter", "text", "group"];
+export const NODE_TYPES: readonly NodeType[] = ["rect", "ellipse", "polygon", "polyline", "path", "arc", "counter", "text", "group"];
 
 /** The kind of value an animatable property carries. */
 export type PropertyKind = "number" | "color";
@@ -48,6 +48,7 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
   endAngle: "number",
   value: "number",
   progress: "number",
+  morph: "number",
   strokeWidth: "number",
   fontSize: "number",
   reveal: "number",
@@ -67,7 +68,8 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
   rect: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth", "radius"],
   ellipse: [...COMMON_KEYS, "width", "height", "fill", "stroke", "strokeWidth"],
   polygon: [...COMMON_KEYS, "sides", "radius", "innerRadius", "fill", "stroke", "strokeWidth"],
-  polyline: [...COMMON_KEYS, "points", "stroke", "strokeWidth", "fill", "closed", "lineCap", "lineJoin", "progress"],
+  polyline: [...COMMON_KEYS, "points", "stroke", "strokeWidth", "fill", "closed", "lineCap", "lineJoin", "progress", "morphTo", "morph"],
+  path: [...COMMON_KEYS, "d", "fill", "stroke", "strokeWidth", "fillRule", "lineCap", "lineJoin", "progress"],
   arc: [...COMMON_KEYS, "radius", "innerRadius", "startAngle", "endAngle", "fill", "stroke", "strokeWidth"],
   counter: [
     ...COMMON_KEYS,
@@ -94,7 +96,8 @@ export const ANIMATABLE_BY_TYPE: Readonly<Record<NodeType, readonly string[]>> =
   rect: [...TRANSFORM_ANIM, "width", "height", "radius", "strokeWidth", "fill", "stroke"],
   ellipse: [...TRANSFORM_ANIM, "width", "height", "strokeWidth", "fill", "stroke"],
   polygon: [...TRANSFORM_ANIM, "radius", "innerRadius", "strokeWidth", "fill", "stroke"],
-  polyline: [...TRANSFORM_ANIM, "strokeWidth", "progress", "fill", "stroke"],
+  polyline: [...TRANSFORM_ANIM, "strokeWidth", "progress", "morph", "fill", "stroke"],
+  path: [...TRANSFORM_ANIM, "strokeWidth", "progress", "fill", "stroke"],
   arc: [...TRANSFORM_ANIM, "radius", "innerRadius", "startAngle", "endAngle", "strokeWidth", "fill", "stroke"],
   counter: [...TRANSFORM_ANIM, "value", "fontSize", "strokeWidth", "fill", "stroke"],
   text: [...TRANSFORM_ANIM, "fontSize", "reveal", "strokeWidth", "fill", "stroke"],
