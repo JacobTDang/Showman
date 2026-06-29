@@ -24,7 +24,7 @@ import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/
 import { makeRng } from "../../src/index.js";
 import { hintCard } from "../../src/pedagogy/index.js";
 import { penStroke } from "../../src/handwriting/index.js";
-import { projectile, energyBars, inclinedPlane } from "../../src/physics/index.js";
+import { projectile, energyBars, inclinedPlane, pointCharge, emSpectrum } from "../../src/physics/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -663,6 +663,14 @@ function energyDiagramCase(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 470, height: 370, fps: 1, duration: 1, seed: 1, background: "#ffffff", nodes: [ed, ph] };
 }
 
+/** A + and − point charge (radial-gradient glow + field arrows) above the EM spectrum. Golden-safe. */
+function fieldsCase(): SceneSpec {
+  const pos = pointCharge({ id: "pos", x: 120, y: 90, charge: 1, fieldArrows: true });
+  const neg = pointCharge({ id: "neg", x: 320, y: 90, charge: -1, fieldArrows: true });
+  const em = emSpectrum({ id: "em", x: 36, y: 220, width: 400 });
+  return { specVersion: SPEC_VERSION, width: 470, height: 290, fps: 1, duration: 1, seed: 1, background: "#f8fafc", nodes: [pos, neg, em] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -685,6 +693,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "quiz", spec: quizCase(), frames: [0] },
   { name: "projectile", spec: projectileCase(), frames: [18] },
   { name: "energy-diagram", spec: energyDiagramCase(), frames: [0] },
+  { name: "fields", spec: fieldsCase(), frames: [0] },
   {
     name: "incline",
     spec: {
