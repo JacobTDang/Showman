@@ -42,7 +42,7 @@ export function zipStore(entries: ZipEntry[]): Buffer {
     if (data.length > 0xffffffff) throw new Error(`ZIP entry "${path}" exceeds 4 GiB; ZIP64 is not implemented.`);
     // Set the UTF-8 (EFS, bit 11) general-purpose flag for non-ASCII names so strict readers
     // (e.g. .NET) don't decode them with a legacy code page.
-    const efs = /[^\x00-\x7f]/.test(path) ? 0x0800 : 0;
+    const efs = name.length !== path.length ? 0x0800 : 0; // UTF-8 bytes > chars ⇒ non-ASCII
     const crc = crc32(data);
 
     const lfh = Buffer.alloc(30);
