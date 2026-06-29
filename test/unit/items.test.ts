@@ -38,6 +38,12 @@ describe("parametric items", () => {
     expect(new Set(bank.map((i) => i.stem)).size).toBe(6); // all distinct
     expect(generateBank(additionTemplate, 6, 42).map((i) => i.stem)).toEqual(bank.map((i) => i.stem)); // deterministic
   });
+  it("under-fills (without spinning) when count exceeds the parameter space (review fix)", () => {
+    const bank = generateBank(multiplicationTemplate, 100000, 1); // space is only 7×10 = 70 distinct stems
+    expect(bank.length).toBeLessThanOrEqual(70);
+    expect(bank.length).toBeGreaterThan(40);
+    expect(new Set(bank.map((i) => i.stem)).size).toBe(bank.length); // all distinct
+  });
 });
 
 describe("quizCard", () => {

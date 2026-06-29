@@ -78,17 +78,24 @@ export function generateItem(template: ItemTemplate, rng: Rng): GeneratedItem {
   };
 }
 
-/** Generate `count` distinct variants (by stem) from a template, seeded for reproducibility. */
+/**
+ * Generate up to `count` distinct variants (by stem) from a template, seeded for reproducibility.
+ * Returns *fewer* than `count` if the template's parameter space is smaller — it bails after a run of
+ * consecutive duplicates rather than spinning, so the cost is O(space + count), not O(count × 50).
+ */
 export function generateBank(template: ItemTemplate, count: number, seed = 0): GeneratedItem[] {
   const rng = makeRng(seed);
   const out: GeneratedItem[] = [];
   const seenStems = new Set<string>();
-  let guard = 0;
-  const cap = Math.max(count * 50, 50);
-  while (out.length < count && guard < cap) {
-    guard++;
+  let stale = 0;
+  const staleLimit = Math.max(count, 64);
+  while (out.length < count) {
     const item = generateItem(template, rng);
-    if (seenStems.has(item.stem)) continue;
+    if (seenStems.has(item.stem)) {
+      if (++stale > staleLimit) break; // parameter space likely exhausted
+      continue;
+    }
+    stale = 0;
     seenStems.add(item.stem);
     out.push(item);
   }
