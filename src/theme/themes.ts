@@ -35,6 +35,10 @@ export interface Theme {
   bodyFont: string;
   headingWeight: number;
   bodyWeight: number;
+  /** Light or dark surface — lets builders pick readable defaults. Default "light". */
+  mode?: "light" | "dark";
+  /** Monospace family for code/tables (a pinned family). Default "JetBrains Mono". */
+  monoFont?: string;
 }
 
 export const THEMES: Record<string, Theme> = {
@@ -102,9 +106,70 @@ export const THEMES: Record<string, Theme> = {
     headingWeight: 700,
     bodyWeight: 500,
   },
+
+  // --- Adult / professional themes (college, enterprise, technical content) ---
+  slate: {
+    name: "slate",
+    palette: {
+      bg: "#0f172a",
+      primary: "#38bdf8",
+      secondary: "#818cf8",
+      accent: "#fbbf24",
+      text: "#e2e8f0",
+      muted: "#94a3b8",
+      swatches: ["#38bdf8", "#818cf8", "#34d399", "#fb7185", "#fbbf24", "#a78bfa"],
+    },
+    headingFont: "Inter",
+    bodyFont: "Inter",
+    headingWeight: 700,
+    bodyWeight: 400,
+    mode: "dark",
+    monoFont: "JetBrains Mono",
+  },
+  daylight: {
+    name: "daylight",
+    palette: {
+      bg: "#ffffff",
+      primary: "#2563eb",
+      secondary: "#0f766e",
+      accent: "#d97706",
+      text: "#1e293b",
+      muted: "#64748b",
+      swatches: ["#2563eb", "#0f766e", "#d97706", "#dc2626", "#7c3aed", "#0891b2"],
+    },
+    headingFont: "Inter",
+    bodyFont: "Inter",
+    headingWeight: 700,
+    bodyWeight: 400,
+    mode: "light",
+    monoFont: "JetBrains Mono",
+  },
+  editorial: {
+    name: "editorial",
+    palette: {
+      bg: "#faf7f2",
+      primary: "#1f2937",
+      secondary: "#9a3412",
+      accent: "#b45309",
+      text: "#292524",
+      muted: "#78716c",
+      swatches: ["#9a3412", "#1f2937", "#b45309", "#3f6212", "#0e7490", "#7e22ce"],
+    },
+    headingFont: "Source Serif 4",
+    bodyFont: "Source Serif 4",
+    headingWeight: 600,
+    bodyWeight: 400,
+    mode: "light",
+    monoFont: "JetBrains Mono",
+  },
 };
 
 export const DEFAULT_THEME = "sunshine";
+
+/** Monospace family for a theme (for code/tables), with a pinned default. */
+export function monoFamily(theme: Theme): string {
+  return theme.monoFont ?? "JetBrains Mono";
+}
 
 /** Look up a theme by name, falling back to the default. */
 export function getTheme(name?: string): Theme {

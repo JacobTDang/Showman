@@ -280,6 +280,63 @@ interface GlyphDefaults {
 }
 
 /** Paint a string with the node's resolved font/paint props. Shared by text + counter. */
+/** Paint one line at vertical offset `y` (the single-line behavior, hoisted so multi-line reuses it). */
+function paintLine(
+  ctx: SKRSContext2D,
+  str: string,
+  y: number,
+  fill: string | undefined,
+  stroke: string | undefined,
+  strokeWidth: number,
+): void {
+  if (fill !== undefined && fill !== "transparent") {
+    ctx.fillStyle = normalizeColor(fill);
+    ctx.fillText(str, 0, y);
+  }
+  if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
+    ctx.strokeStyle = normalizeColor(stroke);
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeText(str, 0, y);
+  }
+}
+
+/** Break `str` into display lines: split on explicit "\n", then greedily word-wrap to `maxWidth`
+ * (px) when given, hard-breaking any single word that is itself too wide. Pure given the font/ctx. */
+function wrapLines(ctx: SKRSContext2D, str: string, maxWidth: number | undefined): string[] {
+  const paragraphs = str.split("\n");
+  if (maxWidth === undefined || !(maxWidth > 0)) return paragraphs;
+  const fits = (s: string): boolean => ctx.measureText(s).width <= maxWidth;
+  const out: string[] = [];
+  for (const para of paragraphs) {
+    let line = "";
+    for (const word of para.split(" ")) {
+      const candidate = line === "" ? word : `${line} ${word}`;
+      if (fits(candidate)) {
+        line = candidate;
+        continue;
+      }
+      if (line !== "") out.push(line);
+      if (fits(word)) {
+        line = word;
+        continue;
+      }
+      // A single word wider than maxWidth — hard-break it by character.
+      let chunk = "";
+      for (const ch of word) {
+        if (chunk !== "" && !fits(chunk + ch)) {
+          out.push(chunk);
+          chunk = ch;
+        } else {
+          chunk += ch;
+        }
+      }
+      line = chunk;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
 function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, defaults: GlyphDefaults): void {
   const fontSize = Math.max(0, res.num("fontSize", SHAPE_DEFAULTS.fontSize));
   // Only render with a pinned family; fall back to the default otherwise so an
@@ -297,15 +354,25 @@ function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, default
   ctx.textAlign = (res.str("align") as TextAlign) ?? defaults.align;
   ctx.textBaseline = (res.str("baseline") as TextBaseline) ?? defaults.baseline;
 
-  if (fill !== undefined && fill !== "transparent") {
-    ctx.fillStyle = normalizeColor(fill);
-    ctx.fillText(str, 0, 0);
+  const letterSpacing = res.num("letterSpacing", 0);
+  const hasLetterSpacing = Number.isFinite(letterSpacing) && letterSpacing !== 0;
+  if (hasLetterSpacing) ctx.letterSpacing = `${letterSpacing}px`;
+
+  const maxWidth = res.numOpt("maxWidth");
+  // Fast path: a single line with no wrapping is painted exactly as before (byte-identical).
+  if (!str.includes("\n") && (maxWidth === undefined || !(maxWidth > 0))) {
+    paintLine(ctx, str, 0, fill, stroke, strokeWidth);
+  } else {
+    const lines = wrapLines(ctx, str, maxWidth);
+    const lineHeightPx = Math.max(0, res.num("lineHeight", 1.25)) * fontSize;
+    const n = lines.length;
+    const base = ctx.textBaseline;
+    // Position the block so the chosen baseline still anchors at the node origin.
+    const y0 = base === "middle" ? -((n - 1) / 2) * lineHeightPx : base === "bottom" || base === "alphabetic" ? -(n - 1) * lineHeightPx : 0;
+    for (let i = 0; i < n; i++) paintLine(ctx, lines[i]!, y0 + i * lineHeightPx, fill, stroke, strokeWidth);
   }
-  if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
-    ctx.strokeStyle = normalizeColor(stroke);
-    ctx.lineWidth = strokeWidth;
-    ctx.strokeText(str, 0, 0);
-  }
+
+  if (hasLetterSpacing) ctx.letterSpacing = "0px"; // reset shared ctx state
 }
 
 function drawText(ctx: SKRSContext2D, res: NodeResolver): void {

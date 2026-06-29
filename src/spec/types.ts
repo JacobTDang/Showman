@@ -292,6 +292,15 @@ export interface TextNode extends BaseNodeProps {
   stroke?: Color;
   /** Stroke width in px. Default 0. Animatable. */
   strokeWidth?: number;
+  /**
+   * Max line width in px. When set, text word-wraps to fit (and still honors
+   * explicit `\n`). Omit for single-line text (the default; byte-identical to before).
+   */
+  maxWidth?: number;
+  /** Line height as a multiple of `fontSize` for multi-line/wrapped text. Default 1.25. */
+  lineHeight?: number;
+  /** Extra spacing between characters in px (tracking). Can be negative. Default 0. */
+  letterSpacing?: number;
 }
 
 export interface GroupNode extends BaseNodeProps {

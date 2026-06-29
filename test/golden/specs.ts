@@ -268,8 +268,67 @@ function compositing(): SceneSpec {
   };
 }
 
+/** Typography foundation: a serif heading, a wrapped Inter paragraph, and a mono line on a dark
+ * theme — exercises the new pinned fonts + multi-line word-wrap + lineHeight. Text rasterizes
+ * through @napi-rs/canvas's bundled Skia (same on Win/Linux), like the existing text goldens. */
+function typography(): SceneSpec {
+  return {
+    specVersion: SPEC_VERSION,
+    width: 380,
+    height: 210,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#0f172a",
+    nodes: [
+      {
+        id: "h",
+        type: "text",
+        x: 20,
+        y: 18,
+        text: "Distributed Systems",
+        fontFamily: "Source Serif 4",
+        fontWeight: 600,
+        fontSize: 30,
+        fill: "#38bdf8",
+        align: "left",
+        baseline: "top",
+      },
+      {
+        id: "p",
+        type: "text",
+        x: 20,
+        y: 64,
+        text: "A partition forces a choice between consistency and availability.",
+        fontFamily: "Inter",
+        fontWeight: 400,
+        fontSize: 16,
+        fill: "#e2e8f0",
+        align: "left",
+        baseline: "top",
+        maxWidth: 250,
+        lineHeight: 1.3,
+      },
+      {
+        id: "code",
+        type: "text",
+        x: 20,
+        y: 170,
+        text: "fn solve() {}",
+        fontFamily: "JetBrains Mono",
+        fontWeight: 500,
+        fontSize: 18,
+        fill: "#fbbf24",
+        align: "left",
+        baseline: "top",
+      },
+    ],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
+  { name: "typography", spec: typography(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },

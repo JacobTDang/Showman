@@ -213,3 +213,93 @@ export function normalizeColor(input: string): string {
   const c = parseColor(input);
   return c ? rgbaToString(c) : input;
 }
+
+// ---------------------------------------------------------------------------
+// Color math — deterministic transforms over parsed RGBA, for themes, brand
+// kits, elevation tints, and accessibility checks. All pure; hex in, hex/number
+// out. Unparseable input falls back gracefully (returns the input or a safe
+// default) so these never throw on author data.
+// ---------------------------------------------------------------------------
+
+function toHex2(n: number): string {
+  return clampByte(n).toString(16).padStart(2, "0");
+}
+
+/** Format RGBA as `#rrggbb` (or `#rrggbbaa` when not fully opaque). */
+export function rgbaToHex(c: Rgba): string {
+  const base = `#${toHex2(c.r)}${toHex2(c.g)}${toHex2(c.b)}`;
+  return c.a >= 1 ? base : `${base}${toHex2(Math.round(clampUnit(c.a) * 255))}`;
+}
+
+/** RGB → HSL (h 0..360, s/l 0..100). */
+export function rgbToHsl(c: Rgba): { h: number; s: number; l: number } {
+  const r = c.r / 255;
+  const g = c.g / 255;
+  const b = c.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return { h: h * 60, s: s * 100, l: l * 100 };
+}
+
+/** Mix two colors in RGB by `t` (0 = a, 1 = b). */
+export function mix(a: string, b: string, t: number): string {
+  const ca = parseColor(a);
+  const cb = parseColor(b);
+  if (!ca || !cb) return a;
+  const k = clampUnit(t);
+  return rgbaToHex({
+    r: ca.r + (cb.r - ca.r) * k,
+    g: ca.g + (cb.g - ca.g) * k,
+    b: ca.b + (cb.b - ca.b) * k,
+    a: ca.a + (cb.a - ca.a) * k,
+  });
+}
+
+/** Lighten toward white by `amount` (0..1). */
+export function lighten(color: string, amount: number): string {
+  return mix(color, "#ffffff", amount);
+}
+
+/** Darken toward black by `amount` (0..1). */
+export function darken(color: string, amount: number): string {
+  return mix(color, "#000000", amount);
+}
+
+/** Return `color` with its alpha set to `alpha` (0..1). */
+export function withAlpha(color: string, alpha: number): string {
+  const c = parseColor(color);
+  if (!c) return color;
+  return rgbaToHex({ ...c, a: clampUnit(alpha) });
+}
+
+/** WCAG relative luminance (0..1) of a color (alpha ignored). */
+export function relativeLuminance(color: string): number {
+  const c = parseColor(color) ?? { r: 0, g: 0, b: 0, a: 1 };
+  const ch = (v: number): number => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b);
+}
+
+/** WCAG contrast ratio (1..21) between two colors. */
+export function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Pick the foreground (black or white, or the provided pair) with the better contrast on `bg`. */
+export function readableOn(bg: string, dark = "#000000", light = "#ffffff"): string {
+  return contrastRatio(bg, dark) >= contrastRatio(bg, light) ? dark : light;
+}
