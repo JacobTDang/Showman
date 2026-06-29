@@ -66,7 +66,19 @@ export interface ValidationResult {
   errors: ValidationError[];
 }
 
-const TOP_LEVEL_KEYS = ["specVersion", "width", "height", "fps", "duration", "seed", "background", "nodes", "narration", "interactions"];
+const TOP_LEVEL_KEYS = [
+  "specVersion",
+  "width",
+  "height",
+  "fps",
+  "duration",
+  "seed",
+  "background",
+  "camera",
+  "nodes",
+  "narration",
+  "interactions",
+];
 
 const TEXT_ALIGN = ["left", "center", "right"];
 const TEXT_BASELINE = ["top", "middle", "alphabetic", "bottom"];
@@ -239,6 +251,65 @@ class Validator {
           code: "INVALID_TYPE",
           message: `background must be a color string or a backdrop object.`,
         });
+      }
+    }
+
+    if (spec.camera !== undefined) {
+      const cam = spec.camera;
+      if (!isObject(cam)) {
+        this.err({
+          path: "camera",
+          property: "camera",
+          code: "INVALID_TYPE",
+          message: `camera must be an object { x?, y?, zoom?, tracks? }.`,
+        });
+      } else {
+        for (const k of ["x", "y", "zoom"] as const) {
+          if (cam[k] !== undefined && !isFiniteNumber(cam[k]))
+            this.err({ path: `camera.${k}`, property: "camera", code: "INVALID_VALUE", message: `camera.${k} must be a finite number.` });
+        }
+        if (cam.zoom !== undefined && isFiniteNumber(cam.zoom) && cam.zoom <= 0)
+          this.err({ path: "camera.zoom", property: "camera", code: "OUT_OF_RANGE", message: `camera.zoom must be > 0.` });
+        if (cam.tracks !== undefined) {
+          if (!Array.isArray(cam.tracks)) {
+            this.err({ path: "camera.tracks", property: "camera", code: "INVALID_TYPE", message: `camera.tracks must be an array.` });
+          } else {
+            cam.tracks.forEach((t, ti) => {
+              const tp = `camera.tracks[${ti}]`;
+              if (!isObject(t)) {
+                this.err({ path: tp, property: "camera", code: "INVALID_TYPE", message: `a camera track must be an object.` });
+                return;
+              }
+              if (t.property !== "x" && t.property !== "y" && t.property !== "zoom") {
+                this.err({
+                  path: `${tp}.property`,
+                  property: "camera",
+                  code: "INVALID_VALUE",
+                  message: `a camera track's property must be "x", "y", or "zoom".`,
+                });
+              }
+              if (!Array.isArray(t.keyframes) || t.keyframes.length === 0) {
+                this.err({
+                  path: `${tp}.keyframes`,
+                  property: "camera",
+                  code: "EMPTY",
+                  message: `a camera track needs a non-empty keyframes array.`,
+                });
+              } else {
+                t.keyframes.forEach((kf, ki) => {
+                  if (!isObject(kf) || !isFiniteNumber(kf.t) || !isFiniteNumber(kf.value)) {
+                    this.err({
+                      path: `${tp}.keyframes[${ki}]`,
+                      property: "camera",
+                      code: "INVALID_VALUE",
+                      message: `a camera keyframe needs numeric { t, value }.`,
+                    });
+                  }
+                });
+              }
+            });
+          }
+        }
       }
     }
 

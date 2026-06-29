@@ -156,6 +156,20 @@ export interface Shadow {
   offsetY?: number;
 }
 
+/** A keyframed camera: the focus point (cx, cy) is centered in the frame and the scene is scaled by
+ * `zoom`. Identity (no `camera`) = focus the frame center at zoom 1. Animate via `tracks` on
+ * "x" / "y" / "zoom" — e.g. a slow push-in or a pan across a wide diagram. */
+export interface Camera {
+  /** Focus x in scene coords. Default width/2. */
+  x?: number;
+  /** Focus y in scene coords. Default height/2. */
+  y?: number;
+  /** Zoom factor (> 0). Default 1. */
+  zoom?: number;
+  /** Keyframed tracks animating "x" | "y" | "zoom". */
+  tracks?: Track[];
+}
+
 /** A rich scene background: a base fill (color or gradient) plus optional vignette + film grain. */
 export interface Backdrop {
   /** Base fill — a color or a gradient (gradient coords are in scene pixels). Default white. */
@@ -414,6 +428,8 @@ export interface SceneSpec {
   seed?: number;
   /** Background — a flat color (default `"#ffffff"`) or a rich {@link Backdrop} (gradient + vignette + grain). */
   background?: Color | Backdrop;
+  /** Optional camera: pan/zoom the whole scene (e.g. push in on a detail). Animatable. */
+  camera?: Camera;
   /** The scene's nodes, drawn in order (later nodes paint on top). */
   nodes: Node[];
   /** Reserved for M5. Ignored by the M0 renderer. */

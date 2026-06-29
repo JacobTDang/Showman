@@ -18,6 +18,7 @@ import { normalizeColor } from "./color.js";
 import { wrapText } from "./textLayout.js";
 import { makeRng, hashSeed, type Rng } from "./rng.js";
 import { NodeResolver, resolveTransform } from "./resolve.js";
+import { sampleNumberTrack } from "./interpolate.js";
 
 /** The result of rendering one frame. */
 export interface RenderResult {
@@ -81,6 +82,24 @@ export function renderFrame(spec: SceneSpec, frameIndex: number): RenderResult {
   // The seed seam: all randomness derives from here, never from Math.random/Date.
   const rng = makeRng(spec.seed ?? SCENE_DEFAULTS.seed);
   const rc: RenderContext = { ctx, rng };
+
+  // Camera: pan/zoom the whole node tree (over the fixed background). A single global transform that
+  // centers the focus point and scales by zoom; animatable via tracks on "x"/"y"/"zoom".
+  const cam = spec.camera;
+  if (cam) {
+    const camProp = (name: "x" | "y" | "zoom", dflt: number): number => {
+      const tr = cam.tracks?.find((t) => t.property === name);
+      if (tr && tr.keyframes.length > 0) return sampleNumberTrack(tr, time);
+      const v = cam[name];
+      return typeof v === "number" && Number.isFinite(v) ? v : dflt;
+    };
+    const cx = camProp("x", width / 2);
+    const cy = camProp("y", height / 2);
+    const zoom = Math.max(0.01, camProp("zoom", 1));
+    ctx.translate(width / 2, height / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-cx, -cy);
+  }
 
   for (const node of spec.nodes) {
     drawNode(rc, node, time, 0);

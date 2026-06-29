@@ -18,6 +18,7 @@ import { reaction } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
+import { icon, iconNames } from "../../src/icon/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -530,6 +531,57 @@ function physicsCase(): SceneSpec {
   };
 }
 
+/** Icons: a grid of the frozen line-art set — stroked + filled paths, deterministic cross-platform. */
+function iconsCase(): SceneSpec {
+  const cols = 7;
+  const cell = 46;
+  const names = iconNames();
+  const nodes = names.map((name, i) =>
+    icon({ id: `ic${i}`, name, x: 14 + (i % cols) * cell, y: 14 + Math.floor(i / cols) * cell, size: 32, color: "#1e293b" }),
+  );
+  return {
+    specVersion: SPEC_VERSION,
+    width: 14 + cols * cell,
+    height: 14 + Math.ceil(names.length / cols) * cell + 8,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#f8fafc",
+    nodes,
+  };
+}
+
+/** Camera: the same shapes pushed in (zoom 1.8 on a focus point) — exercises the global transform. */
+function cameraCase(): SceneSpec {
+  return {
+    specVersion: SPEC_VERSION,
+    width: 300,
+    height: 200,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#eef2f7",
+    camera: { x: 110, y: 90, zoom: 1.8 },
+    nodes: [
+      { id: "a", type: "rect", x: 70, y: 60, width: 80, height: 60, radius: 10, fill: "#2563eb" },
+      { id: "b", type: "ellipse", x: 120, y: 40, width: 50, height: 50, fill: "#f59e0b" },
+      {
+        id: "t",
+        type: "text",
+        x: 110,
+        y: 150,
+        text: "zoom",
+        fontFamily: "Inter",
+        fontWeight: 700,
+        fontSize: 18,
+        fill: "#0f172a",
+        align: "center",
+        baseline: "middle",
+      },
+    ],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -539,6 +591,8 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "chart", spec: chartCase(), frames: [0] },
   { name: "code", spec: codeCase(), frames: [0] },
   { name: "physics", spec: physicsCase(), frames: [0] },
+  { name: "icons", spec: iconsCase(), frames: [0] },
+  { name: "camera", spec: cameraCase(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
