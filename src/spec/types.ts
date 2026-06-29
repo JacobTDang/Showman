@@ -27,11 +27,29 @@ export type EasingName =
   | "easeInSine"
   | "easeOutSine"
   | "easeInOutSine"
+  | "easeInQuart"
+  | "easeOutQuart"
+  | "easeInOutQuart"
+  | "easeInQuint"
+  | "easeOutQuint"
+  | "easeInOutQuint"
+  | "easeInExpo"
+  | "easeOutExpo"
+  | "easeInOutExpo"
+  | "easeInCirc"
+  | "easeOutCirc"
+  | "easeInOutCirc"
   | "easeInBack"
   | "easeOutBack"
   | "easeInOutBack"
+  | "easeInElastic"
   | "easeOutElastic"
-  | "easeOutBounce";
+  | "easeInOutElastic"
+  | "easeInBounce"
+  | "easeOutBounce"
+  | "easeInOutBounce"
+  | "easeOutSpring"
+  | "easeOutSpringy";
 
 /** An easing curve: a named curve or a custom cubic-bezier `[x1, y1, x2, y2]`. */
 export type EasingSpec = EasingName | [number, number, number, number];
