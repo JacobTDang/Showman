@@ -6,3 +6,5 @@
 export * from "./store.js";
 export * from "./provider.js";
 export * from "./generators.js";
+export * from "./imageGen.js";
+export * from "./styleCapsule.js";
