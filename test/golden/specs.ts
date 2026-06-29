@@ -19,6 +19,7 @@ import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
 import { icon, iconNames } from "../../src/icon/index.js";
+import { titleCard } from "../../src/brand/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -593,6 +594,14 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "physics", spec: physicsCase(), frames: [0] },
   { name: "icons", spec: iconsCase(), frames: [0] },
   { name: "camera", spec: cameraCase(), frames: [0] },
+  {
+    name: "brand",
+    spec: titleCard(
+      { name: "Acme", primary: "#6d28d9" },
+      { title: "Quarterly Review", subtitle: "FY2026 — Finance", width: 480, height: 270 },
+    ),
+    frames: [0],
+  },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
