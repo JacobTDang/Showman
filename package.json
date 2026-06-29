@@ -33,7 +33,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@napi-rs/canvas": "^0.1.65"
+    "@napi-rs/canvas": "^0.1.65",
+    "mathjax-full": "3.2.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
