@@ -47,6 +47,16 @@ export function packageLesson(input: PackageInput): LessonPackage {
       manifest = commonCartridgeManifest(input.meta, input.files);
       break;
   }
+  // The manifest/AU points at the launch file — fail fast if it isn't bundled, and don't let a
+  // caller-provided file collide with the generated manifest path.
+  const norm = (p: string): string => p.replace(/\\/g, "/");
+  const launch = norm(input.meta.launch ?? "index.html");
+  if (!input.files.some((f) => norm(f.path) === launch)) {
+    throw new Error(`Launch file "${launch}" is not in the bundle; add it to files (or set meta.launch).`);
+  }
+  if (input.files.some((f) => norm(f.path) === manifestPath)) {
+    throw new Error(`A bundled file collides with the manifest path "${manifestPath}".`);
+  }
   const files: PackageFile[] = [{ path: manifestPath, content: Buffer.from(manifest, "utf8") }, ...input.files];
   return {
     format: input.format,

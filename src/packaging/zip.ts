@@ -27,19 +27,28 @@ export interface ZipEntry {
 
 /** Build a ZIP archive with every entry stored uncompressed. */
 export function zipStore(entries: ZipEntry[]): Buffer {
+  if (entries.length > 0xffff) throw new Error(`ZIP supports at most 65535 entries (got ${entries.length}); ZIP64 is not implemented.`);
   const local: Buffer[] = [];
   const central: Buffer[] = [];
+  const seen = new Set<string>();
   let offset = 0;
 
   for (const e of entries) {
-    const name = Buffer.from(e.path.replace(/\\/g, "/"), "utf8");
+    const path = e.path.replace(/\\/g, "/");
+    if (seen.has(path)) throw new Error(`Duplicate ZIP entry path: "${path}".`);
+    seen.add(path);
+    const name = Buffer.from(path, "utf8");
     const data = e.content;
+    if (data.length > 0xffffffff) throw new Error(`ZIP entry "${path}" exceeds 4 GiB; ZIP64 is not implemented.`);
+    // Set the UTF-8 (EFS, bit 11) general-purpose flag for non-ASCII names so strict readers
+    // (e.g. .NET) don't decode them with a legacy code page.
+    const efs = /[^\x00-\x7f]/.test(path) ? 0x0800 : 0;
     const crc = crc32(data);
 
     const lfh = Buffer.alloc(30);
     lfh.writeUInt32LE(0x04034b50, 0); // local file header signature
     lfh.writeUInt16LE(20, 4); // version needed
-    lfh.writeUInt16LE(0, 6); // flags
+    lfh.writeUInt16LE(efs, 6); // general-purpose flags (UTF-8 bit when non-ASCII)
     lfh.writeUInt16LE(0, 8); // method: 0 = store
     lfh.writeUInt16LE(0, 10); // mod time (fixed)
     lfh.writeUInt16LE(0x21, 12); // mod date (fixed: 1980-01-01)
@@ -54,7 +63,7 @@ export function zipStore(entries: ZipEntry[]): Buffer {
     cdh.writeUInt32LE(0x02014b50, 0); // central directory header signature
     cdh.writeUInt16LE(20, 4); // version made by
     cdh.writeUInt16LE(20, 6); // version needed
-    cdh.writeUInt16LE(0, 8);
+    cdh.writeUInt16LE(efs, 8); // general-purpose flags (UTF-8 bit when non-ASCII)
     cdh.writeUInt16LE(0, 10);
     cdh.writeUInt16LE(0, 12);
     cdh.writeUInt16LE(0x21, 14);
@@ -71,6 +80,7 @@ export function zipStore(entries: ZipEntry[]): Buffer {
     central.push(cdh, name);
 
     offset += lfh.length + name.length + data.length;
+    if (offset > 0xffffffff) throw new Error(`ZIP archive exceeds 4 GiB; ZIP64 is not implemented.`);
   }
 
   const centralBuf = Buffer.concat(central);
