@@ -87,7 +87,6 @@ export function reaction(opts: ReactionOptions): GroupNode {
     to: { x: arrowEnd, y: centerY },
     stroke: arrowColor,
     strokeWidth: 2.5,
-    ...(opts.conditions !== undefined ? { label: opts.conditions, labelColor: color, fontSize: Math.round(size * 0.5) } : {}),
     ...(opts.animateArrow ? { progress: 0 } : {}),
   });
   if (opts.animateArrow) {
@@ -104,6 +103,22 @@ export function reaction(opts: ReactionOptions): GroupNode {
       ];
   }
   children.push(arrow);
+  // Conditions sit ABOVE the arrow (placing them on the line made labels like "spark" read struck-through).
+  if (opts.conditions !== undefined && opts.conditions.trim() !== "") {
+    children.push({
+      id: `${id}-cond`,
+      type: "text",
+      x: (arrowStart + arrowEnd) / 2,
+      y: centerY - size * 0.55,
+      text: opts.conditions,
+      fontFamily: "Inter",
+      fontWeight: 500,
+      fontSize: Math.round(size * 0.5),
+      fill: color,
+      align: "center",
+      baseline: "middle",
+    });
+  }
   cx = arrowEnd + gap * 1.5;
 
   products.forEach((e, i) => {

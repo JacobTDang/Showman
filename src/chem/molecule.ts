@@ -37,6 +37,9 @@ export interface MoleculeOptions {
   bondWidth?: number;
   /** Pop the atoms in and fade the bonds in (a lively assembly). Default false. */
   animate?: boolean;
+  /** Soft drop shadow on atoms (blur — pretty but not byte-stable cross-platform). Default true; pass
+   * false for golden-frame scenes, which keeps the depth from the radial-highlight gradient alone. */
+  shadow?: boolean;
 }
 
 function unit(dx: number, dy: number): { x: number; y: number } {
@@ -118,7 +121,7 @@ export function molecule(opts: MoleculeOptions): GroupNode {
           { offset: 1, color },
         ],
       },
-      shadow: { color: "rgba(15,23,42,0.35)", blur: 6, offsetY: 3 },
+      ...(opts.shadow === false ? {} : { shadow: { color: "rgba(15,23,42,0.35)", blur: 6, offsetY: 3 } }),
       anchor: { x: r, y: r },
     };
     // Skip the label for an empty element symbol (an empty text node would fail validation).

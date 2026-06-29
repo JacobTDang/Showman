@@ -7,3 +7,4 @@ export * from "./cpk.js";
 export * from "./equation.js";
 export * from "./molecule.js";
 export * from "./reaction.js";
+export * from "./graphs.js";
