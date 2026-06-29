@@ -22,6 +22,7 @@ import { icon, iconNames } from "../../src/icon/index.js";
 import { titleCard } from "../../src/brand/index.js";
 import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/index.js";
 import { makeRng } from "../../src/index.js";
+import { hintCard } from "../../src/pedagogy/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -612,6 +613,29 @@ export const GOLDEN_CASES: GoldenCase[] = [
     frames: [0],
   },
   { name: "quiz", spec: quizCase(), frames: [0] },
+  {
+    name: "hint",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 480,
+      height: 150,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#fffdf7",
+      nodes: [
+        hintCard({
+          id: "hint",
+          hint: { level: 2, text: "Try skip-counting by the first number — 3 groups of 4." },
+          x: 28,
+          y: 28,
+          width: 420,
+          theme: "sunshine",
+        }),
+      ],
+    },
+    frames: [0],
+  },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
