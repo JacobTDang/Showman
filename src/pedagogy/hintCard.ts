@@ -34,7 +34,8 @@ export function hintCard(opts: HintCardOptions): GroupNode {
   const textW = w - pad * 2 - edge;
   // Estimate wrapped line count for the card height (the text node wraps exactly via maxWidth).
   const charsPerLine = Math.max(8, Math.floor(textW / (fontSize * 0.52)));
-  const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+  // Count each explicit paragraph (the renderer splits on "\n" before word-wrapping), at least 1 line.
+  const lines = text.split("\n").reduce((sum, para) => sum + Math.max(1, Math.ceil(para.length / charsPerLine)), 0);
   const cardH = pad + eyebrowH + lines * lineH + pad - 4;
 
   const children: Node[] = [

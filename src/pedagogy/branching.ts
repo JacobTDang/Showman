@@ -76,7 +76,10 @@ export function validateGraph(graph: LessonGraph): GraphProblem[] {
 
   // Reachability (BFS from start, following only valid edges).
   if (ids.has(graph.start)) {
-    const byId = new Map(graph.segments.map((s) => [s.id, s]));
+    // First-wins, to match runtime nextSegment()'s `find` (a Map would keep the LAST duplicate and
+    // disagree with the runtime path, inverting reachability on duplicate-id graphs).
+    const byId = new Map<string, Segment>();
+    for (const s of graph.segments) if (!byId.has(s.id)) byId.set(s.id, s);
     const seen = new Set<string>([graph.start]);
     const queue = [graph.start];
     while (queue.length) {
