@@ -551,6 +551,20 @@ class Validator {
       this.enumProp(node, "fillRule", ["nonzero", "evenodd"], path, nodeId);
       this.enumProp(node, "lineCap", ["butt", "round", "square"], path, nodeId);
       this.enumProp(node, "lineJoin", ["miter", "round", "bevel"], path, nodeId);
+    } else if (type === "image") {
+      if (typeof node.src !== "string" || node.src.trim() === "") {
+        this.err({
+          path: `${path}.src`,
+          ...(nodeId ? { nodeId } : {}),
+          property: "src",
+          code: "MISSING_FIELD",
+          message: `image "${nodeId ?? "?"}" must have a non-empty "src" (a data: URI, asset hash, or file path).`,
+        });
+      }
+      nonNegNum("width");
+      nonNegNum("height");
+      nonNegNum("radius");
+      this.enumProp(node, "fit", ["fill", "contain", "cover"], path, nodeId);
     } else if (type === "arc") {
       nonNegNum("radius");
       nonNegNum("innerRadius");

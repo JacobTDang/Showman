@@ -17,6 +17,8 @@ import { encodeSceneToFile } from "../encode/encodeVideo.js";
 import { describeScene, type SchemaDescription } from "../spec/describe.js";
 import { validateInteractions, toInteractionsJson } from "../interaction/index.js";
 import type { InteractionTrack } from "../interaction/types.js";
+import { inlineAssets } from "../engine/imageRegistry.js";
+import type { AssetStore } from "../assets/store.js";
 import type { ObjectStorage, StoredObject } from "./storage.js";
 import { synthesizeNarration, narrationCharCount, measureNarration, fitSceneDuration, type TtsProvider } from "../audio/tts.js";
 import { muxAudioVideo } from "../audio/mux.js";
@@ -91,6 +93,8 @@ export interface RenderServiceOptions {
   tts?: TtsProvider;
   /** Moderation provider for the safety gate (M5.7). If unset, the gate is skipped. */
   moderation?: ModerationProvider;
+  /** Asset store for resolving frozen image-hash srcs. If set, assets are inlined before encode. */
+  assetStore?: AssetStore;
 }
 
 /** Stable JSON (sorted keys) so a content hash is independent of key order. */
@@ -108,6 +112,7 @@ export class RenderService {
   private readonly defaultConcurrency: number;
   private readonly tts: TtsProvider | undefined;
   private readonly moderation: ModerationProvider | undefined;
+  private readonly assetStore: AssetStore | undefined;
 
   constructor(opts: RenderServiceOptions) {
     this.storage = opts.storage;
@@ -116,6 +121,7 @@ export class RenderService {
     this.defaultConcurrency = opts.defaultConcurrency ?? 1;
     this.tts = opts.tts;
     this.moderation = opts.moderation;
+    this.assetStore = opts.assetStore;
     mkdirSync(this.workDir, { recursive: true });
   }
 
@@ -222,6 +228,10 @@ export class RenderService {
         renderScene = { ...scene, duration: fitted };
       }
     }
+
+    // Freeze asset-hash image srcs into self-contained data: URIs so they render identically on
+    // the main thread and in worker threads (which have no store).
+    if (this.assetStore) renderScene = await inlineAssets(renderScene, this.assetStore);
 
     // The mp4 is interaction-blind, so the video cache key excludes interactions — editing a
     // quiz over a stable video reuses the encode and only the sidecar is rewritten.

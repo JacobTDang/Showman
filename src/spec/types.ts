@@ -181,6 +181,21 @@ export interface PathNode extends BaseNodeProps {
   progress?: number;
 }
 
+export interface ImageNode extends BaseNodeProps {
+  id: string;
+  type: "image";
+  /** Image source: a `data:` URI, a frozen asset hash (resolved by prepareImages), or a file path. */
+  src: string;
+  /** Drawn width in px (defaults to the image's natural width). Animatable. */
+  width?: number;
+  /** Drawn height in px (defaults to natural height). Animatable. */
+  height?: number;
+  /** How the image fills its box. Default `"fill"` (stretch). */
+  fit?: "fill" | "contain" | "cover";
+  /** Corner radius for clipping in px. Default 0. */
+  radius?: number;
+}
+
 export interface ArcNode extends BaseNodeProps {
   id: string;
   type: "arc";
@@ -265,7 +280,8 @@ export interface GroupNode extends BaseNodeProps {
 }
 
 /** A node in the scene tree. */
-export type Node = RectNode | EllipseNode | PolygonNode | PolylineNode | PathNode | ArcNode | CounterNode | TextNode | GroupNode;
+export type Node =
+  RectNode | EllipseNode | PolygonNode | PolylineNode | PathNode | ImageNode | ArcNode | CounterNode | TextNode | GroupNode;
 
 export type NodeType = Node["type"];
 

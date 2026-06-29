@@ -6,6 +6,7 @@
 
 import { parentPort, workerData } from "node:worker_threads";
 import { renderFrame } from "../engine/render.js";
+import { prepareImages } from "../engine/imageRegistry.js";
 import type { SceneSpec } from "../spec/types.js";
 
 interface InitData {
@@ -34,5 +35,6 @@ parentPort?.on("message", (msg: RenderRequest) => {
   parentPort?.postMessage({ type: "done", results }, transfers);
 });
 
-// Signal readiness.
-parentPort?.postMessage({ type: "ready" });
+// Decode any images into this worker's registry, THEN signal readiness (data: URIs are
+// self-contained, so the worker can prepare them without the asset store).
+void prepareImages(spec).finally(() => parentPort?.postMessage({ type: "ready" }));

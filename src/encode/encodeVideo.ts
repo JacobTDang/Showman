@@ -15,6 +15,7 @@ import { once } from "node:events";
 import type { SceneSpec } from "../spec/types.js";
 import { totalFrames } from "../spec/schema.js";
 import { renderFrame } from "../engine/render.js";
+import { prepareImages } from "../engine/imageRegistry.js";
 import { FramePool } from "../render/framePool.js";
 import { buildEncodeArgs } from "./ffmpegArgs.js";
 
@@ -140,6 +141,7 @@ async function pumpFrames(
   stdin: NodeJS.WritableStream,
   onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
+  await prepareImages(spec); // decode image nodes into the main-thread registry (sequential path)
   const writeFrame = async (pixels: Uint8ClampedArray): Promise<void> => {
     const buf = Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength);
     if (!stdin.write(buf)) await once(stdin, "drain");

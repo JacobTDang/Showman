@@ -10,6 +10,7 @@
 
 import { createCanvas, Path2D, type SKRSContext2D } from "@napi-rs/canvas";
 import { flattenPath } from "./svgPath.js";
+import { getRegisteredImage } from "./imageRegistry.js";
 import type { Node, SceneSpec } from "../spec/types.js";
 import { LIMITS, SCENE_DEFAULTS, SHAPE_DEFAULTS } from "../spec/schema.js";
 import { ensureFontsRegistered, DEFAULT_FONT_FAMILY, isRegisteredFamily } from "./fonts.js";
@@ -128,6 +129,9 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
       break;
     case "path":
       drawPath(ctx, res);
+      break;
+    case "image":
+      drawImage(ctx, res);
       break;
     case "arc":
       drawArc(ctx, res);
@@ -417,6 +421,42 @@ function drawPath(ctx: SKRSContext2D, res: NodeResolver): void {
     if (done) break;
   }
   ctx.stroke();
+}
+
+function drawImage(ctx: SKRSContext2D, res: NodeResolver): void {
+  const src = res.raw("src");
+  if (typeof src !== "string") return;
+  const img = getRegisteredImage(src);
+  if (!img) return; // not decoded (missing / undecodable) — render nothing
+  const w = Math.max(0, res.num("width", img.width));
+  const h = Math.max(0, res.num("height", img.height));
+  if (w === 0 || h === 0) return;
+  const fit = (res.str("fit") as "fill" | "contain" | "cover") ?? "fill";
+  const radius = Math.min(Math.max(0, res.num("radius", 0)), w / 2, h / 2);
+
+  ctx.save();
+  // Clip to the (optionally rounded) box for rounded corners or a `cover` overflow.
+  if (radius > 0 || fit === "cover") {
+    ctx.beginPath();
+    ctx.moveTo(radius, 0);
+    ctx.arcTo(w, 0, w, h, radius);
+    ctx.arcTo(w, h, 0, h, radius);
+    ctx.arcTo(0, h, 0, 0, radius);
+    ctx.arcTo(0, 0, w, 0, radius);
+    ctx.closePath();
+    ctx.clip();
+  }
+  if (fit === "fill") {
+    ctx.drawImage(img, 0, 0, w, h);
+  } else {
+    const iw = img.width || w;
+    const ih = img.height || h;
+    const scale = fit === "cover" ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  }
+  ctx.restore();
 }
 
 function drawArc(ctx: SKRSContext2D, res: NodeResolver): void {
