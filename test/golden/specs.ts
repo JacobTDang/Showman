@@ -14,6 +14,7 @@ import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
+import { reaction } from "../../src/chem/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -423,11 +424,28 @@ function diagram(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 400, height: 220, fps: 1, duration: 1, seed: 1, background: "#f8fafc", nodes: [fc, t.node] };
 }
 
+/** Chemistry: an mhchem reaction with a labeled arrow — glyph paths + a vector arrow, deterministic
+ * cross-platform like the math-typeset golden. (Molecules use shadow blur, so they stay out of
+ * goldens and are covered by pixel tests instead.) */
+function chemistry(): SceneSpec {
+  return {
+    specVersion: SPEC_VERSION,
+    width: 440,
+    height: 110,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#fffdf7",
+    nodes: [reaction({ id: "rx", reactants: ["2H2", "O2"], products: ["2H2O"], conditions: "spark", x: 24, y: 26, size: 38 })],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
   { name: "paint", spec: paint(), frames: [0] },
   { name: "diagram", spec: diagram(), frames: [0] },
+  { name: "chemistry", spec: chemistry(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
