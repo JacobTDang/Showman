@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Showman — Mastery Dashboard</title>
+    <style>
+      :root { --teal: #1d6f72; --teal-2: #2a9d8f; --amber: #ffb703; --coral: #e63946; --ink: #1d2b2b; --paper: #fffdf7; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #eef6f6; color: var(--ink); }
+      .wrap { max-width: 860px; margin: 28px auto; padding: 0 18px; }
+      h1 { font-size: 26px; margin: 0 0 4px; color: var(--teal); }
+      .sub { color: #5a7; margin: 0 0 22px; }
+      .summary { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+      .stat { background: var(--paper); border-radius: 16px; padding: 16px 20px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); flex: 1; min-width: 130px; }
+      .stat .n { font-size: 30px; font-weight: 800; }
+      .stat .l { color: #678; font-size: 14px; font-weight: 600; }
+      .mastered .n { color: var(--teal-2); }
+      .struggling .n { color: var(--coral); }
+      .practicing .n { color: var(--amber); }
+      .skill { background: var(--paper); border-radius: 14px; padding: 14px 18px; margin-bottom: 10px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; }
+      .skill .name { font-weight: 700; font-size: 17px; }
+      .skill .std { color: #789; font-weight: 600; font-size: 12px; margin-left: 8px; }
+      .bar { grid-column: 1 / -1; height: 12px; border-radius: 7px; background: #e7eeee; overflow: hidden; }
+      .bar > span { display: block; height: 100%; border-radius: 7px; }
+      .badge { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; text-transform: capitalize; }
+      .meta { color: #678; font-size: 13px; }
+      .b-mastered { background: #d8f3e6; color: var(--teal-2); }
+      .b-practicing { background: #fff1cc; color: #b07d00; }
+      .b-struggling { background: #fde2e4; color: var(--coral); }
+      .b-new { background: #e7eeee; color: #678; }
+      .f-mastered { background: var(--teal-2); }
+      .f-practicing { background: var(--amber); }
+      .f-struggling { background: var(--coral); }
+      .f-new { background: #b9c7c7; }
+      .empty { color: #678; padding: 30px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Mastery Dashboard</h1>
+      <p class="sub" id="sub">Loading…</p>
+      <div class="summary" id="summary"></div>
+      <div id="skills"></div>
+    </div>
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const pct = (v) => Math.round((v || 0) * 100);
+      // Only a same-origin relative path (no scheme/host) — never load cross-origin JSON.
+      const raw = new URLSearchParams(location.search).get("data") || "dashboard.json";
+      const src = /^[\w.\-/]+\.json$/.test(raw) && !raw.includes("..") ? raw : "dashboard.json";
+
+      fetch(src)
+        .then((r) => r.json())
+        .then(render)
+        .catch(() => ($("sub").textContent = "Could not load dashboard.json"));
+
+      function render(d) {
+        $("sub").textContent = `${d.counts.total} skills tracked · ${pct(d.overallMastery)}% average mastery`;
+        $("summary").innerHTML = "";
+        const stats = [
+          ["mastered", d.counts.mastered, "Mastered"],
+          ["practicing", d.counts.practicing, "Practicing"],
+          ["struggling", d.counts.struggling, "Needs help"],
+        ];
+        for (const [cls, n, label] of stats) {
+          const el = document.createElement("div");
+          el.className = "stat " + cls; // cls/label are hardcoded literals
+          el.innerHTML = `<div class="n">${Number(n) || 0}</div><div class="l">${label}</div>`;
+          $("summary").appendChild(el);
+        }
+        const list = $("skills");
+        list.innerHTML = "";
+        if (!d.skills.length) { list.innerHTML = '<div class="empty">No skills practiced yet — play a lesson to begin.</div>'; return; }
+        const STATUSES = ["mastered", "practicing", "struggling", "new"];
+        for (const s of d.skills) {
+          // Treat the JSON as untrusted: validate the status enum, coerce counts to numbers,
+          // and escape every string before it reaches innerHTML (no XSS via a crafted ?data=).
+          const status = STATUSES.includes(s.status) ? s.status : "new";
+          const due = new Date(Number(s.dueAt) || 0).toLocaleDateString();
+          const correct = Number(s.correct) || 0;
+          const attempts = Number(s.attempts) || 0;
+          const el = document.createElement("div");
+          el.className = "skill";
+          el.innerHTML =
+            `<div class="name">${escape(s.label)}${s.standard ? `<span class="std">${escape(s.standard)}</span>` : ""}</div>` +
+            `<div><span class="badge b-${status}">${status}</span></div>` +
+            `<div class="bar"><span class="f-${status}" style="width:${pct(s.mastery)}%"></span></div>` +
+            `<div class="meta" style="grid-column:1/-1">${pct(s.mastery)}% mastery · ${correct}/${attempts} correct · review ${escape(due)}</div>`;
+          list.appendChild(el);
+        }
+      }
+      function escape(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+    </script>
+  </body>
+</html>
