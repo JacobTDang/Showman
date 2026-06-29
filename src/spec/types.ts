@@ -82,9 +82,31 @@ export interface BaseNodeProps {
   opacity?: number;
   /** Rotation/scale pivot in local pixels. Default `{ x: 0, y: 0 }`. */
   anchor?: Anchor;
+  /** Blend mode for compositing this node. On a group it applies to each child individually
+   * (not as one flattened layer); blend a single shape for a uniform effect. Default `"normal"`. */
+  blend?: BlendMode;
+  /** Gaussian blur radius in px for this node's own drawing (on a group: each child individually,
+   * not the merged subtree). Animatable. Capped at 200px. Default 0. */
+  blur?: number;
   /** Keyframed animation tracks for this node. */
   tracks?: Track[];
 }
+
+/** How a node composites onto what's already drawn. */
+export type BlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "darken"
+  | "lighten"
+  | "add"
+  | "difference"
+  | "exclusion"
+  | "soft-light"
+  | "hard-light"
+  | "color-dodge"
+  | "color-burn";
 
 export interface RectNode extends BaseNodeProps {
   id: string;
@@ -277,6 +299,8 @@ export interface GroupNode extends BaseNodeProps {
   type: "group";
   /** Child nodes, drawn in this group's transformed space. */
   children: Node[];
+  /** Clip children to a rounded-rect window from the group origin (spotlight / mask). */
+  clip?: { width: number; height: number; radius?: number };
 }
 
 /** A node in the scene tree. */

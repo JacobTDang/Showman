@@ -60,6 +60,7 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
   value: "number",
   progress: "number",
   morph: "number",
+  blur: "number",
   strokeWidth: "number",
   fontSize: "number",
   reveal: "number",
@@ -68,7 +69,21 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
 };
 
 /** Transform properties common to all node types. */
-const COMMON_KEYS = ["id", "type", "x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "anchor", "tracks"] as const;
+const COMMON_KEYS = [
+  "id",
+  "type",
+  "x",
+  "y",
+  "rotation",
+  "scale",
+  "scaleX",
+  "scaleY",
+  "opacity",
+  "anchor",
+  "blend",
+  "blur",
+  "tracks",
+] as const;
 
 /**
  * The full set of allowed keys per node type. Any key outside this set is reported
@@ -99,11 +114,11 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
     "strokeWidth",
   ],
   text: [...COMMON_KEYS, "text", "reveal", "fontSize", "fontFamily", "fontWeight", "align", "baseline", "fill", "stroke", "strokeWidth"],
-  group: [...COMMON_KEYS, "children"],
+  group: [...COMMON_KEYS, "children", "clip"],
 };
 
 /** Which animatable properties are valid targets for a track, per node type. */
-const TRANSFORM_ANIM = ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity"];
+const TRANSFORM_ANIM = ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "blur"];
 export const ANIMATABLE_BY_TYPE: Readonly<Record<NodeType, readonly string[]>> = {
   rect: [...TRANSFORM_ANIM, "width", "height", "radius", "strokeWidth", "fill", "stroke"],
   ellipse: [...TRANSFORM_ANIM, "width", "height", "strokeWidth", "fill", "stroke"],
