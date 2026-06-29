@@ -108,8 +108,8 @@ finished video") is realized end to end and tested offline:
   picks `AnthropicSpecAuthor` when `ANTHROPIC_API_KEY` is set.
 - `POST /author { brief }` on the worker runs the authoring loop (validate → preview →
   self-correct → submit) and returns a `jobId`; `GET /jobs/{id}` resolves to the video.
-- `npm run brief -- "teach counting to four balloons in a magical fairy land"` produced
-  the berry-themed 4-balloon lesson in `docs/brief-lesson-frame.png`.
+- `npm run brief -- "teach counting to four balloons in a magical fairy land"` produces
+  a complete berry-themed 4-balloon lesson (rendered to `out/`).
 
 ## Horizontal scale — HTTP-pull workers  ✅
 
