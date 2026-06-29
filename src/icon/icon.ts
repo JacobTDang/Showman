@@ -26,9 +26,10 @@ export function icon(opts: IconOptions): Node {
   const id = opts.id ?? "icon";
   const def = ICONS[opts.name];
   const size = opts.size ?? 24;
-  const s = size / 24;
   const color = opts.color ?? "#1e293b";
-  if (!def) return { id, type: "group", x: opts.x, y: opts.y, children: [] }; // unknown → nothing
+  // Unknown icon, or a non-positive box, has nothing to draw (and a 0 size would make strokeWidth ∞).
+  if (!def || !Number.isFinite(size) || size <= 0) return { id, type: "group", x: opts.x, y: opts.y, children: [] };
+  const s = size / 24;
   const filled = opts.fill ?? def.fill ?? false;
   const base: Node = { id, type: "path", x: opts.x, y: opts.y, d: def.d, scaleX: s, scaleY: s, lineCap: "round", lineJoin: "round" };
   if (filled) {
