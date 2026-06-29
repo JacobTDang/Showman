@@ -9,3 +9,4 @@ export * from "./motion.js";
 export * from "./oscillator.js";
 export * from "./fields.js";
 export * from "./optics.js";
+export * from "./modern.js";
