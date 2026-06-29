@@ -11,6 +11,42 @@ already shipped, so this goes past the existing roadmap.
 
 ---
 
+## 📦 Status — shipped vs. remaining (updated 2026-06-29)
+
+Six features have shipped end-to-end since this research, each via a multi-agent adversarial
+review (29 confirmed findings fixed across them), all CI-green on `main`:
+
+| ✅ Shipped | PR | Theme |
+|---|---|---|
+| SVG **`path` primitive + draw-on + shape morphing** | #2 | Animation substrate |
+| **LaTeX-quality math typesetting** (MathJax → morphable glyph paths) | #3 | Animation / math flagship |
+| **Interactive-lesson platform** (interaction sidecar + thin player) | #4 | Pedagogy |
+| **BKT learner model + spaced-retrieval review reel** | #5 | Pedagogy / adaptivity |
+| **xAPI telemetry + teacher mastery dashboard** | #6 | Delivery / market |
+| **Frozen Asset Store + `image` node** (content-addressed generate-then-freeze) | #7 | AI-native substrate |
+
+That covers the **substrate → math flagship → interactivity → adaptivity → distribution** arc,
+plus the generated-visual substrate.
+
+**Remaining (highest-leverage first):**
+- **AI visuals** (asset store now unblocks these): a real text→image generator behind the
+  `AssetGenerator` seam · **Style Capsule** · **character/mascot identity** · **vision-grounded
+  scene critic + self-improving eval harness**.
+- **Animation/rendering:** compositing toolkit (clip/mask, blend, blur) · scene-to-scene
+  transitions · spring/physics motion · motion blur · **Lottie import via Skottie** · handwriting "Write".
+- **Pedagogy:** branching segment-graph (+ remediation) · contingent hint ladder · parametric
+  item bank · Socratic "ask-the-character" tutor · UDL audio-first pre-reader mode.
+- **Delivery/market:** **LMS packaging** (cmi5/SCORM/Common Cartridge) · **Audio Description**
+  (auto-generated from the timeline) · platform presets (9:16 safe-area, per-platform LUFS, ABR) ·
+  emotion-directed TTS + SSML · one-click multilingual · VPAT/flash-safety lint.
+- **Authoring pipeline:** agentic Planner→Storyboard→Draft→Critic→Reviser · RAG over curriculum ·
+  MCP generative tools.
+
+The natural next three (each builds on what's merged): **real image generator + Style Capsule**,
+**compositing + transitions**, **LMS packaging**.
+
+---
+
 ## Two architectural meta-insights (these shape everything)
 
 Both surfaced independently in multiple threads, and both extend patterns **already in the repo**:
