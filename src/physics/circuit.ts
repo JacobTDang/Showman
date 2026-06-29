@@ -314,6 +314,241 @@ export function ground(opts: SymbolOptions): CircuitSymbol {
   };
 }
 
+/** An open switch: a lead, a hinge pivot, and a lifted blade. */
+export function switchSym(opts: SymbolOptions): CircuitSymbol {
+  const id = opts.id ?? "sw";
+  const { x, y } = opts;
+  const size = opts.size ?? 70;
+  const color = opts.color ?? "#1e293b";
+  const lead = size * 0.22;
+  const pivot = { x: x + lead, y };
+  const contact = { x: x + size - lead, y };
+  const blade = { x: contact.x - size * 0.1, y: y - size * 0.28 };
+  return withLabel(
+    id,
+    opts,
+    [
+      poly(`${id}-l`, [{ x, y }, pivot], color),
+      poly(`${id}-blade`, [pivot, blade], color),
+      poly(`${id}-r`, [contact, { x: x + size, y }], color),
+      { id: `${id}-p`, type: "ellipse", x: pivot.x - 2.5, y: y - 2.5, width: 5, height: 5, fill: color },
+      { id: `${id}-c`, type: "ellipse", x: contact.x - 2.5, y: y - 2.5, width: 5, height: 5, fill: color },
+    ],
+    color,
+  );
+}
+
+/** An inductor: a row of semicircular bumps. */
+export function inductor(opts: SymbolOptions): CircuitSymbol {
+  const id = opts.id ?? "ind";
+  const { x, y } = opts;
+  const size = opts.size ?? 70;
+  const color = opts.color ?? "#1e293b";
+  const lead = size * 0.16;
+  const bL = x + lead;
+  const bR = x + size - lead;
+  const bumps = 4;
+  const span = (bR - bL) / bumps;
+  const rad = span / 2;
+  const pts: Point[] = [{ x: bL, y }];
+  for (let i = 0; i < bumps; i++) {
+    const c = bL + span * (i + 0.5);
+    for (let k = 1; k <= 8; k++) {
+      const ang = Math.PI - (Math.PI * k) / 8; // π → 0 (top bump, screen-up)
+      pts.push({ x: c + rad * Math.cos(ang), y: y - rad * Math.sin(ang) });
+    }
+  }
+  pts.push({ x: bR, y });
+  return withLabel(
+    id,
+    opts,
+    [
+      poly(
+        `${id}-l`,
+        [
+          { x, y },
+          { x: bL, y },
+        ],
+        color,
+      ),
+      poly(`${id}-coil`, pts, color),
+      poly(
+        `${id}-r`,
+        [
+          { x: bR, y },
+          { x: x + size, y },
+        ],
+        color,
+      ),
+    ],
+    color,
+  );
+}
+
+/** An AC source: a circle with a sine wave inside. */
+export function acSource(opts: SymbolOptions): CircuitSymbol {
+  const id = opts.id ?? "ac";
+  const { x, y } = opts;
+  const size = opts.size ?? 70;
+  const color = opts.color ?? "#1e293b";
+  const cx = x + size / 2;
+  const r = size * 0.2;
+  const sine: Point[] = [];
+  for (let k = 0; k <= 16; k++) {
+    const u = k / 16;
+    sine.push({ x: cx - r * 0.7 + u * r * 1.4, y: y - Math.sin(u * Math.PI * 2) * r * 0.45 });
+  }
+  return withLabel(
+    id,
+    opts,
+    [
+      poly(
+        `${id}-l`,
+        [
+          { x, y },
+          { x: cx - r, y },
+        ],
+        color,
+      ),
+      {
+        id: `${id}-circ`,
+        type: "ellipse",
+        x: cx - r,
+        y: y - r,
+        width: r * 2,
+        height: r * 2,
+        fill: "transparent",
+        stroke: color,
+        strokeWidth: SW,
+      },
+      poly(`${id}-sine`, sine, color, SW - 0.5),
+      poly(
+        `${id}-r`,
+        [
+          { x: cx + r, y },
+          { x: x + size, y },
+        ],
+        color,
+      ),
+    ],
+    color,
+  );
+}
+
+/** A diode: a filled triangle into a bar (current flows a → b). */
+export function diode(opts: SymbolOptions): CircuitSymbol {
+  const id = opts.id ?? "diode";
+  const { x, y } = opts;
+  const size = opts.size ?? 70;
+  const color = opts.color ?? "#1e293b";
+  const cx = x + size / 2;
+  const h = size * 0.16;
+  return withLabel(
+    id,
+    opts,
+    [
+      poly(
+        `${id}-l`,
+        [
+          { x, y },
+          { x: cx - h, y },
+        ],
+        color,
+      ),
+      {
+        id: `${id}-tri`,
+        type: "polyline",
+        x: 0,
+        y: 0,
+        points: [
+          { x: cx - h, y: y - h },
+          { x: cx - h, y: y + h },
+          { x: cx + h, y },
+        ],
+        closed: true,
+        fill: color,
+        stroke: color,
+        strokeWidth: 1,
+      },
+      poly(
+        `${id}-bar`,
+        [
+          { x: cx + h, y: y - h },
+          { x: cx + h, y: y + h },
+        ],
+        color,
+        SW + 0.5,
+      ),
+      poly(
+        `${id}-r`,
+        [
+          { x: cx + h, y },
+          { x: x + size, y },
+        ],
+        color,
+      ),
+    ],
+    color,
+  );
+}
+
+/** A meter: a circle with a letter ("A" ammeter, "V" voltmeter, …). */
+export function meter(opts: SymbolOptions & { symbol?: string }): CircuitSymbol {
+  const id = opts.id ?? "meter";
+  const { x, y } = opts;
+  const size = opts.size ?? 70;
+  const color = opts.color ?? "#1e293b";
+  const cx = x + size / 2;
+  const r = size * 0.22;
+  return withLabel(
+    id,
+    opts,
+    [
+      poly(
+        `${id}-l`,
+        [
+          { x, y },
+          { x: cx - r, y },
+        ],
+        color,
+      ),
+      {
+        id: `${id}-circ`,
+        type: "ellipse",
+        x: cx - r,
+        y: y - r,
+        width: r * 2,
+        height: r * 2,
+        fill: "transparent",
+        stroke: color,
+        strokeWidth: SW,
+      },
+      {
+        id: `${id}-sym`,
+        type: "text",
+        x: cx,
+        y,
+        text: opts.symbol ?? "A",
+        fontFamily: "Inter",
+        fontWeight: 700,
+        fontSize: Math.round(r * 1.1),
+        fill: color,
+        align: "center",
+        baseline: "middle",
+      },
+      poly(
+        `${id}-r`,
+        [
+          { x: cx + r, y },
+          { x: x + size, y },
+        ],
+        color,
+      ),
+    ],
+    color,
+  );
+}
+
 export interface WireOptions {
   id?: string;
   points: Point[];

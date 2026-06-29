@@ -141,6 +141,9 @@ export type {
   SpringOptions,
   MassSpringOptions,
   PendulumOptions,
+  VectorFieldOptions,
+  PointChargeOptions,
+  EmSpectrumOptions,
 } from "./physics/index.js";
 export type { MovingMarkerOptions } from "./math/index.js";
 export * as icon from "./icon/index.js";
