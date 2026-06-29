@@ -151,10 +151,12 @@ function getPipeline(): { convert: (tex: string) => string } {
     liteAdaptor: () => { outerHTML: (n: unknown) => string };
   };
   const { RegisterHTMLHandler } = require("mathjax-full/js/handlers/html.js") as { RegisterHTMLHandler: (a: unknown) => void };
+  // mhchem registers the \ce{…} / \pu{…} chemistry macros (side-effecting import).
+  require("mathjax-full/js/input/tex/mhchem/MhchemConfiguration.js");
   const adaptor = liteAdaptor();
   RegisterHTMLHandler(adaptor);
   // A curated package set — AllPackages trips a MathJax bug (unguarded char-range lookup).
-  const tex = new TeX({ packages: ["base", "ams", "newcommand", "noundefined"] });
+  const tex = new TeX({ packages: ["base", "ams", "newcommand", "noundefined", "mhchem"] });
   const svg = new SVG({ fontCache: "local" });
   const doc = mathjax.document("", { InputJax: tex, OutputJax: svg });
   pipeline = { convert: (t: string): string => adaptor.outerHTML(doc.convert(t, { display: true })) };
@@ -163,6 +165,7 @@ function getPipeline(): { convert: (tex: string) => string } {
   // otherwise make the first conversions throw in some contexts). Result is discarded.
   try {
     pipeline.convert("x + \\frac{1}{2} = \\sqrt{a^2 - b^2} \\pm \\alpha");
+    pipeline.convert("\\ce{2H2 + O2 -> 2H2O}"); // warm the mhchem char tables too
   } catch {
     /* surfaced loudly on the first real conversion if it persists */
   }
