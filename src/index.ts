@@ -124,6 +124,8 @@ export type { ForceDiagramOptions, Force, SymbolOptions, CircuitSymbol, WireOpti
 export * as icon from "./icon/index.js";
 export type { IconOptions, IconDef } from "./icon/index.js";
 export type { Camera } from "./spec/types.js";
+export * as a11y from "./a11y/index.js";
+export type { A11yReport, A11yFinding, A11ySeverity } from "./a11y/index.js";
 export * as motion from "./motion/index.js";
 export type { BlendMode } from "./spec/types.js";
 export * as math from "./math/index.js";
