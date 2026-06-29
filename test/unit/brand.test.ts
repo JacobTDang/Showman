@@ -12,8 +12,9 @@ describe("brandTheme", () => {
     expect(t.palette.swatches.length).toBeGreaterThanOrEqual(4);
     // text is readable on the (light, default) background
     expect(contrastRatio(t.palette.text, t.palette.bg)).toBeGreaterThan(7);
-    // secondary derived darker than primary
-    expect(relativeLuminance(t.palette.secondary)).toBeLessThan(relativeLuminance(t.palette.primary));
+    // secondary is a distinct sibling of primary (direction depends on primary's lightness)
+    expect(t.palette.secondary).not.toBe(t.palette.primary);
+    expect(t.palette.accent).not.toBe(t.palette.primary);
   });
   it("honors dark mode and explicit overrides", () => {
     const dark = brandTheme({ name: "Night", primary: "#38bdf8", mode: "dark" });
@@ -26,6 +27,32 @@ describe("brandTheme", () => {
   it("registerBrand makes the theme available to every builder via getTheme(name)", () => {
     registerBrand({ name: "TestCo", primary: "#0ea5e9" });
     expect(getTheme("TestCo").palette.primary).toBe("#0ea5e9");
+  });
+});
+
+describe("brand review fixes", () => {
+  it("titleCard keeps the title readable even for a light/saturated primary", () => {
+    for (const primary of ["#fafafa", "#ffff00", "#ff0000", "#2563eb"]) {
+      const tc = titleCard({ name: "B", primary }, { title: "Headline" });
+      const title = tc.nodes.find((n) => n.id === "tc-title") as { fill?: string };
+      expect(contrastRatio(title.fill!, tc.background as string)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  it("derives a distinct secondary/accent even for pure black/white primaries", () => {
+    const black = brandTheme({ name: "K", primary: "#000000" });
+    expect(black.palette.secondary).not.toBe("#000000");
+    const white = brandTheme({ name: "W", primary: "#ffffff", mode: "dark" });
+    expect(white.palette.accent).not.toBe("#ffffff");
+  });
+  it("registerBrand refuses to clobber a built-in theme", () => {
+    expect(() => registerBrand({ name: "ocean", primary: "#ff0000" })).toThrow(/built-in/);
+    expect(getTheme("ocean").palette.primary).not.toBe("#ff0000"); // untouched
+  });
+  it("falls back to a pinned font for an unregistered brand typeface (scene stays valid)", () => {
+    const t = brandTheme({ name: "Mont", primary: "#2563eb", headingFont: "Montserrat", bodyFont: "Roboto" });
+    expect(t.headingFont).toBe("Inter");
+    const tc = titleCard({ name: "Mont2", primary: "#2563eb", headingFont: "Montserrat" }, { title: "Hi", subtitle: "x" });
+    expect(validateScene(tc)).toMatchObject({ valid: true });
   });
 });
 

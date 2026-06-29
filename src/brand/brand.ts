@@ -9,7 +9,13 @@ import type { SceneSpec, Node, GroupNode, Color } from "../spec/types.js";
 import type { Theme } from "../theme/themes.js";
 import { THEMES } from "../theme/themes.js";
 import { SPEC_VERSION } from "../spec/schema.js";
-import { mix, lighten, darken, withAlpha, readableOn } from "../engine/color.js";
+import { mix, lighten, darken, withAlpha, readableOn, contrastRatio, relativeLuminance } from "../engine/color.js";
+import { isRegisteredFamily } from "../engine/fonts.js";
+
+/** Pinned families only validate; an unregistered brand typeface falls back so scenes stay valid. */
+function pinnedFont(family: string | undefined, fallback: string): string {
+  return family !== undefined && isRegisteredFamily(family) ? family : fallback;
+}
 
 export interface BrandLogo {
   /** Image asset key (registered via registerImage / prepareImages). */
@@ -30,7 +36,8 @@ export interface BrandKit {
   text?: Color;
   muted?: Color;
   swatches?: Color[];
-  /** Pinned heading/body/mono families (default "Inter" / "Inter" / "JetBrains Mono"). */
+  /** Heading/body/mono families. Must be one of the pinned REGISTERED_FONT_FAMILIES — an unregistered
+   * brand typeface falls back to the default so scenes stay valid (register the family first to use it). */
   headingFont?: string;
   bodyFont?: string;
   monoFont?: string;
@@ -45,24 +52,34 @@ export function brandTheme(kit: BrandKit): Theme {
   const bg = kit.bg ?? (mode === "dark" ? "#0f172a" : "#ffffff");
   const text = kit.text ?? readableOn(bg, "#0f172a", "#f8fafc");
   const primary = kit.primary;
-  const secondary = kit.secondary ?? darken(primary, 0.18);
-  const accent = kit.accent ?? lighten(primary, 0.12);
+  const lum = relativeLuminance(primary);
+  // Shift toward black/white, but flip the direction at the extremes so a pure-black or pure-white
+  // primary still yields a *distinct* sibling (darken("#000") would collapse back onto primary).
+  const secondary = kit.secondary ?? (lum < 0.15 ? lighten(primary, 0.22) : darken(primary, 0.18));
+  const accent = kit.accent ?? (lum > 0.85 ? darken(primary, 0.2) : lighten(primary, 0.12));
   const muted = kit.muted ?? mix(text, bg, 0.45);
   const swatches = kit.swatches ?? [primary, accent, secondary, "#16a34a", "#dc2626", "#7c3aed"];
   return {
     name: kit.name,
     palette: { bg, primary, secondary, accent, text, muted, swatches },
-    headingFont: kit.headingFont ?? "Inter",
-    bodyFont: kit.bodyFont ?? "Inter",
+    headingFont: pinnedFont(kit.headingFont, "Inter"),
+    bodyFont: pinnedFont(kit.bodyFont, "Inter"),
     headingWeight: 700,
     bodyWeight: 500,
     mode,
-    ...(kit.monoFont !== undefined ? { monoFont: kit.monoFont } : {}),
+    ...(kit.monoFont !== undefined ? { monoFont: pinnedFont(kit.monoFont, "JetBrains Mono") } : {}),
   };
 }
 
-/** Register a kit's theme into the global THEMES map so `getTheme(kit.name)` / `theme: kit.name` work. */
+/** Names of the built-in themes, captured at load — registerBrand must not clobber these. */
+const BUILTIN_THEMES = new Set(Object.keys(THEMES));
+
+/** Register a kit's theme into the global THEMES map so `getTheme(kit.name)` / `theme: kit.name` work.
+ * Throws if the name collides with a built-in theme (which would silently re-skin unrelated scenes). */
 export function registerBrand(kit: BrandKit): Theme {
+  if (BUILTIN_THEMES.has(kit.name)) {
+    throw new Error(`registerBrand: "${kit.name}" collides with a built-in theme — choose a unique brand name.`);
+  }
   const theme = brandTheme(kit);
   THEMES[kit.name] = theme;
   return theme;
@@ -140,6 +157,8 @@ export function titleCard(kit: BrandKit, opts: TitleCardOptions): SceneSpec {
   const titleSize = Math.round(H * 0.085);
   const titleY = Math.round(H * 0.46);
   const ruleY = titleY + Math.round(titleSize * 0.5) + 22; // clear of the title's descenders
+  // Keep the brand primary for the title only when it's legible on the background; else fall back.
+  const titleFill = contrastRatio(p.primary, p.bg) >= 4.5 ? p.primary : readableOn(p.bg, p.text, "#f8fafc");
   const nodes: Node[] = [
     {
       id: "tc-mark",
@@ -164,7 +183,7 @@ export function titleCard(kit: BrandKit, opts: TitleCardOptions): SceneSpec {
       fontFamily: theme.headingFont,
       fontWeight: theme.headingWeight,
       fontSize: titleSize,
-      fill: p.primary,
+      fill: titleFill,
       align: "center",
       baseline: "middle",
     },
