@@ -16,6 +16,8 @@ export type ArrowHead = "none" | "arrow" | "open" | "diamond" | "circle";
 export type Routing = "straight" | "elbow" | "curved";
 
 export interface ConnectorOptions {
+  /** Node id (and the prefix for child ids). Defaults to "conn" — pass distinct ids when composing
+   * several builders into one scene so their child ids don't collide (flowchart() does this for you). */
   id?: string;
   from: Point;
   to: Point;
@@ -142,8 +144,12 @@ export function connector(opts: ConnectorOptions): GroupNode {
     const last = pts[pts.length - 2]!;
     endDir = unit(to.x - last.x, to.y - last.y);
     startDir = unit(from.x - pts[1]!.x, from.y - pts[1]!.y);
-    const m = pts[Math.floor(pts.length / 2)]!;
-    mid = m;
+    // Geometric midpoint of the path (not a vertex): the middle of the middle segment for elbow,
+    // the line midpoint for straight — so the label sits on the line, never on the endpoint.
+    mid =
+      routing === "elbow"
+        ? { x: (pts[1]!.x + pts[2]!.x) / 2, y: (pts[1]!.y + pts[2]!.y) / 2 }
+        : { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
   }
 
   const head = arrowHead(`${id}-end`, endArrow, to, endDir, size, stroke);
@@ -151,7 +157,7 @@ export function connector(opts: ConnectorOptions): GroupNode {
   const tail = arrowHead(`${id}-start`, startArrow, from, startDir, size, stroke);
   if (tail) children.push(tail);
 
-  if (opts.label !== undefined) {
+  if (opts.label !== undefined && opts.label.trim() !== "") {
     const fontSize = opts.fontSize ?? 14;
     if (opts.labelBg !== undefined) {
       const w = opts.label.length * fontSize * 0.6 + 10;

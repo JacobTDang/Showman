@@ -12,6 +12,8 @@ import { ensureFontsRegistered } from "../engine/fonts.js";
 export type CellAlign = "left" | "center" | "right";
 
 export interface TableOptions {
+  /** Node id (and the prefix for child ids). Defaults to "table" — pass distinct ids when composing
+   * several builders into one scene so their child ids don't collide. */
   id?: string;
   x: number;
   y: number;
@@ -149,5 +151,6 @@ export function table(opts: TableOptions): Table {
     }
   }
 
-  return { node: { id, type: "group", x: 0, y: 0, children }, width: total, height };
+  // A forced width is honored even when there's no measurable content (empty rows).
+  return { node: { id, type: "group", x: 0, y: 0, children }, width: opts.width ?? total, height };
 }

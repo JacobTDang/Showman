@@ -43,7 +43,10 @@ export function flowchart(opts: FlowchartOptions): GroupNode {
   const boxes = new Map<string, Box>();
   const boxNodes: Node[] = [];
   for (const n of opts.nodes) {
-    const b = box(n);
+    if (boxes.has(n.id)) throw new Error(`flowchart: duplicate node id "${n.id}".`);
+    // Namespace the emitted box ids under the flowchart id (so two flowcharts compose without
+    // colliding); keep the Map keyed by the original node id, which edges reference.
+    const b = box({ ...n, id: `${id}-${n.id}` });
     boxes.set(n.id, b);
     boxNodes.push(b.node);
   }
