@@ -82,6 +82,10 @@ const COMMON_KEYS = [
   "anchor",
   "blend",
   "blur",
+  "gradient",
+  "shadow",
+  "dash",
+  "dashOffset",
   "tracks",
 ] as const;
 
@@ -133,7 +137,7 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
 };
 
 /** Which animatable properties are valid targets for a track, per node type. */
-const TRANSFORM_ANIM = ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "blur"];
+const TRANSFORM_ANIM = ["x", "y", "rotation", "scale", "scaleX", "scaleY", "opacity", "blur", "dashOffset"];
 export const ANIMATABLE_BY_TYPE: Readonly<Record<NodeType, readonly string[]>> = {
   rect: [...TRANSFORM_ANIM, "width", "height", "radius", "strokeWidth", "fill", "stroke"],
   ellipse: [...TRANSFORM_ANIM, "width", "height", "strokeWidth", "fill", "stroke"],
