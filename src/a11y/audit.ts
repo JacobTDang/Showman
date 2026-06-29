@@ -3,6 +3,11 @@
  * that matter most for learning video: photosensitive-seizure flash risk (WCAG 2.3.1, the
  * "three flashes in any one second" rule) and text/background contrast (WCAG 1.4.3). No rendering;
  * it reads the spec + its animation tracks. The basis for a VPAT/conformance report.
+ *
+ * Scope (documented limitations): flash detection uses an opacity/fill-luminance proxy over keyframe
+ * values — it does not model brightness changes from `scale`/`blur`/position, nor the overshoot of a
+ * single-segment oscillating ease (elastic/bounce/spring). Contrast is measured against the scene
+ * background, not layered cards. These are conservative gaps, not false passes for the common cases.
  */
 
 import type { SceneSpec, Node, Backdrop, Color } from "../spec/types.js";
@@ -46,15 +51,32 @@ function peakFlashesPerSecond(peakTimes: number[]): number {
   return max;
 }
 
-/** Local-maximum times of a value sequence whose swing around each peak exceeds `minSwing`. */
+/**
+ * Times of luminance peaks whose drop to the *neighbouring troughs* exceeds `minSwing`.
+ *
+ * Crucially this collapses the value sequence to its turning points (local extrema) first, so the
+ * result is invariant to how densely a ramp is keyframed: a full 0→1→0 strobe is detected whether it
+ * is authored as a hard square wave or as a finely-sampled sine. Measuring trough-to-peak (not the
+ * step to the adjacent keyframe) is what makes a smoothly-ramped strobe count as a flash.
+ */
 function significantPeaks(times: number[], values: number[], minSwing: number): number[] {
-  const peaks: number[] = [];
+  if (values.length < 3) return [];
+  // Indices of local extrema (maxima + minima), endpoints included as boundary troughs/peaks.
+  const ext: number[] = [0];
   for (let i = 1; i < values.length - 1; i++) {
+    const a = values[i - 1]!;
+    const b = values[i]!;
+    const c = values[i + 1]!;
+    if ((b > a && b >= c) || (b < a && b <= c)) ext.push(i);
+  }
+  ext.push(values.length - 1);
+  const peaks: number[] = [];
+  for (let k = 1; k < ext.length - 1; k++) {
+    const i = ext[k]!;
     const v = values[i]!;
-    if (v >= values[i - 1]! && v > values[i + 1]!) {
-      const swing = v - Math.min(values[i - 1]!, values[i + 1]!);
-      if (swing >= minSwing) peaks.push(times[i]!);
-    }
+    const prev = values[ext[k - 1]!]!;
+    const next = values[ext[k + 1]!]!;
+    if (v > prev && v >= next && v - Math.min(prev, next) >= minSwing) peaks.push(times[i]!);
   }
   return peaks;
 }
@@ -72,7 +94,9 @@ function flashFindings(node: Node): A11yFinding[] {
     const values = kfs.map((k) => (track.property === "opacity" ? Number(k.value) : relativeLuminance(String(k.value))));
     const range = Math.max(...values) - Math.min(...values);
     if (range < 0.1) continue; // negligible swing can't flash
-    const minSwing = track.property === "opacity" ? 0.5 : 0.1;
+    // Trough-to-peak swing threshold: a flash is a near-full luminance excursion. 0.4 (opacity) keeps
+    // half-amplitude strobes in scope while ignoring gentle pulses; 0.1 for color luminance.
+    const minSwing = track.property === "opacity" ? 0.4 : 0.1;
     const peaks = significantPeaks(times, values, minSwing);
     const fps = peakFlashesPerSecond(peaks);
     if (fps > 3) {
