@@ -18,7 +18,7 @@ export const SPEC_VERSION = 1 as const;
  * cross-machine determinism, so the validator rejects it. `engine/fonts.ts` maps
  * these names to the bundled font files and registers exactly them.
  */
-export const REGISTERED_FONT_FAMILIES = ["Nunito", "Fredoka"] as const;
+export const REGISTERED_FONT_FAMILIES = ["Nunito", "Fredoka", "Inter", "Source Serif 4", "JetBrains Mono"] as const;
 
 /** Every supported node type. */
 export const NODE_TYPES: readonly NodeType[] = [
@@ -113,7 +113,22 @@ export const ALLOWED_KEYS: Readonly<Record<NodeType, readonly string[]>> = {
     "stroke",
     "strokeWidth",
   ],
-  text: [...COMMON_KEYS, "text", "reveal", "fontSize", "fontFamily", "fontWeight", "align", "baseline", "fill", "stroke", "strokeWidth"],
+  text: [
+    ...COMMON_KEYS,
+    "text",
+    "reveal",
+    "fontSize",
+    "fontFamily",
+    "fontWeight",
+    "align",
+    "baseline",
+    "fill",
+    "stroke",
+    "strokeWidth",
+    "maxWidth",
+    "lineHeight",
+    "letterSpacing",
+  ],
   group: [...COMMON_KEYS, "children", "clip"],
 };
 

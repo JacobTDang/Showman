@@ -713,6 +713,27 @@ class Validator {
     }
     this.enumProp(node, "align", TEXT_ALIGN, path, nodeId);
     this.enumProp(node, "baseline", TEXT_BASELINE, path, nodeId);
+    for (const prop of ["maxWidth", "lineHeight"] as const) {
+      const v = node[prop];
+      if (v !== undefined && (!isFiniteNumber(v) || v <= 0)) {
+        this.err({
+          path: `${path}.${prop}`,
+          ...(nodeId ? { nodeId } : {}),
+          property: prop,
+          code: "INVALID_VALUE",
+          message: `${prop} must be a positive number; got ${JSON.stringify(v)}.`,
+        });
+      }
+    }
+    if (node.letterSpacing !== undefined && !isFiniteNumber(node.letterSpacing)) {
+      this.err({
+        path: `${path}.letterSpacing`,
+        ...(nodeId ? { nodeId } : {}),
+        property: "letterSpacing",
+        code: "INVALID_VALUE",
+        message: `letterSpacing must be a finite number (px, may be negative); got ${JSON.stringify(node.letterSpacing)}.`,
+      });
+    }
   }
 
   private validateTracks(node: Record<string, unknown>, type: NodeType, path: string, nodeId: string | undefined): void {

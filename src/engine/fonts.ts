@@ -30,6 +30,10 @@ export const DEFAULT_FONT_FAMILY = "Nunito";
 const FONT_FILES: Readonly<Record<string, string>> = {
   Nunito: "Nunito-Variable.ttf",
   Fredoka: "Fredoka-Variable.ttf",
+  // Adult / professional families (OFL) — for college, enterprise, and technical content.
+  Inter: "Inter-Variable.ttf", // grotesque sans, body + UI
+  "Source Serif 4": "SourceSerif4-Variable.ttf", // editorial serif, headings + prose
+  "JetBrains Mono": "JetBrainsMono-Variable.ttf", // monospace, code + tables
 };
 
 /** True if `family` is one the engine ships and pins (and may therefore be rendered). */
