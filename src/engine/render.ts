@@ -11,12 +11,12 @@
 import { createCanvas, Path2D, type SKRSContext2D } from "@napi-rs/canvas";
 import { flattenPath } from "./svgPath.js";
 import { getRegisteredImage } from "./imageRegistry.js";
-import type { Node, SceneSpec } from "../spec/types.js";
+import type { Node, SceneSpec, Gradient, Shadow, Backdrop } from "../spec/types.js";
 import { LIMITS, SCENE_DEFAULTS, SHAPE_DEFAULTS } from "../spec/schema.js";
 import { ensureFontsRegistered, DEFAULT_FONT_FAMILY, isRegisteredFamily } from "./fonts.js";
 import { normalizeColor } from "./color.js";
 import { wrapText } from "./textLayout.js";
-import { makeRng, type Rng } from "./rng.js";
+import { makeRng, hashSeed, type Rng } from "./rng.js";
 import { NodeResolver, resolveTransform } from "./resolve.js";
 
 /** The result of rendering one frame. */
@@ -69,9 +69,13 @@ export function renderFrame(spec: SceneSpec, frameIndex: number): RenderResult {
 
   // Background.
   const bg = spec.background ?? SCENE_DEFAULTS.background;
-  if (bg !== "transparent") {
-    ctx.fillStyle = normalizeColor(bg);
-    ctx.fillRect(0, 0, width, height);
+  if (typeof bg === "string") {
+    if (bg !== "transparent") {
+      ctx.fillStyle = normalizeColor(bg);
+      ctx.fillRect(0, 0, width, height);
+    }
+  } else {
+    drawBackdrop(ctx, bg, width, height, spec.seed ?? SCENE_DEFAULTS.seed, frameIndex);
   }
 
   // The seed seam: all randomness derives from here, never from Math.random/Date.
@@ -137,6 +141,8 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
   // never reach ctx.filter (where "blur(NaNpx)" / an enormous radius can crash the process).
   const blurPx = res.num("blur", 0);
   if (Number.isFinite(blurPx) && blurPx > 0) ctx.filter = `blur(${Math.min(blurPx, 200)}px)`;
+  // Drop shadow / glow (on a group: applies to each child). Auto-resets on ctx.restore().
+  if (node.shadow) applyShadow(ctx, node.shadow);
   switch (node.type) {
     case "rect":
       drawRect(ctx, res);
@@ -194,14 +200,116 @@ function drawNode(rc: RenderContext, node: Node, t: number, depth: number): void
   ctx.restore();
 }
 
-function applyFillAndStroke(ctx: SKRSContext2D, fill: string | undefined, stroke: string | undefined, strokeWidth: number): void {
-  if (fill !== undefined && fill !== "transparent") {
-    ctx.fillStyle = normalizeColor(fill);
+/** Paint a rich scene background: base fill (color or gradient) + vignette + seeded film grain. */
+function drawBackdrop(ctx: SKRSContext2D, bd: Backdrop, width: number, height: number, seed: number, frameIndex: number): void {
+  const fill = bd.fill ?? "#ffffff";
+  if (typeof fill === "string") {
+    if (fill !== "transparent") {
+      ctx.fillStyle = normalizeColor(fill);
+      ctx.fillRect(0, 0, width, height);
+    }
+  } else {
+    ctx.fillStyle = buildGradient(ctx, fill);
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  const vig = bd.vignette ?? 0;
+  if (Number.isFinite(vig) && vig > 0) {
+    const v = Math.min(1, vig);
+    const cx = width / 2;
+    const cy = height / 2;
+    const g = ctx.createRadialGradient(cx, cy, Math.min(width, height) * 0.3, cx, cy, Math.hypot(cx, cy));
+    g.addColorStop(0, "rgba(0, 0, 0, 0)");
+    g.addColorStop(1, `rgba(0, 0, 0, ${v})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  const grain = bd.grain ?? 0;
+  if (Number.isFinite(grain) && grain > 0) {
+    applyGrain(ctx, width, height, makeRng(hashSeed(Math.floor(seed), frameIndex)), Math.min(1, grain));
+  }
+}
+
+/** Add monochrome film grain via a seeded RNG. Pure integer pixel math → byte-identical across
+ * platforms; per-frame seed gives natural flicker. */
+function applyGrain(ctx: SKRSContext2D, width: number, height: number, rng: Rng, strength: number): void {
+  const img = ctx.getImageData(0, 0, width, height);
+  const data = img.data;
+  const amp = strength * 32; // up to ±32 levels at full strength
+  for (let i = 0; i < data.length; i += 4) {
+    const n = Math.round((rng.next() * 2 - 1) * amp);
+    data[i] = data[i]! + n; // Uint8ClampedArray clamps to [0, 255]
+    data[i + 1] = data[i + 1]! + n;
+    data[i + 2] = data[i + 2]! + n;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/** The Skia gradient type (@napi-rs/canvas doesn't export it by name). */
+type SkGradient = ReturnType<SKRSContext2D["createLinearGradient"]>;
+
+/** Build a Skia gradient from a spec (local coordinates). Stops are clamped to [0,1]. */
+function buildGradient(ctx: SKRSContext2D, g: Gradient): SkGradient {
+  const grad =
+    g.type === "linear"
+      ? ctx.createLinearGradient(g.from.x, g.from.y, g.to.x, g.to.y)
+      : ctx.createRadialGradient(
+          (g.innerCenter ?? g.center).x,
+          (g.innerCenter ?? g.center).y,
+          Math.max(0, g.innerRadius ?? 0),
+          g.center.x,
+          g.center.y,
+          Math.max(0, g.radius),
+        );
+  for (const s of g.stops) grad.addColorStop(Math.max(0, Math.min(1, s.offset)), normalizeColor(s.color));
+  return grad;
+}
+
+/** The fill style for a node: its gradient when present, else the solid fill color (or undefined). */
+function resolveFillStyle(ctx: SKRSContext2D, res: NodeResolver, fill: string | undefined): string | SkGradient | undefined {
+  const g = res.raw("gradient");
+  if (g && typeof g === "object") return buildGradient(ctx, g as Gradient);
+  return fill === undefined || fill === "transparent" ? undefined : normalizeColor(fill);
+}
+
+/** Set the canvas shadow state for a node (cleared by the surrounding ctx.restore()). */
+function applyShadow(ctx: SKRSContext2D, s: Shadow): void {
+  ctx.shadowColor = normalizeColor(s.color ?? "rgba(0, 0, 0, 0.35)");
+  const blur = s.blur ?? 0;
+  ctx.shadowBlur = Number.isFinite(blur) ? Math.max(0, Math.min(blur, 200)) : 0;
+  const ox = s.offsetX ?? 0;
+  const oy = s.offsetY ?? 0;
+  ctx.shadowOffsetX = Number.isFinite(ox) ? ox : 0;
+  ctx.shadowOffsetY = Number.isFinite(oy) ? oy : 0;
+}
+
+/** Apply a stroke dash pattern if the node declares a valid one (otherwise leave solid). */
+function applyDash(ctx: SKRSContext2D, res: NodeResolver): void {
+  const dash = res.raw("dash");
+  if (Array.isArray(dash) && dash.length > 0 && dash.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) {
+    ctx.setLineDash(dash as number[]);
+    const off = res.num("dashOffset", 0);
+    ctx.lineDashOffset = Number.isFinite(off) ? off : 0;
+  }
+}
+
+function applyFillAndStroke(
+  ctx: SKRSContext2D,
+  res: NodeResolver,
+  fill: string | undefined,
+  stroke: string | undefined,
+  strokeWidth: number,
+): void {
+  const fillStyle = resolveFillStyle(ctx, res, fill);
+  if (fillStyle !== undefined) {
+    ctx.fillStyle = fillStyle;
     ctx.fill();
   }
   if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
     ctx.strokeStyle = normalizeColor(stroke);
     ctx.lineWidth = strokeWidth;
+    applyDash(ctx, res);
     ctx.stroke();
   }
 }
@@ -222,7 +330,7 @@ function drawRect(ctx: SKRSContext2D, res: NodeResolver): void {
   } else {
     ctx.rect(0, 0, width, height);
   }
-  applyFillAndStroke(ctx, fill, stroke, strokeWidth);
+  applyFillAndStroke(ctx, res, fill, stroke, strokeWidth);
 }
 
 function drawEllipse(ctx: SKRSContext2D, res: NodeResolver): void {
@@ -234,7 +342,7 @@ function drawEllipse(ctx: SKRSContext2D, res: NodeResolver): void {
 
   ctx.beginPath();
   ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
-  applyFillAndStroke(ctx, fill, stroke, strokeWidth);
+  applyFillAndStroke(ctx, res, fill, stroke, strokeWidth);
 }
 
 function drawPolygon(ctx: SKRSContext2D, res: NodeResolver): void {
@@ -271,7 +379,7 @@ function drawPolygon(ctx: SKRSContext2D, res: NodeResolver): void {
     }
   }
   ctx.closePath();
-  applyFillAndStroke(ctx, fill, stroke, strokeWidth);
+  applyFillAndStroke(ctx, res, fill, stroke, strokeWidth);
 }
 
 interface GlyphDefaults {
@@ -412,12 +520,16 @@ function drawPolyline(ctx: SKRSContext2D, res: NodeResolver): void {
   }
 
   // Fill a closed shape only once fully drawn (the outline animates on, then fills).
-  if (fill !== undefined && fill !== "transparent" && closed && progress >= 1) {
-    ctx.fillStyle = normalizeColor(fill);
-    ctx.fill();
+  if (closed && progress >= 1) {
+    const fs = resolveFillStyle(ctx, res, fill);
+    if (fs !== undefined) {
+      ctx.fillStyle = fs;
+      ctx.fill();
+    }
   }
   if (stroke !== "transparent" && strokeWidth > 0) {
     ctx.strokeStyle = normalizeColor(stroke);
+    applyDash(ctx, res);
     ctx.stroke();
   }
 }
@@ -442,12 +554,14 @@ function drawPath(ctx: SKRSContext2D, res: NodeResolver): void {
     } catch {
       return; // malformed path data — render nothing rather than throw
     }
-    if (fill !== undefined && fill !== "transparent") {
-      ctx.fillStyle = normalizeColor(fill);
+    const fs = resolveFillStyle(ctx, res, fill);
+    if (fs !== undefined) {
+      ctx.fillStyle = fs;
       ctx.fill(path, res.raw("fillRule") === "evenodd" ? "evenodd" : "nonzero");
     }
     if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
       ctx.strokeStyle = normalizeColor(stroke);
+      applyDash(ctx, res);
       ctx.stroke(path);
     }
     return;
@@ -465,6 +579,7 @@ function drawPath(ctx: SKRSContext2D, res: NodeResolver): void {
     }
   const target = progress * total;
   ctx.strokeStyle = normalizeColor(stroke);
+  applyDash(ctx, res);
   ctx.beginPath();
   let acc = 0;
   for (const sp of subpaths) {
@@ -560,5 +675,5 @@ function drawArc(ctx: SKRSContext2D, res: NodeResolver): void {
     ctx.arc(cx, cy, radius, a0, a1, ccw);
     ctx.closePath();
   }
-  applyFillAndStroke(ctx, fill, stroke, strokeWidth);
+  applyFillAndStroke(ctx, res, fill, stroke, strokeWidth);
 }

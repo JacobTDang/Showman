@@ -88,6 +88,14 @@ export interface BaseNodeProps {
   /** Gaussian blur radius in px for this node's own drawing (on a group: each child individually,
    * not the merged subtree). Animatable. Capped at 200px. Default 0. */
   blur?: number;
+  /** Fill gradient (linear/radial), in local coordinates. Overrides the solid `fill` when set. */
+  gradient?: Gradient;
+  /** Drop shadow / glow applied to this node's drawing (and its subtree, for a group). */
+  shadow?: Shadow;
+  /** Stroke dash pattern in px, e.g. `[6, 4]`. Empty/absent = solid stroke. */
+  dash?: number[];
+  /** Offset into the dash pattern (px) — animate for marching-ants / flow lines. Animatable. */
+  dashOffset?: number;
   /** Keyframed animation tracks for this node. */
   tracks?: Track[];
 }
@@ -107,6 +115,56 @@ export type BlendMode =
   | "hard-light"
   | "color-dodge"
   | "color-burn";
+
+/** A color stop in a gradient: `offset` 0..1 along the gradient, with a color. */
+export interface GradientStop {
+  offset: number;
+  color: Color;
+}
+
+/** A linear gradient between two points (local node coordinates). */
+export interface LinearGradient {
+  type: "linear";
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  stops: GradientStop[];
+}
+
+/** A radial gradient from an inner circle to an outer circle (local node coordinates). */
+export interface RadialGradient {
+  type: "radial";
+  center: { x: number; y: number };
+  radius: number;
+  /** Inner circle center (default: same as `center`). */
+  innerCenter?: { x: number; y: number };
+  /** Inner circle radius (default 0). */
+  innerRadius?: number;
+  stops: GradientStop[];
+}
+
+export type Gradient = LinearGradient | RadialGradient;
+
+/** A drop shadow / glow. All fields optional; an all-zero offset + blur with a color is a glow. */
+export interface Shadow {
+  /** Shadow color. Default `"rgba(0,0,0,0.35)"`. */
+  color?: Color;
+  /** Blur radius in px. Default 0 (a hard offset). */
+  blur?: number;
+  /** Horizontal offset in px. Default 0. */
+  offsetX?: number;
+  /** Vertical offset in px. Default 0. */
+  offsetY?: number;
+}
+
+/** A rich scene background: a base fill (color or gradient) plus optional vignette + film grain. */
+export interface Backdrop {
+  /** Base fill — a color or a gradient (gradient coords are in scene pixels). Default white. */
+  fill?: Color | Gradient;
+  /** Edge-darkening vignette strength 0..1. Default 0 (off). */
+  vignette?: number;
+  /** Film-grain strength 0..1 (seeded; deterministic per frame). Default 0 (off). */
+  grain?: number;
+}
 
 export interface RectNode extends BaseNodeProps {
   id: string;
@@ -354,8 +412,8 @@ export interface SceneSpec {
   duration: number;
   /** Deterministic RNG seed (integer). Default 0. */
   seed?: number;
-  /** Background fill color. Default `"#ffffff"`. */
-  background?: Color;
+  /** Background — a flat color (default `"#ffffff"`) or a rich {@link Backdrop} (gradient + vignette + grain). */
+  background?: Color | Backdrop;
   /** The scene's nodes, drawn in order (later nodes paint on top). */
   nodes: Node[];
   /** Reserved for M5. Ignored by the M0 renderer. */

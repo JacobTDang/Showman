@@ -79,6 +79,27 @@ function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
+function isPoint(v: unknown): boolean {
+  return isObject(v) && isFiniteNumber(v.x) && isFiniteNumber(v.y);
+}
+
+/** Validate a gradient spec; returns a problem message, or null if valid. Shared by node fills + the backdrop. */
+function gradientError(g: unknown): string | null {
+  if (!isObject(g)) return "must be an object";
+  if (g.type !== "linear" && g.type !== "radial") return 'type must be "linear" or "radial"';
+  if (!Array.isArray(g.stops) || g.stops.length === 0) return "stops must be a non-empty array";
+  for (const s of g.stops) {
+    if (!isObject(s) || !isFiniteNumber(s.offset) || s.offset < 0 || s.offset > 1) return "each stop needs an offset in 0..1";
+    if (typeof s.color !== "string" || !isParseableColor(s.color)) return "each stop needs a valid color";
+  }
+  if (g.type === "linear") {
+    if (!isPoint(g.from) || !isPoint(g.to)) return "a linear gradient needs from/to points";
+  } else if (!isPoint(g.center) || !isFiniteNumber(g.radius) || g.radius < 0) {
+    return "a radial gradient needs a center point and radius ≥ 0";
+  }
+  return null;
+}
+
 /** Levenshtein distance, used only for "did you mean …" suggestions. */
 function editDistance(a: string, b: string): number {
   const m = a.length;
@@ -166,12 +187,54 @@ class Validator {
     }
 
     if (spec.background !== undefined) {
-      if (typeof spec.background !== "string" || !isParseableColor(spec.background)) {
+      const bg = spec.background;
+      if (typeof bg === "string") {
+        if (!isParseableColor(bg)) {
+          this.err({
+            path: "background",
+            property: "background",
+            code: "INVALID_COLOR",
+            message: `background must be a color or a backdrop object; got ${JSON.stringify(bg)}.`,
+          });
+        }
+      } else if (isObject(bg)) {
+        if (bg.fill !== undefined) {
+          if (typeof bg.fill === "string") {
+            if (!isParseableColor(bg.fill))
+              this.err({
+                path: "background.fill",
+                property: "background",
+                code: "INVALID_COLOR",
+                message: `background.fill must be a color or gradient.`,
+              });
+          } else {
+            const e = gradientError(bg.fill);
+            if (e)
+              this.err({
+                path: "background.fill",
+                property: "background",
+                code: "INVALID_VALUE",
+                message: `background.fill gradient ${e}.`,
+              });
+          }
+        }
+        for (const k of ["vignette", "grain"] as const) {
+          const v = bg[k];
+          if (v !== undefined && (!isFiniteNumber(v) || v < 0 || v > 1)) {
+            this.err({
+              path: `background.${k}`,
+              property: "background",
+              code: "OUT_OF_RANGE",
+              message: `background.${k} must be a number 0..1.`,
+            });
+          }
+        }
+      } else {
         this.err({
           path: "background",
           property: "background",
-          code: "INVALID_COLOR",
-          message: `background must be a color (hex, rgb()/rgba(), or a named color); got ${JSON.stringify(spec.background)}.`,
+          code: "INVALID_TYPE",
+          message: `background must be a color string or a backdrop object.`,
         });
       }
     }
@@ -429,6 +492,35 @@ class Validator {
           message: `clip.radius must be ≥ 0.`,
         });
       }
+    }
+    this.validatePaintProps(node, path, nodeId);
+  }
+
+  private validatePaintProps(node: Record<string, unknown>, path: string, nodeId: string | undefined): void {
+    const bad = (prop: string, code: ValidationCode, message: string): void =>
+      this.err({ path: `${path}.${prop}`, ...(nodeId ? { nodeId } : {}), property: prop, code, message });
+    if (node.gradient !== undefined) {
+      const e = gradientError(node.gradient);
+      if (e) bad("gradient", "INVALID_VALUE", `gradient ${e}.`);
+    }
+    if (node.shadow !== undefined) {
+      const s = node.shadow;
+      if (!isObject(s)) {
+        bad("shadow", "INVALID_TYPE", `shadow must be an object { color?, blur?, offsetX?, offsetY? }.`);
+      } else {
+        if (s.color !== undefined && (typeof s.color !== "string" || !isParseableColor(s.color)))
+          bad("shadow", "INVALID_COLOR", `shadow.color must be a valid color.`);
+        if (s.blur !== undefined && (!isFiniteNumber(s.blur) || s.blur < 0)) bad("shadow", "OUT_OF_RANGE", `shadow.blur must be ≥ 0.`);
+        for (const k of ["offsetX", "offsetY"] as const) {
+          if (s[k] !== undefined && !isFiniteNumber(s[k])) bad("shadow", "INVALID_VALUE", `shadow.${k} must be a finite number.`);
+        }
+      }
+    }
+    if (node.dash !== undefined && (!Array.isArray(node.dash) || !node.dash.every((n) => isFiniteNumber(n) && n >= 0))) {
+      bad("dash", "INVALID_VALUE", `dash must be an array of numbers ≥ 0 (px).`);
+    }
+    if (node.dashOffset !== undefined && !isFiniteNumber(node.dashOffset)) {
+      bad("dashOffset", "INVALID_VALUE", `dashOffset must be a finite number.`);
     }
   }
 

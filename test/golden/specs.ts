@@ -326,9 +326,83 @@ function typography(): SceneSpec {
   };
 }
 
+/** Paint upgrade: a gradient-filled card with a (hard) drop shadow, dashed strokes, on a
+ * gradient + vignette + seeded-grain backdrop. All byte-deterministic — gradients/shadow are Skia
+ * vector ops, grain is integer pixel math seeded per frame. */
+function paint(): SceneSpec {
+  return {
+    specVersion: SPEC_VERSION,
+    width: 340,
+    height: 200,
+    fps: 1,
+    duration: 1,
+    seed: 11,
+    background: {
+      fill: {
+        type: "linear",
+        from: { x: 0, y: 0 },
+        to: { x: 0, y: 200 },
+        stops: [
+          { offset: 0, color: "#1e293b" },
+          { offset: 1, color: "#0f172a" },
+        ],
+      },
+      vignette: 0.35,
+      grain: 0.15,
+    },
+    nodes: [
+      {
+        id: "card",
+        type: "rect",
+        x: 24,
+        y: 30,
+        width: 150,
+        height: 110,
+        radius: 18,
+        gradient: {
+          type: "linear",
+          from: { x: 0, y: 0 },
+          to: { x: 150, y: 110 },
+          stops: [
+            { offset: 0, color: "#38bdf8" },
+            { offset: 1, color: "#6366f1" },
+          ],
+        },
+        shadow: { color: "rgba(0,0,0,0.5)", blur: 0, offsetX: 6, offsetY: 8 },
+      },
+      {
+        id: "ring",
+        type: "ellipse",
+        x: 208,
+        y: 38,
+        width: 92,
+        height: 92,
+        fill: "transparent",
+        stroke: "#34d399",
+        strokeWidth: 5,
+        dash: [12, 8],
+      },
+      {
+        id: "line",
+        type: "polyline",
+        x: 28,
+        y: 168,
+        points: [
+          { x: 0, y: 0 },
+          { x: 160, y: 0 },
+        ],
+        stroke: "#fbbf24",
+        strokeWidth: 4,
+        dash: [6, 6],
+      },
+    ],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
+  { name: "paint", spec: paint(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
