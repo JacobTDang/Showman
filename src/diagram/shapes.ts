@@ -11,6 +11,8 @@ import type { Point } from "./connector.js";
 export type BoxShape = "rect" | "rounded" | "ellipse" | "diamond" | "parallelogram" | "hexagon" | "cylinder";
 
 export interface BoxOptions {
+  /** Node id (and the prefix for child ids). Defaults to "box" — pass distinct ids when composing
+   * several builders into one scene (flowchart() namespaces these for you). */
   id?: string;
   x: number;
   y: number;
@@ -114,9 +116,11 @@ function shapeNode(id: string, opts: BoxOptions): Node {
 export function box(opts: BoxOptions): Box {
   const id = opts.id ?? "box";
   const { x, y, width: w, height: h } = opts;
+  const shape = opts.shape ?? "rect";
   const children: Node[] = [shapeNode(`${id}-shape`, opts)];
-  if (opts.label !== undefined) {
-    const fontSize = opts.fontSize ?? 16;
+  if (opts.label !== undefined && opts.label.trim() !== "") {
+    // Shrink the label to fit a short box vertically, and keep maxWidth positive for tiny boxes.
+    const fontSize = Math.min(opts.fontSize ?? 16, Math.max(8, Math.floor(h * 0.42)));
     children.push({
       id: `${id}-label`,
       type: "text",
@@ -129,17 +133,19 @@ export function box(opts: BoxOptions): Box {
       fill: opts.labelColor ?? "#1e293b",
       align: "center",
       baseline: "middle",
-      maxWidth: w - 16,
+      maxWidth: Math.max(1, w - 16),
       lineHeight: 1.2,
     });
   }
+  // Left/right ports follow the slanted edges of a parallelogram; other shapes use the bounding box.
+  const inset = shape === "parallelogram" ? (w * 0.2) / 2 : 0;
   return {
     node: { id, type: "group", x: 0, y: 0, children },
     ports: {
       top: { x: x + w / 2, y },
       bottom: { x: x + w / 2, y: y + h },
-      left: { x, y: y + h / 2 },
-      right: { x: x + w, y: y + h / 2 },
+      left: { x: x + inset, y: y + h / 2 },
+      right: { x: x + w - inset, y: y + h / 2 },
       center: { x: x + w / 2, y: y + h / 2 },
     },
   };

@@ -57,7 +57,8 @@ describe("box shapes", () => {
       expect(validateScene(scene([b.node])).valid).toBe(true);
       expect(b.ports.center).toEqual({ x: 60, y: 40 });
       expect(b.ports.top).toEqual({ x: 60, y: 20 });
-      expect(b.ports.right).toEqual({ x: 110, y: 40 });
+      // The parallelogram's right port follows its slanted edge (inset by w*0.2/2 = 10).
+      expect(b.ports.right).toEqual({ x: shape === "parallelogram" ? 100 : 110, y: 40 });
     }
   });
   it("wraps a long label inside the box", () => {
@@ -100,9 +101,47 @@ describe("flowchart", () => {
       ],
     });
     const childIds = kids(fc).map((n) => n.id);
-    expect(childIds).toContain("a"); // box groups
-    expect(childIds).toContain("b");
+    expect(childIds).toContain("flow-a"); // box groups, namespaced under the flowchart id
+    expect(childIds).toContain("flow-b");
     expect(childIds.filter((i) => i.includes("-edge-")).length).toBe(1); // ghost edge skipped
     expect(validateScene(scene([fc], 200, 240)).valid).toBe(true);
+  });
+
+  it("rejects duplicate node ids", () => {
+    expect(() =>
+      flowchart({
+        nodes: [
+          { id: "x", x: 0, y: 0, width: 60, height: 30 },
+          { id: "x", x: 0, y: 50, width: 60, height: 30 },
+        ],
+      }),
+    ).toThrow(/duplicate/i);
+  });
+});
+
+describe("diagram review fixes", () => {
+  it("an empty-string label produces a valid scene (no empty text node) for connector + box", () => {
+    const c = connector({ from: { x: 0, y: 0 }, to: { x: 60, y: 0 }, label: "  " });
+    expect(kids(c).some((n) => n.id.endsWith("-label"))).toBe(false);
+    expect(validateScene(scene([c])).valid).toBe(true);
+    const b = box({ x: 0, y: 0, width: 60, height: 30, label: "" });
+    expect(kids(b.node).some((n) => n.id.endsWith("-label"))).toBe(false);
+    expect(validateScene(scene([b.node])).valid).toBe(true);
+  });
+
+  it("places a straight connector's label at the line midpoint, not the endpoint", () => {
+    const c = connector({ from: { x: 20, y: 20 }, to: { x: 220, y: 20 }, label: "hi" });
+    const label = kids(c).find((n) => n.id.endsWith("-label")) as { x: number; y: number };
+    expect(label.x).toBe(120); // (20+220)/2, not 220
+    expect(label.y).toBe(20);
+  });
+
+  it("keeps a tiny labeled box valid (maxWidth clamped)", () => {
+    const b = box({ x: 0, y: 0, width: 12, height: 12, label: "ok" });
+    expect(validateScene(scene([b.node])).valid).toBe(true);
+  });
+
+  it("honors a forced table width even with empty rows", () => {
+    expect(table({ x: 0, y: 0, rows: [], width: 300 }).width).toBe(300);
   });
 });
