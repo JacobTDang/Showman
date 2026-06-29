@@ -14,7 +14,7 @@ import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
-import { reaction, energyDiagram, phScale, phaseDiagram } from "../../src/chem/index.js";
+import { reaction, energyDiagram, phScale, phaseDiagram, lewisStructure } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
@@ -693,6 +693,31 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "quiz", spec: quizCase(), frames: [0] },
   { name: "projectile", spec: projectileCase(), frames: [18] },
   { name: "energy-diagram", spec: energyDiagramCase(), frames: [0] },
+  {
+    name: "lewis",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 320,
+      height: 160,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#ffffff",
+      nodes: [
+        lewisStructure({
+          id: "c",
+          x: 160,
+          y: 80,
+          center: "C",
+          ligands: [
+            { el: "O", bonds: 2, lonePairs: 2 },
+            { el: "O", bonds: 2, lonePairs: 2 },
+          ],
+        }),
+      ],
+    },
+    frames: [0],
+  },
   { name: "fields", spec: fieldsCase(), frames: [0] },
   {
     name: "bohr-atom",

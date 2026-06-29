@@ -115,6 +115,11 @@ export type {
   ReactionOptions,
   EnergyDiagramOptions,
   PhScaleOptions,
+  TitrationCurveOptions,
+  HeatingCurveOptions,
+  PhaseDiagramOptions,
+  LewisStructureOptions,
+  LewisLigand,
 } from "./chem/index.js";
 export * as chart from "./chart/index.js";
 export type {
