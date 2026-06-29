@@ -1,10 +1,28 @@
 /**
- * Generate the README showcase media: hero + capability stills (PNG) and a short animated demo
- * (MP4 + GIF). Everything is rendered by the engine itself, so the images are faithful output.
+ * Generate the README showcase media: a hero, a gallery of capability stills (PNG), and a short
+ * animated demo (MP4 + GIF). Everything is rendered by the engine itself, so the images are faithful
+ * output — what an agent authors is exactly what ships.
  *
  *   npx tsx scripts/readme-media.ts
  */
-import { renderFrame, validateScene, encodeSceneToFile, SPEC_VERSION, diagram, math, buildCountingLesson } from "../src/index.js";
+import {
+  renderFrame,
+  validateScene,
+  encodeSceneToFile,
+  SPEC_VERSION,
+  diagram,
+  math,
+  chart,
+  code,
+  chem,
+  physics,
+  icon,
+  brand,
+  items,
+  motion,
+  makeRng,
+  buildCountingLesson,
+} from "../src/index.js";
 import type { SceneSpec, Node } from "../src/index.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -22,25 +40,37 @@ function still(name: string, spec: SceneSpec, frame = 0): void {
   console.log(`wrote ${DIR}/${name}.png`);
 }
 
+const card = (w: number, h: number, nodes: Node[], background: SceneSpec["background"] = "#f8fafc"): SceneSpec => ({
+  specVersion: SPEC_VERSION,
+  width: w,
+  height: h,
+  fps: 1,
+  duration: 1,
+  seed: 1,
+  background,
+  nodes,
+});
+
 // --- Hero: gradient backdrop + grain + a gradient/shadowed title and capability cards ----------
 function hero(): SceneSpec {
   const W = 1200;
   const H = 630;
   const cards: { x: number; label: string; g: [string, string] }[] = [
-    { x: 245, label: "Narration", g: ["#38bdf8", "#0ea5e9"] },
-    { x: 495, label: "Diagrams", g: ["#a78bfa", "#7c3aed"] },
-    { x: 745, label: "Mathematics", g: ["#fbbf24", "#f59e0b"] },
+    { x: 170, label: "Diagrams", g: ["#38bdf8", "#0ea5e9"] },
+    { x: 405, label: "Mathematics", g: ["#a78bfa", "#7c3aed"] },
+    { x: 640, label: "Charts", g: ["#34d399", "#059669"] },
+    { x: 875, label: "Chemistry", g: ["#fb7185", "#e11d48"] },
   ];
   const nodes: Node[] = [
     {
       id: "title",
       type: "text",
       x: W / 2,
-      y: 215,
+      y: 220,
       text: "Showman",
       fontFamily: "Inter",
       fontWeight: 800,
-      fontSize: 124,
+      fontSize: 128,
       fill: "#e2e8f0",
       align: "center",
       baseline: "middle",
@@ -53,26 +83,26 @@ function hero(): SceneSpec {
           { offset: 1, color: "#a78bfa" },
         ],
       },
-      shadow: { color: "rgba(129,140,248,0.45)", blur: 34 },
+      shadow: { color: "rgba(129,140,248,0.45)", blur: 36 },
     },
     {
       id: "sub",
       type: "text",
       x: W / 2,
-      y: 305,
-      text: "A deterministic engine for narrated learning videos, authored by AI agents.",
+      y: 312,
+      text: "Beautiful, narrated learning videos — rendered deterministically from a single spec.",
       fontFamily: "Inter",
       fontWeight: 400,
-      fontSize: 28,
+      fontSize: 27,
       fill: "#94a3b8",
       align: "center",
       baseline: "middle",
-      maxWidth: 840,
+      maxWidth: 880,
     },
   ];
-  const cw = 210;
+  const cw = 195;
   const ch = 120;
-  const cy = 400;
+  const cy = 410;
   cards.forEach((c, i) => {
     nodes.push({
       id: `card${i}`,
@@ -101,7 +131,7 @@ function hero(): SceneSpec {
       text: c.label,
       fontFamily: "Inter",
       fontWeight: 700,
-      fontSize: 24,
+      fontSize: 23,
       fill: "#0f172a",
       align: "center",
       baseline: "middle",
@@ -148,16 +178,7 @@ function mathStill(): SceneSpec {
   });
   const line = math.plotLine(plane, { m: 1, b: 1 }, { stroke: "#1d6f72", strokeWidth: 4 });
   const parab = math.plotFunction(plane, (x) => 0.4 * x * x - 2, { samples: 72 }, { stroke: "#ef6c35", strokeWidth: 6, id: "parab" });
-  return {
-    specVersion: SPEC_VERSION,
-    width: 640,
-    height: 470,
-    fps: 1,
-    duration: 1,
-    seed: 1,
-    background: "#f8fbfe",
-    nodes: [plane.node, line, parab],
-  };
+  return card(640, 470, [plane.node, line, parab], "#f8fbfe");
 }
 
 // --- Diagrams: a flowchart beside a data table -------------------------------------------------
@@ -196,10 +217,95 @@ function diagramStill(): SceneSpec {
     ],
     columnAlign: ["left", "center", "center"],
   });
-  return { specVersion: SPEC_VERSION, width: 860, height: 410, fps: 1, duration: 1, seed: 1, background: "#f8fafc", nodes: [flow, t.node] };
+  return card(860, 410, [flow, t.node]);
 }
 
-// --- Animated demo: a parabola draws itself onto a coordinate plane -----------------------------
+// --- Charts: a grouped bar chart with round axis ticks -----------------------------------------
+function chartStill(): SceneSpec {
+  const c = chart.barChart({
+    id: "bc",
+    x: 30,
+    y: 24,
+    width: 660,
+    height: 400,
+    title: "Quarterly revenue",
+    categories: ["Q1", "Q2", "Q3", "Q4"],
+    series: [
+      { name: "2025", values: [38, 52, 47, 61] },
+      { name: "2026", values: [44, 58, 63, 79] },
+    ],
+    yFormat: "currency",
+  });
+  return card(720, 450, [c]);
+}
+
+// --- Code: a syntax-highlighted editor card ----------------------------------------------------
+function codeStill(): SceneSpec {
+  const src = `export function plotLine(plane, { m, b }) {\n  const x0 = plane.xMin, x1 = plane.xMax;\n  return polyline({\n    points: [pt(x0, m * x0 + b), pt(x1, m * x1 + b)],\n    stroke: "#1d6f72",\n    progress: 1, // draws itself on\n  });\n}`;
+  const block = code.codeBlock({ id: "cb", x: 24, y: 24, width: 672, code: src, lang: "ts", title: "plotLine.ts", shadow: false });
+  return card(720, 300, [block], "#0b1220");
+}
+
+// --- Chemistry: an ethanol molecule beside a combustion reaction -------------------------------
+function chemStill(): SceneSpec {
+  const mol = chem.molecule({ id: "etoh", ...chem.MOLECULE_PRESETS.ethanol, ox: 130, oy: 110, scale: 46 });
+  const rxn = chem.reaction({ id: "rxn", reactants: ["2H2", "O2"], products: ["2H2O"], x: 300, y: 250, size: 30, conditions: "spark" });
+  return card(720, 360, [mol, rxn], "#ffffff");
+}
+
+// --- Physics: a free-body diagram beside a circuit ---------------------------------------------
+function physicsStill(): SceneSpec {
+  const fbd = physics.forceDiagram({
+    id: "fbd",
+    x: 150,
+    y: 150,
+    bodyLabel: "m",
+    bodyRadius: 22,
+    forces: [
+      { label: "N", magnitude: 70, angle: 90, color: "#16a34a" },
+      { label: "mg", magnitude: 70, angle: 270, color: "#dc2626" },
+      { label: "F", magnitude: 95, angle: 0, color: "#2563eb" },
+      { label: "f", magnitude: 55, angle: 180, color: "#d97706" },
+    ],
+  });
+  const b = physics.battery({ id: "b", x: 360, y: 110, label: "9V" });
+  const r = physics.resistor({ id: "r", x: 470, y: 110, label: "R" });
+  const l = physics.lamp({ id: "l", x: 580, y: 110 });
+  const w1 = physics.wire({ id: "w1", points: [b.b, r.a], current: true });
+  const w2 = physics.wire({ id: "w2", points: [r.b, l.a], current: true });
+  const w3 = physics.wire({ id: "w3", points: [l.b, { x: 650, y: 110 }, { x: 650, y: 230 }, { x: 360, y: 230 }, b.a], current: true });
+  return card(720, 300, [fbd, w1, w2, w3, b.node, r.node, l.node]);
+}
+
+// --- Icons: the frozen line-art set ------------------------------------------------------------
+function iconStill(): SceneSpec {
+  const names = icon.iconNames();
+  const cols = 9;
+  const cell = 56;
+  const nodes = names.map((name, i) =>
+    icon.icon({ id: `ic${i}`, name, x: 26 + (i % cols) * cell, y: 26 + Math.floor(i / cols) * cell, size: 36, color: "#1e293b" }),
+  );
+  return card(26 * 2 + cols * cell, 26 * 2 + Math.ceil(names.length / cols) * cell, nodes);
+}
+
+// --- Brand: a white-label title card -----------------------------------------------------------
+function brandStill(): SceneSpec {
+  return brand.titleCard(
+    { name: "Northwind Academy", primary: "#0ea5e9" },
+    { title: "Photosynthesis", subtitle: "Unit 3 · How plants make food", width: 720, height: 405 },
+  );
+}
+
+// --- Assessment: a quiz card with the answer revealed ------------------------------------------
+function quizStill(): SceneSpec {
+  const item = items.generateItem(items.multiplicationTemplate, makeRng(1));
+  const qc = items.quizCard({ id: "quiz", item, x: 30, y: 26, width: 460, theme: "ocean", reveal: true });
+  return card(520, 380, [qc], "#eef2f7");
+}
+
+// --- Counting lesson (a frame) -----------------------------------------------------------------
+
+// --- Animated demo: a parabola draws itself onto a coordinate plane with an ease-in-out --------
 function demo(): SceneSpec {
   const W = 960;
   const H = 540;
@@ -217,19 +323,7 @@ function demo(): SceneSpec {
     step: 1,
   });
   const parab = math.plotFunction(plane, (x) => 0.4 * x * x - 2, { samples: 72 }, { stroke: "#ef6c35", strokeWidth: 6, id: "parab" });
-  const parabAnim: Node = {
-    ...parab,
-    progress: 0,
-    tracks: [
-      {
-        property: "progress",
-        keyframes: [
-          { t: 1.2, value: 0 },
-          { t: 3.4, value: 1, easing: "easeOutCubic" },
-        ],
-      },
-    ],
-  };
+  const parabAnim: Node = { ...parab, progress: 0, tracks: motion.drawOn({ start: 1.2, duration: 2.2 }) };
   const title: Node = {
     id: "eq",
     type: "text",
@@ -242,15 +336,7 @@ function demo(): SceneSpec {
     fill: "#0f172a",
     align: "center",
     baseline: "middle",
-    tracks: [
-      {
-        property: "opacity",
-        keyframes: [
-          { t: 0.2, value: 0 },
-          { t: 1.0, value: 1, easing: "easeOutQuad" },
-        ],
-      },
-    ],
+    tracks: motion.fadeIn({ start: 0.2, duration: 0.8 }),
   };
   return {
     specVersion: SPEC_VERSION,
@@ -268,6 +354,13 @@ async function main(): Promise<void> {
   still("hero", hero());
   still("showcase-math", mathStill());
   still("showcase-diagram", diagramStill());
+  still("showcase-chart", chartStill());
+  still("showcase-code", codeStill());
+  still("showcase-chem", chemStill());
+  still("showcase-physics", physicsStill());
+  still("showcase-icons", iconStill());
+  still("showcase-brand", brandStill());
+  still("showcase-quiz", quizStill());
   const lesson = buildCountingLesson({ count: 5, topic: "stars", theme: "sunshine", itemShape: "star" });
   still("showcase-lesson", lesson, Math.floor(lesson.fps * lesson.duration * 0.85));
 
