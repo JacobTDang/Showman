@@ -66,4 +66,20 @@ describe("penStroke", () => {
     expect(Buffer.from(renderFrame(s, 4).pixels).equals(Buffer.from(renderFrame(s, 19).pixels))).toBe(false); // draws on
     expect(Buffer.from(renderFrame(s, 6).pixels).equals(Buffer.from(renderFrame(s, 6).pixels))).toBe(true); // deterministic
   });
+  it("stays valid for very short or zero/negative durations (review fix)", () => {
+    for (const duration of [0.04, 0.05, 0, -1]) {
+      expect(validateScene(scene(penStroke({ points: pts, duration })))).toMatchObject({ valid: true });
+    }
+  });
+});
+
+describe("writeOn guards", () => {
+  it("rejects a non-polyline/path node instead of emitting an invalid scene (review fix)", () => {
+    const rect: Node = { id: "r", type: "rect", x: 0, y: 0, width: 10, height: 10, fill: "#000" };
+    expect(() => writeOn(rect)).toThrow(/polyline\/path/);
+  });
+  it("stays valid for a zero duration", () => {
+    const base: Node = { id: "p", type: "polyline", x: 0, y: 0, points: pts, stroke: "#000", strokeWidth: 3 };
+    expect(validateScene(scene(writeOn(base, { duration: 0 })))).toMatchObject({ valid: true });
+  });
 });
