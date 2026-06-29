@@ -14,7 +14,16 @@ import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
-import { reaction, energyDiagram, phScale, phaseDiagram, lewisStructure, periodicTable, vseprShape } from "../../src/chem/index.js";
+import {
+  reaction,
+  energyDiagram,
+  phScale,
+  phaseDiagram,
+  lewisStructure,
+  periodicTable,
+  vseprShape,
+  moleculeFrom,
+} from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
@@ -704,6 +713,20 @@ export const GOLDEN_CASES: GoldenCase[] = [
       seed: 1,
       background: "#f8fafc",
       nodes: [periodicTable({ id: "pt", x: 16, y: 16, cellSize: 40, highlight: ["O", "Na", "Fe"] })],
+    },
+    frames: [0],
+  },
+  {
+    name: "benzene",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 220,
+      height: 220,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#ffffff",
+      nodes: [moleculeFrom({ id: "bz", name: "benzene", ox: 110, oy: 110, scale: 38, shadow: false })],
     },
     frames: [0],
   },
