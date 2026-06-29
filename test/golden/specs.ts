@@ -23,6 +23,7 @@ import { titleCard } from "../../src/brand/index.js";
 import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/index.js";
 import { makeRng } from "../../src/index.js";
 import { hintCard } from "../../src/pedagogy/index.js";
+import { penStroke } from "../../src/handwriting/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -613,6 +614,33 @@ export const GOLDEN_CASES: GoldenCase[] = [
     frames: [0],
   },
   { name: "quiz", spec: quizCase(), frames: [0] },
+  {
+    name: "handwriting",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 260,
+      height: 160,
+      fps: 20,
+      duration: 1.4,
+      seed: 1,
+      background: "#fffdf7",
+      nodes: [
+        penStroke({
+          id: "ck",
+          points: [
+            { x: 40, y: 90 },
+            { x: 95, y: 135 },
+            { x: 210, y: 35 },
+          ],
+          stroke: "#16a34a",
+          strokeWidth: 9,
+          duration: 1,
+          penColor: "#15803d",
+        }),
+      ],
+    },
+    frames: [12], // ~60% drawn — shows the partial stroke + the nib at the tip
+  },
   {
     name: "hint",
     spec: {
