@@ -130,6 +130,8 @@ export * as brand from "./brand/index.js";
 export type { BrandKit, BrandLogo, WatermarkOptions, TitleCardOptions, LowerThirdOptions, Corner } from "./brand/index.js";
 export * as items from "./items/index.js";
 export type { ItemTemplate, ItemParams, GeneratedItem, Distractor, QuizCardOptions } from "./items/index.js";
+export * as pedagogy from "./pedagogy/index.js";
+export type { LessonGraph, Segment, Branch, Outcome, GraphProblem, Hint, HintLadder, HintCardOptions } from "./pedagogy/index.js";
 export * as motion from "./motion/index.js";
 export type { BlendMode } from "./spec/types.js";
 export * as math from "./math/index.js";
