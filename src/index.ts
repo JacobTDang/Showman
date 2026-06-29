@@ -127,6 +127,8 @@ export type {
   Geometry,
   ElectronConfigOptions,
   SubshellFill,
+  MoleculeFromOptions,
+  MoleculeName,
 } from "./chem/index.js";
 export * as chart from "./chart/index.js";
 export type {

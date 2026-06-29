@@ -16,3 +16,5 @@ export * from "./periodicTable.js";
 
 export * from "./vsepr.js";
 export * from "./electronConfig.js";
+
+export * from "./moleculeLibrary.js";
