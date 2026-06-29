@@ -1,6 +1,6 @@
 # Showman — Deep Feature Research
 
-A PM-grade research pass into what to build next, beyond [docs/PRODUCT_ROADMAP.md](./PRODUCT_ROADMAP.md).
+A PM-grade research pass into what to build next, beyond [PRODUCT_ROADMAP.md](./PRODUCT_ROADMAP.md).
 Five parallel research threads (animation/rendering, pedagogy/interactivity, AI-native
 authoring, delivery/accessibility, competitive) each web-researched the 2025–2026
 landscape and grounded against the codebase. The math toolkit and real-voice TTS are
@@ -11,39 +11,43 @@ already shipped, so this goes past the existing roadmap.
 
 ---
 
-## 📦 Status — shipped vs. remaining (updated 2026-06-29)
+## Status — shipped vs. remaining (updated 2026-06-29)
 
-Six features have shipped end-to-end since this research, each via a multi-agent adversarial
-review (29 confirmed findings fixed across them), all CI-green on `main`:
+Twelve features have shipped end-to-end since this research, each via a multi-agent adversarial
+review with its findings fixed, all CI-green on `main`:
 
-| ✅ Shipped | PR | Theme |
+| Shipped | PR | Theme |
 |---|---|---|
-| SVG **`path` primitive + draw-on + shape morphing** | #2 | Animation substrate |
-| **LaTeX-quality math typesetting** (MathJax → morphable glyph paths) | #3 | Animation / math flagship |
-| **Interactive-lesson platform** (interaction sidecar + thin player) | #4 | Pedagogy |
-| **BKT learner model + spaced-retrieval review reel** | #5 | Pedagogy / adaptivity |
-| **xAPI telemetry + teacher mastery dashboard** | #6 | Delivery / market |
-| **Frozen Asset Store + `image` node** (content-addressed generate-then-freeze) | #7 | AI-native substrate |
+| SVG `path` primitive + draw-on + shape morphing | #2 | Animation substrate |
+| LaTeX-quality math typesetting (MathJax → morphable glyph paths) | #3 | Animation / math flagship |
+| Interactive-lesson platform (interaction sidecar + thin player) | #4 | Pedagogy |
+| BKT learner model + spaced-retrieval review reel | #5 | Pedagogy / adaptivity |
+| xAPI telemetry + teacher mastery dashboard | #6 | Delivery / market |
+| Frozen Asset Store + `image` node (content-addressed generate-then-freeze) | #7 | AI-native substrate |
+| Compositing (blend / blur / clip) + scene transitions | #8 | Animation / beauty |
+| Real text→image generator + Style Capsule | #9 | AI visuals |
+| LMS packaging (SCORM / cmi5 / Common Cartridge) | #10 | Delivery / market |
+| Typography & layout (pro fonts, multi-line text, color math, adult themes) | #11 | Beauty / adult-ready |
+| Engine paint upgrade (gradients, shadows, dashed strokes, backdrop system) | #12 | Beauty |
+| Diagram substrate (connectors, box shapes, data tables, flowcharts) | #13 | Technical teaching |
 
-That covers the **substrate → math flagship → interactivity → adaptivity → distribution** arc,
-plus the generated-visual substrate.
+That covers the substrate → math flagship → interactivity → adaptivity → distribution arc, the
+generated-visual substrate, and the K-12 → adult/college/enterprise foundation (typography, paint,
+diagrams).
 
 **Remaining (highest-leverage first):**
-- **AI visuals** (asset store now unblocks these): a real text→image generator behind the
-  `AssetGenerator` seam · **Style Capsule** · **character/mascot identity** · **vision-grounded
-  scene critic + self-improving eval harness**.
-- **Animation/rendering:** compositing toolkit (clip/mask, blend, blur) · scene-to-scene
-  transitions · spring/physics motion · motion blur · **Lottie import via Skottie** · handwriting "Write".
+- **AI visuals:** character/mascot identity (reference-conditioned consistency) · vision-grounded
+  scene critic + self-improving eval harness · agentic Planner→Storyboard→Draft→Critic→Reviser pipeline.
+- **Animation/rendering:** spring/physics motion · sub-frame motion blur · Lottie import via Skottie ·
+  handwriting "Write" for text and equations · a camera system (pan / zoom / parallax).
 - **Pedagogy:** branching segment-graph (+ remediation) · contingent hint ladder · parametric
   item bank · Socratic "ask-the-character" tutor · UDL audio-first pre-reader mode.
-- **Delivery/market:** **LMS packaging** (cmi5/SCORM/Common Cartridge) · **Audio Description**
-  (auto-generated from the timeline) · platform presets (9:16 safe-area, per-platform LUFS, ABR) ·
-  emotion-directed TTS + SSML · one-click multilingual · VPAT/flash-safety lint.
-- **Authoring pipeline:** agentic Planner→Storyboard→Draft→Critic→Reviser · RAG over curriculum ·
-  MCP generative tools.
+- **Delivery/accessibility:** Audio Description (auto-generated from the timeline) · VPAT / WCAG-AA +
+  flash-safety lint · platform presets (9:16 safe-area, per-platform LUFS, ABR) · emotion-directed
+  TTS + SSML · one-click multilingual · white-label brand kits.
 
-The natural next three (each builds on what's merged): **real image generator + Style Capsule**,
-**compositing + transitions**, **LMS packaging**.
+The natural next three (each builds on what's merged): **character/mascot identity**, a
+**vision-grounded scene critic**, and **Audio Description + accessibility (VPAT / flash-safety)**.
 
 ---
 
