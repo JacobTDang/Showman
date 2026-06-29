@@ -11,9 +11,12 @@ export interface Point {
   y: number;
 }
 export interface SymbolOptions {
+  /** Node id (and child-id prefix). Each symbol defaults to its own ("res"/"bat"/…) — pass distinct
+   * ids when composing several of the same type into one scene so the ids don't collide. */
   id?: string;
   x: number;
   y: number;
+  /** Symbol width in px; must be > 0. Default 70. */
   size?: number;
   color?: Color;
   label?: string;
