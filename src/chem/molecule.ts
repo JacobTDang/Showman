@@ -21,6 +21,8 @@ export interface Bond {
 }
 
 export interface MoleculeOptions {
+  /** Node id (and the prefix for child ids). Defaults to "mol" — pass distinct ids when composing
+   * several molecules into one scene so their child ids don't collide. */
   id?: string;
   atoms: Atom[];
   bonds?: Bond[];
@@ -92,6 +94,8 @@ export function molecule(opts: MoleculeOptions): GroupNode {
   });
 
   // Atoms: CPK sphere (radial-highlight gradient) + soft shadow + readable element label.
+  // Compress the pop-in stagger so even a large molecule finishes assembling within a short scene.
+  const step = Math.min(0.12, 1.2 / Math.max(1, opts.atoms.length));
   opts.atoms.forEach((atom, i) => {
     const c = pos[i]!;
     const color = cpkColor(atom.el);
@@ -117,22 +121,26 @@ export function molecule(opts: MoleculeOptions): GroupNode {
       shadow: { color: "rgba(15,23,42,0.35)", blur: 6, offsetY: 3 },
       anchor: { x: r, y: r },
     };
-    const label: Node = {
-      id: `${id}-label-${i}`,
-      type: "text",
-      x: c.x,
-      y: c.y,
-      text: atom.el,
-      fontFamily: "Inter",
-      fontWeight: 700,
-      fontSize: Math.round(r * 0.95),
-      fill: readableOn(color),
-      align: "center",
-      baseline: "middle",
-      anchor: { x: 0, y: 0 },
-    };
+    // Skip the label for an empty element symbol (an empty text node would fail validation).
+    const label: Node | undefined =
+      atom.el.trim() === ""
+        ? undefined
+        : {
+            id: `${id}-label-${i}`,
+            type: "text",
+            x: c.x,
+            y: c.y,
+            text: atom.el,
+            fontFamily: "Inter",
+            fontWeight: 700,
+            fontSize: Math.round(r * 0.95),
+            fill: readableOn(color),
+            align: "center",
+            baseline: "middle",
+            anchor: { x: 0, y: 0 },
+          };
     if (opts.animate) {
-      const start = 0.2 + i * 0.12;
+      const start = 0.2 + i * step;
       const pop: Track[] = [
         {
           property: "scale",
@@ -150,17 +158,19 @@ export function molecule(opts: MoleculeOptions): GroupNode {
         },
       ];
       sphere.tracks = pop;
-      label.tracks = [
-        {
-          property: "opacity",
-          keyframes: [
-            { t: start + 0.2, value: 0 },
-            { t: start + 0.5, value: 1 },
-          ],
-        },
-      ];
+      if (label)
+        label.tracks = [
+          {
+            property: "opacity",
+            keyframes: [
+              { t: start + 0.2, value: 0 },
+              { t: start + 0.5, value: 1 },
+            ],
+          },
+        ];
     }
-    children.push(sphere, label);
+    children.push(sphere);
+    if (label) children.push(label);
   });
 
   return { id, type: "group", x: 0, y: 0, children };

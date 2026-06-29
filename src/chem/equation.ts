@@ -17,10 +17,26 @@ export interface ChemEquationOptions {
   theme?: string;
 }
 
-/** Typeset a chemical formula/equation (mhchem). Returns the group node plus its measured size. */
+/** Typeset a chemical formula/equation (mhchem). Returns the group node plus its measured size.
+ * Malformed input degrades to an empty group (consistent with the LaTeX pipeline): a stray `}` would
+ * break out of `\ce{…}` and inject arbitrary LaTeX, and C0 control chars trip a MathJax internal bug. */
 export function chemEquation(opts: ChemEquationOptions): TexResult {
+  const id = opts.id ?? "tex";
+  const x = opts.x ?? 0;
+  const y = opts.y ?? 0;
+  const empty: TexResult = { node: { id, type: "group", x, y, children: [] }, width: 0, height: 0 };
+
+  // Drop control chars (charCode < 32) — avoids a control-char regex and the MathJax bug.
+  const formula = [...opts.formula].filter((ch) => ch.charCodeAt(0) >= 32).join("");
+  let depth = 0;
+  for (const ch of formula) {
+    if (ch === "{") depth++;
+    else if (ch === "}" && --depth < 0) return empty; // unbalanced → would escape \ce{…}
+  }
+  if (depth !== 0) return empty;
+
   return texToNodes({
-    latex: `\\ce{${opts.formula}}`,
+    latex: `\\ce{${formula}}`,
     ...(opts.id !== undefined ? { id: opts.id } : {}),
     ...(opts.x !== undefined ? { x: opts.x } : {}),
     ...(opts.y !== undefined ? { y: opts.y } : {}),
