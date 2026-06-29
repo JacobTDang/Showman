@@ -9,6 +9,8 @@ import { chemEquation } from "./equation.js";
 import { connector } from "../diagram/connector.js";
 
 export interface ReactionOptions {
+  /** Node id (and the prefix for child ids). Defaults to "rxn" — pass distinct ids when composing
+   * several reactions into one scene so their child ids don't collide. */
   id?: string;
   /** Reactant formulas (mhchem syntax, no \ce), e.g. ["2H2", "O2"]. */
   reactants: string[];
@@ -41,8 +43,9 @@ export function reaction(opts: ReactionOptions): GroupNode {
       i,
       ...chemEquation({ formula: f, size, color, ...(opts.theme !== undefined ? { theme: opts.theme } : {}), id: `${id}-${side}${i}` }),
     }));
-  const reactants = r(opts.reactants, "r");
-  const products = r(opts.products, "p");
+  // Drop empty/invalid formulas (no rendered glyphs) entirely — otherwise their joining "+" dangles.
+  const reactants = r(opts.reactants, "r").filter((e) => e.node.children.length > 0);
+  const products = r(opts.products, "p").filter((e) => e.node.children.length > 0);
   const maxH = Math.max(size, ...reactants.map((e) => e.height), ...products.map((e) => e.height));
   const centerY = y0 + maxH / 2;
 
