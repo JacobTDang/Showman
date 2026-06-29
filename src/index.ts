@@ -110,6 +110,8 @@ export * as learning from "./learning/index.js";
 export type { LearnerModel, KcState, BktParams, ReviewCard } from "./learning/index.js";
 export * as telemetry from "./telemetry/index.js";
 export type { XapiStatement, Actor, Dashboard, SkillSummary } from "./telemetry/index.js";
+export * as packaging from "./packaging/index.js";
+export type { PackageFormat, LessonPackage, LessonMeta, PackageFile } from "./packaging/index.js";
 export { captionsFromNarration, toVTT, toSRT } from "./audio/captions.js";
 export type { Cue } from "./audio/captions.js";
 export {
