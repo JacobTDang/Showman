@@ -94,8 +94,11 @@ function gradientError(g: unknown): string | null {
   }
   if (g.type === "linear") {
     if (!isPoint(g.from) || !isPoint(g.to)) return "a linear gradient needs from/to points";
-  } else if (!isPoint(g.center) || !isFiniteNumber(g.radius) || g.radius < 0) {
-    return "a radial gradient needs a center point and radius ≥ 0";
+  } else {
+    if (!isPoint(g.center) || !isFiniteNumber(g.radius) || g.radius < 0) return "a radial gradient needs a center point and radius ≥ 0";
+    if (g.innerCenter !== undefined && !isPoint(g.innerCenter)) return "a radial gradient innerCenter must be a { x, y } point";
+    if (g.innerRadius !== undefined && (!isFiniteNumber(g.innerRadius) || g.innerRadius < 0))
+      return "a radial gradient innerRadius must be a number ≥ 0";
   }
   return null;
 }
@@ -516,8 +519,13 @@ class Validator {
         }
       }
     }
-    if (node.dash !== undefined && (!Array.isArray(node.dash) || !node.dash.every((n) => isFiniteNumber(n) && n >= 0))) {
-      bad("dash", "INVALID_VALUE", `dash must be an array of numbers ≥ 0 (px).`);
+    if (node.dash !== undefined) {
+      if (!Array.isArray(node.dash) || !node.dash.every((n) => isFiniteNumber(n) && n >= 0)) {
+        bad("dash", "INVALID_VALUE", `dash must be an array of numbers ≥ 0 (px).`);
+      } else if (!node.dash.some((n) => (n as number) > 0) || node.dash.reduce((a, b) => a + (b as number), 0) < 1) {
+        // All-zero crashes Skia; sub-pixel totals blow up the segment count (render-time DoS).
+        bad("dash", "INVALID_VALUE", `dash must contain at least one positive length and sum to ≥ 1px.`);
+      }
     }
     if (node.dashOffset !== undefined && !isFiniteNumber(node.dashOffset)) {
       bad("dashOffset", "INVALID_VALUE", `dashOffset must be a finite number.`);

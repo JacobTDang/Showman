@@ -61,6 +61,7 @@ export const ANIMATABLE_PROPERTIES: Readonly<Record<string, PropertyKind>> = {
   progress: "number",
   morph: "number",
   blur: "number",
+  dashOffset: "number",
   strokeWidth: "number",
   fontSize: "number",
   reveal: "number",

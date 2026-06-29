@@ -40,6 +40,8 @@ export interface SchemaDescription {
   };
   nodeTypes: Record<string, { required: string[]; allowedKeys: readonly string[]; animatableProperties: readonly string[] }>;
   animatablePropertyKinds: Record<string, string>;
+  /** Shapes of object-valued props (which `allowedKeys` only lists by name). */
+  compositeProps: Record<string, string>;
   easings: readonly string[];
   fonts: readonly string[];
   timeModel: string;
@@ -113,8 +115,8 @@ export function describeScene(): SchemaDescription {
     specVersion: SPEC_VERSION,
     description:
       "Showman Scene Spec: a serializable scene rendered deterministically to video. " +
-      "A scene has dimensions, fps, duration, an optional seed and background, and a tree of nodes. " +
-      "Each node has base transform props and keyframed animation tracks. Times are in seconds.",
+      "A scene has dimensions, fps, duration, an optional seed, a background (a color or a Backdrop), and a tree of nodes. " +
+      "Each node has base transform props, optional paint (gradient/shadow/dash), and keyframed animation tracks. Times are in seconds.",
     scene: {
       required: ["specVersion", "width", "height", "fps", "duration", "nodes"],
       optional: ["seed", "background", "narration"],
@@ -123,6 +125,13 @@ export function describeScene(): SchemaDescription {
     },
     nodeTypes,
     animatablePropertyKinds: ANIMATABLE_PROPERTIES,
+    compositeProps: {
+      background: "A color string OR a Backdrop: { fill?: color | gradient, vignette?: 0..1, grain?: 0..1 }.",
+      gradient:
+        'Overrides fill. linear: { type:"linear", from:{x,y}, to:{x,y}, stops:[{offset:0..1,color}] }; radial: { type:"radial", center:{x,y}, radius, innerCenter?, innerRadius?, stops }. Coords are local to the node.',
+      shadow: "Drop shadow / glow: { color?, blur?≥0, offsetX?, offsetY? } in px (zero offset + blur = glow).",
+      dash: "Stroke dash pattern: number[] of px (≥1 positive, sum ≥ 1). Animate `dashOffset` for marching ants.",
+    },
     easings: EASING_NAMES,
     fonts: REGISTERED_FONT_FAMILIES,
     timeModel: "Keyframe times and duration are in seconds; frame N renders at time N/fps.",
