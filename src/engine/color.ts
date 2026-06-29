@@ -176,13 +176,30 @@ export function parseColor(input: string): Rgba | null {
     return { r: clampByte(nums[0]!), g: clampByte(nums[1]!), b: clampByte(nums[2]!), a: clampUnit(a) };
   }
 
-  // hsl()/hsla()
+  // hsl()/hsla() — parsed positionally: hue is a plain number (no %), s/l may carry %, and a
+  // trailing % on alpha means value/100 (so "hsla(.., 50%)" is 0.5, not opaque).
   const hslMatch = s.match(/^hsla?\(([^)]+)\)$/);
   if (hslMatch) {
-    const nums = parseComponents(hslMatch[1]!, true);
-    if (!nums || (nums.length !== 3 && nums.length !== 4)) return null;
-    const { r, g, b } = hslToRgb(nums[0]!, nums[1]!, nums[2]!);
-    const a = nums.length === 4 ? nums[3]! : 1;
+    const parts = hslMatch[1]!.split(",").map((p) => p.trim());
+    if (parts.length !== 3 && parts.length !== 4) return null;
+    const num = (p: string): number | null => {
+      const body = p.endsWith("%") ? p.slice(0, -1) : p;
+      if (body.length === 0) return null;
+      const n = Number(body);
+      return Number.isNaN(n) ? null : n;
+    };
+    if (parts[0]!.endsWith("%")) return null; // hue is not a percentage
+    const h = num(parts[0]!);
+    const sNum = num(parts[1]!);
+    const lNum = num(parts[2]!);
+    if (h === null || sNum === null || lNum === null) return null;
+    const { r, g, b } = hslToRgb(h, sNum, lNum);
+    let a = 1;
+    if (parts.length === 4) {
+      const av = num(parts[3]!);
+      if (av === null) return null;
+      a = parts[3]!.endsWith("%") ? av / 100 : av;
+    }
     return { r, g, b, a: clampUnit(a) };
   }
 
@@ -263,14 +280,20 @@ export function mix(a: string, b: string, t: number): string {
   });
 }
 
-/** Lighten toward white by `amount` (0..1). */
+/** Lighten toward white by `amount` (0..1), preserving the source alpha. */
 export function lighten(color: string, amount: number): string {
-  return mix(color, "#ffffff", amount);
+  const c = parseColor(color);
+  if (!c) return color;
+  const k = clampUnit(amount);
+  return rgbaToHex({ r: c.r + (255 - c.r) * k, g: c.g + (255 - c.g) * k, b: c.b + (255 - c.b) * k, a: c.a });
 }
 
-/** Darken toward black by `amount` (0..1). */
+/** Darken toward black by `amount` (0..1), preserving the source alpha. */
 export function darken(color: string, amount: number): string {
-  return mix(color, "#000000", amount);
+  const c = parseColor(color);
+  if (!c) return color;
+  const k = clampUnit(amount);
+  return rgbaToHex({ r: c.r * (1 - k), g: c.g * (1 - k), b: c.b * (1 - k), a: c.a });
 }
 
 /** Return `color` with its alpha set to `alpha` (0..1). */

@@ -81,6 +81,16 @@ describe("color math", () => {
     expect(readableOn("#0f172a")).toBe("#ffffff"); // dark bg → light text
     expect(readableOn("#ffffff")).toBe("#000000");
   });
+  it("preserves source alpha when lightening/darkening (review fix)", () => {
+    expect(lighten("#ff000080", 0.5).endsWith("80")).toBe(true); // alpha 0x80 kept
+    expect(darken("#00ff0040", 0.5).endsWith("40")).toBe(true);
+    expect(lighten("#808080", 0.5)).toBe("#c0c0c0"); // opaque unchanged in form
+  });
+  it("parses hsl alpha-percent and rejects a percentage hue (review fix)", () => {
+    expect(parseColor("hsla(0, 100%, 50%, 50%)")!.a).toBeCloseTo(0.5, 2); // was wrongly opaque
+    expect(parseColor("hsl(120, 50%, 50%)")).not.toBeNull();
+    expect(parseColor("hsl(50%, 50%, 50%)")).toBeNull(); // hue can't be a percentage
+  });
 });
 
 describe("adult themes", () => {
