@@ -65,11 +65,20 @@ describe("easing library", () => {
 });
 
 describe("motion presets", () => {
-  it("springIn animates scale via easeOutSpring + a fade", () => {
-    const ts = motion.springIn({ duration: 0.7 });
+  it("springIn animates scale via easeOutSpring + a fade that lands before the settle", () => {
+    const ts = motion.springIn({ start: 0, duration: 1 });
     const scale = ts.find((t) => t.property === "scale")!;
     expect(scale.keyframes[1]?.easing).toBe("easeOutSpring");
-    expect(ts.some((t) => t.property === "opacity")).toBe(true);
+    const opacity = ts.find((t) => t.property === "opacity")!;
+    // The fade completes at ~0.6 of the window (not at the very end), with an ease-out-cubic.
+    expect(opacity.keyframes[1]!.t).toBeCloseTo(0.6, 5);
+    expect(opacity.keyframes[1]!.easing).toBe("easeOutCubic");
+  });
+  it("drawOn emits an ease-in-out progress reveal (hand-drawn feel)", () => {
+    const ts = motion.drawOn({ duration: 1 });
+    const prog = ts.find((t) => t.property === "progress")!;
+    expect(prog.keyframes.map((k) => k.value)).toEqual([0, 1]);
+    expect(prog.keyframes[1]!.easing).toBe("easeInOutSine");
   });
   it("followPath emits x/y tracks through the waypoints, timed evenly", () => {
     const ts = motion.followPath({

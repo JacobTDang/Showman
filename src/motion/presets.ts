@@ -44,10 +44,12 @@ export function popIn(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);
   return [
     {
+      // Fade lands at ~0.6 of the window (not half) and eases with cubic so the element finishes
+      // materializing as it settles to size — it "arrives" instead of "appearing solid then growing".
       property: "opacity",
       keyframes: [
         { t: t0, value: 0 },
-        { t: t0 + (t1 - t0) * 0.5, value: 1, easing: "easeOutQuad" },
+        { t: t0 + (t1 - t0) * 0.6, value: 1, easing: "easeOutCubic" },
       ],
     },
     {
@@ -68,7 +70,7 @@ export function springIn(opts: TimingOptions = {}): Track[] {
       property: "opacity",
       keyframes: [
         { t: t0, value: 0 },
-        { t: t0 + (t1 - t0) * 0.4, value: 1, easing: "easeOutQuad" },
+        { t: t0 + (t1 - t0) * 0.6, value: 1, easing: "easeOutCubic" },
       ],
     },
     {
@@ -76,6 +78,22 @@ export function springIn(opts: TimingOptions = {}): Track[] {
       keyframes: [
         { t: t0, value: 0 },
         { t: t1, value: 1, easing: "easeOutSpring" },
+      ],
+    },
+  ];
+}
+
+/** Draw a path/polyline on (progress 0 → 1) with an ease-in-out, so the drawing tip accelerates off
+ * the start and decelerates into the end — the single biggest "hand-drawn" tell. (For constant-cadence
+ * reveals like typewriter text, pass `easing: "linear"`.) */
+export function drawOn(opts: TimingOptions = {}): Track[] {
+  const { t0, t1 } = window(opts, 1);
+  return [
+    {
+      property: "progress",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: opts.easing ?? "easeInOutSine" },
       ],
     },
   ];

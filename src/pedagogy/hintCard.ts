@@ -6,7 +6,7 @@
 import type { Node, GroupNode } from "../spec/types.js";
 import type { Hint } from "./hints.js";
 import { getTheme } from "../theme/themes.js";
-import { withAlpha } from "../engine/color.js";
+import { withAlpha, mix } from "../engine/color.js";
 
 export interface HintCardOptions {
   id?: string;
@@ -61,7 +61,9 @@ export function hintCard(opts: HintCardOptions): GroupNode {
       fontFamily: theme.headingFont,
       fontWeight: 700,
       fontSize: 13,
-      fill: p.accent,
+      // Blend the accent toward text so the eyebrow keeps a brand tint but stays legible on the pale
+      // card (a raw light accent — e.g. gold on cream — fails contrast).
+      fill: mix(p.accent, p.text, 0.45),
       align: "left",
       baseline: "middle",
       letterSpacing: 2,
