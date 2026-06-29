@@ -47,10 +47,14 @@ export interface WriteOnOptions {
   easing?: EasingSpec;
 }
 
-/** Add a draw-on `progress` animation (0 → 1) to an existing polyline/path node. */
+/** Add a draw-on `progress` animation (0 → 1) to an existing polyline/path node (the only node types
+ * `progress` animates on). Throws on any other node type rather than emitting an invalid scene. */
 export function writeOn<T extends Node>(node: T, opts: WriteOnOptions = {}): T {
+  if (node.type !== "polyline" && node.type !== "path") {
+    throw new Error(`writeOn: progress draw-on only applies to polyline/path nodes, got "${node.type}".`);
+  }
   const start = opts.start ?? 0;
-  const dur = opts.duration ?? 1.2;
+  const dur = Math.max(1e-3, opts.duration ?? 1.2);
   const track: Track = {
     property: "progress",
     keyframes: [
@@ -80,7 +84,7 @@ export function penStroke(opts: PenStrokeOptions): GroupNode {
   const pts = opts.points;
   const stroke = opts.stroke ?? "#1e293b";
   const start = opts.start ?? 0;
-  const dur = opts.duration ?? 1.2;
+  const dur = Math.max(1e-3, opts.duration ?? 1.2); // a non-positive duration would collapse the tracks
 
   const line: Node = {
     id: `${id}-line`,
@@ -141,8 +145,14 @@ export function penStroke(opts: PenStrokeOptions): GroupNode {
         { property: "x", keyframes: xk },
         { property: "y", keyframes: yk },
         {
+          // Scale the fade window to the duration so the "hold" keyframe never crosses `start`.
           property: "opacity",
-          keyframes: [...preHide, { t: start, value: 1 }, { t: start + dur - 0.05, value: 1 }, { t: start + dur, value: 0 }],
+          keyframes: [
+            ...preHide,
+            { t: start, value: 1 },
+            { t: start + dur - Math.min(0.05, dur / 2), value: 1 },
+            { t: start + dur, value: 0 },
+          ],
         },
       ],
     });
