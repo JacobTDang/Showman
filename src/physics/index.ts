@@ -6,3 +6,4 @@
 export * from "./vector.js";
 export * from "./circuit.js";
 export * from "./motion.js";
+export * from "./oscillator.js";

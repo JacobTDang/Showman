@@ -85,6 +85,101 @@ export function projectile(plane: Plane, opts: ProjectileOptions): GroupNode {
   return { id, type: "group", x: 0, y: 0, children };
 }
 
+export interface InclinedPlaneOptions {
+  id?: string;
+  /** Bottom-left corner of the ramp. */
+  x: number;
+  y: number;
+  /** Incline angle in degrees. */
+  angle: number;
+  /** Length of the incline surface (hypotenuse) in px. Default 240. */
+  length?: number;
+  rampFill?: Color;
+  /** Place a block on the incline. */
+  block?: boolean;
+  blockSize?: number;
+  blockColor?: Color;
+  showAngle?: boolean;
+  theme?: string;
+}
+
+/** A right-triangle ramp (right angle at the bottom-right) with an optional block sitting on the
+ * incline and an angle marker — the staple force-resolution / friction setup. */
+export function inclinedPlane(opts: InclinedPlaneOptions): GroupNode {
+  const id = opts.id ?? "ramp";
+  const theme = getTheme(opts.theme);
+  const a = opts.angle * DEG;
+  const L = opts.length ?? 240;
+  const base = L * Math.cos(a);
+  const rise = L * Math.sin(a);
+  const A = { x: opts.x, y: opts.y }; // bottom-left
+  const B = { x: opts.x + base, y: opts.y }; // bottom-right (right angle)
+  const C = { x: opts.x + base, y: opts.y - rise }; // top-right
+  const children: Node[] = [
+    {
+      id: `${id}-tri`,
+      type: "polyline",
+      x: 0,
+      y: 0,
+      points: [A, B, C],
+      closed: true,
+      fill: opts.rampFill ?? "#cbd5e1",
+      stroke: theme.palette.muted,
+      strokeWidth: 2,
+      lineJoin: "round",
+    },
+  ];
+  if (opts.showAngle !== false) {
+    const rad = 34;
+    children.push({
+      id: `${id}-arc`,
+      type: "arc",
+      x: A.x,
+      y: A.y,
+      radius: rad,
+      startAngle: -opts.angle,
+      endAngle: 0,
+      fill: "transparent",
+      stroke: theme.palette.text,
+      strokeWidth: 2,
+    });
+    children.push({
+      id: `${id}-ang`,
+      type: "text",
+      x: A.x + rad + 10,
+      y: A.y - rise * 0.12 - 6,
+      text: `${Math.round(opts.angle)}°`,
+      fontFamily: theme.bodyFont,
+      fontWeight: 600,
+      fontSize: 15,
+      fill: theme.palette.text,
+      align: "left",
+      baseline: "middle",
+    });
+  }
+  if (opts.block) {
+    const s = opts.blockSize ?? 44;
+    // Sit the block flush on the incline at its midpoint, rotated by -angle.
+    const mx = (A.x + C.x) / 2;
+    const my = (A.y + C.y) / 2;
+    const nx = Math.sin(a); // outward normal (up-left of the slope)
+    const ny = -Math.cos(a);
+    children.push({
+      id: `${id}-block`,
+      type: "rect",
+      x: mx + (nx * s) / 2 - s / 2,
+      y: my + (ny * s) / 2 - s / 2,
+      width: s,
+      height: s,
+      radius: 4,
+      fill: opts.blockColor ?? "#2563eb",
+      rotation: -opts.angle,
+      anchor: { x: s / 2, y: s / 2 },
+    });
+  }
+  return { id, type: "group", x: 0, y: 0, children };
+}
+
 export interface EnergyBar {
   label: string;
   value: number;
