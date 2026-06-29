@@ -18,6 +18,8 @@ export interface Force {
 }
 
 export interface ForceDiagramOptions {
+  /** Node id (and child-id prefix). Defaults to "fd" — pass distinct ids when composing several
+   * diagrams into one scene so the ids don't collide. */
   id?: string;
   /** Origin (the body). */
   x: number;
@@ -51,10 +53,12 @@ export function forceDiagram(opts: ForceDiagramOptions): GroupNode {
     const ux = Math.cos(a);
     const uy = -Math.sin(a); // screen y is down
     const len = f.magnitude * scale;
+    // Base at the body edge; tip a full `len` beyond it — so the visible arrow length is exactly
+    // `len` and the tip is always outside the body (no under-length or reversal for small forces).
     const fromX = ox + ux * r;
     const fromY = oy + uy * r;
-    const tipX = ox + ux * len;
-    const tipY = oy + uy * len;
+    const tipX = ox + ux * (r + len);
+    const tipY = oy + uy * (r + len);
     const color = f.color ?? swatch(theme, i);
 
     if (opts.showComponents) {

@@ -35,6 +35,11 @@ describe("forceDiagram", () => {
     const line = arrow.children.find((c) => c.id.endsWith("-line")) as { tracks?: { property: string }[] };
     expect(line.tracks?.[0]?.property).toBe("progress"); // grows on
   });
+  it("draws a small force (magnitude < bodyRadius) outward, not reversed into the body (review fix)", () => {
+    const d = forceDiagram({ id: "fd", x: 100, y: 100, bodyRadius: 16, forces: [{ label: "n", magnitude: 5, angle: 0 }] });
+    const lbl = kids(d).find((n) => n.id === "fd-lbl-0") as { x: number };
+    expect(lbl.x).toBeGreaterThan(100 + 16); // tip is beyond the body edge (length not reversed)
+  });
 });
 
 describe("circuit symbols", () => {
