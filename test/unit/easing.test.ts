@@ -1,30 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { applyEasing, cubicBezier, resolveEasing } from "../../src/index.js";
+import { applyEasing, cubicBezier, resolveEasing, EASING_NAMES } from "../../src/index.js";
 import type { EasingName } from "../../src/index.js";
-
-const ALL: EasingName[] = [
-  "linear",
-  "easeInQuad",
-  "easeOutQuad",
-  "easeInOutQuad",
-  "easeInCubic",
-  "easeOutCubic",
-  "easeInOutCubic",
-  "easeInSine",
-  "easeOutSine",
-  "easeInOutSine",
-  "easeInBack",
-  "easeOutBack",
-  "easeInOutBack",
-  "easeOutElastic",
-  "easeOutBounce",
-];
 
 describe("easing", () => {
   it("every named easing pins the endpoints (0->0, 1->1)", () => {
-    for (const name of ALL) {
-      expect(applyEasing(name, 0)).toBeCloseTo(0, 6);
-      expect(applyEasing(name, 1)).toBeCloseTo(1, 6);
+    expect(EASING_NAMES.length).toBeGreaterThanOrEqual(26); // the full library, not a hand-maintained subset
+    for (const name of EASING_NAMES) {
+      expect(applyEasing(name as EasingName, 0)).toBeCloseTo(0, 6);
+      expect(applyEasing(name as EasingName, 1)).toBeCloseTo(1, 6);
     }
   });
 
@@ -54,12 +37,21 @@ describe("easing", () => {
   });
 
   it("easeOutBounce has the expected bounce structure in its interior", () => {
-    // Rises fast, then settles with diminishing bounces; should overshoot toward 1
-    // near the end and never exceed 1.
     const samples = Array.from({ length: 101 }, (_, i) => applyEasing("easeOutBounce", i / 100));
     expect(Math.max(...samples)).toBeLessThanOrEqual(1 + 1e-9);
-    expect(applyEasing("easeOutBounce", 0.5)).toBeGreaterThan(0.5); // past halfway in value by midpoint
+    // The defining feature: it is NON-monotonic — it actually dips (bounces) at least once. A plain
+    // monotonic ease would pass the value checks below but never dip.
+    const dips = samples.some((v, i) => i > 0 && v < samples[i - 1]! - 1e-9);
+    expect(dips).toBe(true);
     expect(applyEasing("easeOutBounce", 0.95)).toBeGreaterThan(0.95);
+  });
+
+  it("the springs overshoot 1 and settle back to it", () => {
+    for (const name of ["easeOutSpring", "easeOutSpringy"] as const) {
+      const interior = Array.from({ length: 99 }, (_, i) => applyEasing(name, (i + 1) / 100));
+      expect(Math.max(...interior)).toBeGreaterThan(1); // springy overshoot
+      expect(applyEasing(name, 1)).toBeCloseTo(1, 6); // settles exactly at rest
+    }
   });
 
   it("easeOutElastic oscillates around 1 before settling", () => {

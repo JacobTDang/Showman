@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateScene, SPEC_VERSION, makeRng, items } from "../../src/index.js";
+import { validateScene, SPEC_VERSION, makeRng, getTheme, items } from "../../src/index.js";
 import type { SceneSpec, Node } from "../../src/index.js";
 
 const { generateItem, generateBank, quizCard, additionTemplate, multiplicationTemplate, linearEquationTemplate } = items;
@@ -64,11 +64,17 @@ describe("quizCard", () => {
     expect(rows).toHaveLength(item.choices.length);
     expect(validateScene(scene(card))).toMatchObject({ valid: true });
   });
-  it("reveal highlights only the correct row and dims the others", () => {
-    const card = quizCard({ item, x: 30, y: 30, theme: "ocean", reveal: true });
-    const correctRow = card.children.find((n) => n.id === `quiz-row-${item.correctIndex}`) as { opacity?: number };
-    const otherRow = card.children.find((n) => /-row-\d+$/.test(n.id) && n.id !== `quiz-row-${item.correctIndex}`) as { opacity?: number };
-    expect(correctRow.opacity ?? 1).toBe(1);
-    expect(otherRow.opacity).toBeLessThan(1); // dimmed
+  it("reveal highlights the correct row (accent fill) and dims the others", () => {
+    const accent = getTheme("ocean").palette.accent;
+    const plain = quizCard({ item, x: 30, y: 30, theme: "ocean" });
+    const revealed = quizCard({ item, x: 30, y: 30, theme: "ocean", reveal: true });
+    const row = (card: typeof plain, i: number) =>
+      card.children.find((n) => n.id === `quiz-row-${i}`) as { fill?: string; opacity?: number };
+    // The correct row is painted with the accent only when revealed (not before).
+    expect(row(revealed, item.correctIndex).fill).toBe(accent);
+    expect(row(plain, item.correctIndex).fill).not.toBe(accent);
+    // A non-correct row is dimmed on reveal.
+    const otherIdx = item.choices.findIndex((_, i) => i !== item.correctIndex);
+    expect(row(revealed, otherIdx).opacity).toBeLessThan(1);
   });
 });

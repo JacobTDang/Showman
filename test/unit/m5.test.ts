@@ -111,7 +111,11 @@ describe("M5.2 motion presets", () => {
 
   it("mergeTracks keeps the last track per property", () => {
     const merged = motion.mergeTracks(motion.fadeIn({ start: 0 }), motion.fadeOut({ start: 1 }));
-    expect(merged.filter((t) => t.property === "opacity").length).toBe(1);
+    const opacity = merged.filter((t) => t.property === "opacity");
+    expect(opacity).toHaveLength(1);
+    // The survivor must be fadeOut (the last), not fadeIn — fadeOut ends at 0, fadeIn ends at 1.
+    expect(opacity[0]!.keyframes[opacity[0]!.keyframes.length - 1]!.value).toBe(0);
+    expect(opacity[0]!.keyframes[0]!.value).toBe(1);
   });
 });
 
@@ -179,6 +183,14 @@ describe("M5.7 content safety", () => {
     const unsafe = await mod.check([{ text: "the gun goes bang", where: "x" }]);
     expect(unsafe.safe).toBe(false);
     expect(unsafe.findings.some((f) => f.category === "violence")).toBe(true);
+  });
+  it("catches inflected forms but not mid-word substrings or false friends", async () => {
+    for (const text of ["two guns", "he killed it", "shooting practice", "monster dies"]) {
+      expect((await mod.check([{ text, where: "x" }])).safe).toBe(false); // inflections must not slip past
+    }
+    for (const text of ["a useful skill", "a healthy diet", "the diesel engine", "a classic tale"]) {
+      expect((await mod.check([{ text, where: "x" }])).safe).toBe(true); // substrings / false friends stay safe
+    }
   });
   it("collects text from nodes and narration", () => {
     const spec: SceneSpec = {

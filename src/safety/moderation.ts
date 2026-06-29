@@ -43,9 +43,12 @@ const DEFAULT_CATEGORIES: Record<string, { severity: Severity; terms: string[] }
 };
 
 function wordRegex(term: string): RegExp {
-  // Word-ish boundary, case-insensitive. Escapes regex metachars in the term.
+  // Match the term at a word start, tolerating a common inflection (plural/past/gerund) so "guns",
+  // "killed", "shooting" are caught — without matching mid-word substrings ("skill" → no: the term
+  // must follow a non-letter) or false friends ("diet"/"diesel" → "et"/"sel" aren't valid suffixes).
+  // Case-insensitive; escapes regex metachars in the term.
   const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^a-z])${esc}([^a-z]|$)`, "i");
+  return new RegExp(`(^|[^a-z])${esc}(e?s|ed|ing|d)?([^a-z]|$)`, "i");
 }
 
 /** Fast lexical moderation. `safe` is false iff any "block"-severity term matched. */

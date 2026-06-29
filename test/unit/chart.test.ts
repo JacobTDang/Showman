@@ -115,7 +115,10 @@ describe("areaChart + scatter", () => {
         },
       ],
     });
-    expect(kids(c).filter((n) => n.id.includes("-pt-"))).toHaveLength(2);
+    const dots = kids(c).filter((n) => n.id.includes("-pt-"));
+    expect(dots).toHaveLength(2);
+    // animate:true must actually attach a pop-in (scale) track — not be a silent no-op.
+    expect((dots[0] as { tracks?: { property: string }[] }).tracks?.some((t) => t.property === "scale")).toBe(true);
     expect(ok(c)).toBe(true);
   });
 });
