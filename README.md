@@ -48,6 +48,29 @@ camera — so things *arrive* and *flow* instead of blinking into place.
 
 ---
 
+## Science, in depth
+
+Chemistry and physics go well beyond a single figure — molecular structure, reactions and energetics,
+mechanics, fields, optics, and atomic models, all exact and all engine-rendered.
+
+<div align="center">
+
+![The periodic table](docs/media/showcase-periodic.png)
+
+</div>
+
+|  |  |
+| :---: | :---: |
+| **Energetics** — reaction-coordinate diagrams + the pH scale | **Optics** — thin-lens ray diagrams with real image formation |
+| ![Energy diagram](docs/media/showcase-energy.png) | ![Ray diagram](docs/media/showcase-optics.png) |
+| **Mechanics** — projectile motion with synced energy bars | **Apparatus** — free-body diagrams + live circuit schematics |
+| ![Projectile motion](docs/media/showcase-mechanics.png) | ![Physics](docs/media/showcase-physics.png) |
+
+Plus Lewis structures, VSEPR geometry, electron configurations, Bohr atoms, titration / heating /
+phase diagrams, vector fields, oscillators, and energy-level diagrams.
+
+---
+
 ## Beautiful by default
 
 Gradients, soft shadows, film-grain backdrops, and LaTeX-quality typography come standard —

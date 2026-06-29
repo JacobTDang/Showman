@@ -350,8 +350,85 @@ function demo(): SceneSpec {
   };
 }
 
+// --- Chemistry: the periodic table -------------------------------------------------------------
+function periodicStill(): SceneSpec {
+  const pt = chem.periodicTable({ id: "pt", x: 16, y: 16, cellSize: 40, highlight: ["O", "Na", "Cl", "Fe", "Au"] });
+  return card(16 * 2 + 18 * 40, 16 * 2 + 10 * 40, [pt]);
+}
+
+// --- Chemistry: a reaction-coordinate energy diagram beside a pH scale --------------------------
+function energyStill(): SceneSpec {
+  const ed = chem.energyDiagram({
+    id: "ed",
+    x: 56,
+    y: 24,
+    width: 420,
+    height: 250,
+    reactantsLevel: 30,
+    productsLevel: 12,
+    activationPeak: 78,
+    catalystPeak: 55,
+    labels: { reactants: "reactants", products: "products" },
+  });
+  const ph = chem.phScale({ id: "ph", x: 56, y: 330, width: 420, value: 3, label: "lemon" });
+  return card(540, 380, [ed, ph], "#ffffff");
+}
+
+// --- Physics: a converging-lens ray diagram ----------------------------------------------------
+function opticsStill(): SceneSpec {
+  return card(
+    560,
+    320,
+    [physics.rayDiagram({ id: "rd", x: 24, y: 20, width: 520, height: 280, focalLength: 90, object: { distance: 190, height: 80 } })],
+    "#ffffff",
+  );
+}
+
+// --- Physics: projectile motion drawing itself onto a coordinate plane --------------------------
+function mechanicsStill(): SceneSpec {
+  const plane = math.coordinatePlane({
+    id: "p",
+    x: 56,
+    y: 24,
+    width: 460,
+    height: 300,
+    xMin: 0,
+    xMax: 10,
+    yMin: 0,
+    yMax: 5,
+    theme: "ocean",
+    step: 1,
+  });
+  const proj = physics.projectile(plane, {
+    id: "pr",
+    speed: 9.6,
+    angle: 58,
+    g: 9.8,
+    color: "#2563eb",
+    markerColor: "#f59e0b",
+    animate: false,
+  });
+  const bars = physics.energyBars({
+    id: "e",
+    x: 540,
+    y: 60,
+    width: 120,
+    height: 250,
+    bars: [
+      { label: "KE", value: 7, color: "#2563eb" },
+      { label: "PE", value: 3, color: "#16a34a" },
+    ],
+    max: 10,
+  });
+  return card(700, 360, [plane.node, proj, bars], "#f8fbfe");
+}
+
 async function main(): Promise<void> {
   still("hero", hero());
+  still("showcase-periodic", periodicStill());
+  still("showcase-energy", energyStill());
+  still("showcase-optics", opticsStill());
+  still("showcase-mechanics", mechanicsStill());
   still("showcase-math", mathStill());
   still("showcase-diagram", diagramStill());
   still("showcase-chart", chartStill());
