@@ -10,3 +10,6 @@ export * from "./reaction.js";
 export * from "./graphs.js";
 export * from "./phaseGraphs.js";
 export * from "./lewis.js";
+
+export * from "./elements.js";
+export * from "./periodicTable.js";

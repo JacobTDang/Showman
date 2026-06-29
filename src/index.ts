@@ -120,6 +120,9 @@ export type {
   PhaseDiagramOptions,
   LewisStructureOptions,
   LewisLigand,
+  PeriodicTableOptions,
+  Element,
+  ElementCategory,
 } from "./chem/index.js";
 export * as chart from "./chart/index.js";
 export type {
