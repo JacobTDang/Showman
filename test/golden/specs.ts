@@ -14,7 +14,7 @@ import { SPEC_VERSION } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { coordinatePlane, plotLine, plotFunction, fractionCircle, numberLine, buildMorph, buildMath } from "../../src/math/index.js";
 import { flowchart, table } from "../../src/diagram/index.js";
-import { reaction } from "../../src/chem/index.js";
+import { reaction, energyDiagram, phScale } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
@@ -645,6 +645,24 @@ function projectileCase(): SceneSpec {
   };
 }
 
+/** A reaction-coordinate energy diagram + a pH scale — vector + text + gradient, golden-safe. */
+function energyDiagramCase(): SceneSpec {
+  const ed = energyDiagram({
+    id: "ed",
+    x: 46,
+    y: 24,
+    width: 380,
+    height: 240,
+    reactantsLevel: 30,
+    productsLevel: 12,
+    activationPeak: 78,
+    catalystPeak: 55,
+    labels: { reactants: "reactants", products: "products" },
+  });
+  const ph = phScale({ id: "ph", x: 46, y: 320, width: 380, value: 3, label: "lemon" });
+  return { specVersion: SPEC_VERSION, width: 470, height: 370, fps: 1, duration: 1, seed: 1, background: "#ffffff", nodes: [ed, ph] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -666,6 +684,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
   },
   { name: "quiz", spec: quizCase(), frames: [0] },
   { name: "projectile", spec: projectileCase(), frames: [18] },
+  { name: "energy-diagram", spec: energyDiagramCase(), frames: [0] },
   {
     name: "handwriting",
     spec: {
