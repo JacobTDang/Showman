@@ -93,3 +93,32 @@ describe("packageLesson", () => {
     }
   });
 });
+
+describe("packaging review fixes", () => {
+  it("sets the UTF-8 (EFS) flag for non-ASCII names and rejects duplicate paths / huge files", () => {
+    expect(zipStore([file("leçon-日本.html", "x")]).readUInt16LE(6)).toBe(0x0800); // bit 11 set
+    expect(zipStore([file("a.html", "x")]).readUInt16LE(6)).toBe(0); // ASCII → no flag
+    expect(() => zipStore([file("a", "1"), file("a", "2")])).toThrow(/Duplicate/);
+  });
+
+  it("SCORM 2004 uses the 2004 CP namespace and a NCName-safe identifier", () => {
+    const m = scormManifest({ id: "https://showman.app/lessons/x", title: "T", launch: "index.html" }, [file("index.html", "")], "2004");
+    expect(m).toContain('xmlns="http://www.imsglobal.org/xsd/imscp_v1p1"');
+    expect(m).not.toContain("imsproject.org"); // not the 1.2 CP namespace
+    const id = m.match(/<manifest identifier="([^"]+)"/)![1]!;
+    expect(id).toMatch(/^M-[0-9a-f]+$/); // valid NCName, not the raw IRI (no ":" or "/")
+  });
+
+  it("packageLesson rejects a missing launch file and a manifest collision", () => {
+    expect(() =>
+      packageLesson({ meta: { id: "i", title: "t", launch: "player.html" }, format: "scorm12", files: [file("other.html", "x")] }),
+    ).toThrow(/Launch file/);
+    expect(() =>
+      packageLesson({
+        meta: { id: "i", title: "t", launch: "index.html" },
+        format: "scorm12",
+        files: [file("index.html", "x"), file("imsmanifest.xml", "evil")],
+      }),
+    ).toThrow(/collides/);
+  });
+});

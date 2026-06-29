@@ -4,6 +4,8 @@
  * Pure string builders; all author-supplied text is XML-escaped.
  */
 
+import { createHash } from "node:crypto";
+
 export interface PackageFile {
   /** Path within the package (forward slashes). */
   path: string;
@@ -23,21 +25,26 @@ const ESC: Record<string, string> = { "<": "&lt;", ">": "&gt;", "&": "&amp;", "'
 const esc = (s: string): string => s.replace(/[<>&'"]/g, (c) => ESC[c]!);
 const norm = (p: string): string => p.replace(/\\/g, "/");
 
+/** A schema-safe NCName for a SCORM/CC manifest `identifier` (xs:ID): a stable hash of the id,
+ * so an IRI/arbitrary id (which can't be an NCName) still yields a valid, unique identifier. */
+const safeId = (s: string): string => `M-${createHash("sha1").update(s).digest("hex").slice(0, 24)}`;
+
 /** `<file href="…"/>` lines for every bundled file (the manifest itself is excluded). */
 function fileEntries(files: PackageFile[]): string {
   return files.map((f) => `      <file href="${esc(norm(f.path))}"/>`).join("\n");
 }
 
 export function scormManifest(meta: LessonMeta, files: PackageFile[], version: "1.2" | "2004" = "1.2"): string {
-  const id = esc(meta.id);
+  const id = safeId(meta.id); // @identifier is xs:ID (NCName) — an IRI would be invalid
   const title = esc(meta.title);
   const launch = esc(norm(meta.launch ?? "index.html"));
   const schemaVer = version === "1.2" ? "1.2" : "2004 4th Edition";
+  const cpNs = version === "1.2" ? "http://www.imsproject.org/xsd/imscp_rootv1p1p2" : "http://www.imsglobal.org/xsd/imscp_v1p1";
   const adlcpNs = version === "1.2" ? "http://www.adlnet.org/xsd/adlcp_rootv1p2" : "http://www.adlnet.org/xsd/adlcp_v1p3";
   const scormType = version === "1.2" ? "adlcp:scormtype" : "adlcp:scormType";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <manifest identifier="${id}" version="1.0"
-  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns="${cpNs}"
   xmlns:adlcp="${adlcpNs}">
   <metadata><schema>ADL SCORM</schema><schemaversion>${schemaVer}</schemaversion></metadata>
   <organizations default="ORG">
@@ -76,7 +83,7 @@ export function cmi5Manifest(meta: LessonMeta): string {
 }
 
 export function commonCartridgeManifest(meta: LessonMeta, files: PackageFile[]): string {
-  const id = esc(meta.id);
+  const id = safeId(meta.id); // @identifier is xs:ID (NCName)
   const title = esc(meta.title);
   const launch = esc(norm(meta.launch ?? "index.html"));
   return `<?xml version="1.0" encoding="UTF-8"?>
