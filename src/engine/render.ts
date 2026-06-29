@@ -249,19 +249,17 @@ function applyGrain(ctx: SKRSContext2D, width: number, height: number, rng: Rng,
 /** The Skia gradient type (@napi-rs/canvas doesn't export it by name). */
 type SkGradient = ReturnType<SKRSContext2D["createLinearGradient"]>;
 
-/** Build a Skia gradient from a spec (local coordinates). Stops are clamped to [0,1]. */
+/** Build a Skia gradient from a spec (local coordinates). Stops are clamped to [0,1]. Inner-circle
+ * fields are coerced to safe values (defense-in-depth: never pass NaN/undefined to Skia). */
 function buildGradient(ctx: SKRSContext2D, g: Gradient): SkGradient {
-  const grad =
-    g.type === "linear"
-      ? ctx.createLinearGradient(g.from.x, g.from.y, g.to.x, g.to.y)
-      : ctx.createRadialGradient(
-          (g.innerCenter ?? g.center).x,
-          (g.innerCenter ?? g.center).y,
-          Math.max(0, g.innerRadius ?? 0),
-          g.center.x,
-          g.center.y,
-          Math.max(0, g.radius),
-        );
+  let grad: SkGradient;
+  if (g.type === "linear") {
+    grad = ctx.createLinearGradient(g.from.x, g.from.y, g.to.x, g.to.y);
+  } else {
+    const ic = g.innerCenter && Number.isFinite(g.innerCenter.x) && Number.isFinite(g.innerCenter.y) ? g.innerCenter : g.center;
+    const ir = Number.isFinite(g.innerRadius) ? Math.max(0, g.innerRadius!) : 0;
+    grad = ctx.createRadialGradient(ic.x, ic.y, ir, g.center.x, g.center.y, Math.max(0, g.radius));
+  }
   for (const s of g.stops) grad.addColorStop(Math.max(0, Math.min(1, s.offset)), normalizeColor(s.color));
   return grad;
 }
@@ -284,14 +282,18 @@ function applyShadow(ctx: SKRSContext2D, s: Shadow): void {
   ctx.shadowOffsetY = Number.isFinite(oy) ? oy : 0;
 }
 
-/** Apply a stroke dash pattern if the node declares a valid one (otherwise leave solid). */
+/** Apply a stroke dash pattern if the node declares a valid one (otherwise leave solid). Requires at
+ * least one positive entry — an all-zero pattern crashes Skia — and a sane total to avoid a tiny-dash
+ * segment-count blowup (defense-in-depth; the validator already rejects these). */
 function applyDash(ctx: SKRSContext2D, res: NodeResolver): void {
   const dash = res.raw("dash");
-  if (Array.isArray(dash) && dash.length > 0 && dash.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) {
-    ctx.setLineDash(dash as number[]);
-    const off = res.num("dashOffset", 0);
-    ctx.lineDashOffset = Number.isFinite(off) ? off : 0;
-  }
+  if (!Array.isArray(dash) || dash.length === 0) return;
+  if (!dash.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return;
+  const sum = (dash as number[]).reduce((a, b) => a + b, 0);
+  if (!dash.some((n) => (n as number) > 0) || sum < 1) return;
+  ctx.setLineDash(dash as number[]);
+  const off = res.num("dashOffset", 0);
+  ctx.lineDashOffset = Number.isFinite(off) ? off : 0;
 }
 
 function applyFillAndStroke(
@@ -394,12 +396,12 @@ function paintLine(
   ctx: SKRSContext2D,
   str: string,
   y: number,
-  fill: string | undefined,
+  fillStyle: string | SkGradient | undefined,
   stroke: string | undefined,
   strokeWidth: number,
 ): void {
-  if (fill !== undefined && fill !== "transparent") {
-    ctx.fillStyle = normalizeColor(fill);
+  if (fillStyle !== undefined) {
+    ctx.fillStyle = fillStyle;
     ctx.fillText(str, 0, y);
   }
   if (stroke !== undefined && stroke !== "transparent" && strokeWidth > 0) {
@@ -430,10 +432,13 @@ function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, default
   const hasLetterSpacing = Number.isFinite(letterSpacing) && letterSpacing !== 0;
   if (hasLetterSpacing) ctx.letterSpacing = `${letterSpacing}px`;
 
+  // A gradient (if present) overrides the solid fill, like shapes; else the resolved fill color.
+  const fillStyle = resolveFillStyle(ctx, res, fill);
+
   const maxWidth = res.numOpt("maxWidth");
   // Fast path: a single line with no wrapping is painted exactly as before (byte-identical).
   if (!str.includes("\n") && (maxWidth === undefined || !(maxWidth > 0))) {
-    paintLine(ctx, str, 0, fill, stroke, strokeWidth);
+    paintLine(ctx, str, 0, fillStyle, stroke, strokeWidth);
   } else {
     const lines = wrapText(str, maxWidth, (s) => ctx.measureText(s).width);
     const lineHeightPx = Math.max(0, res.num("lineHeight", 1.25)) * fontSize;
@@ -441,7 +446,7 @@ function paintGlyphs(ctx: SKRSContext2D, res: NodeResolver, str: string, default
     const base = ctx.textBaseline;
     // Position the block so the chosen baseline still anchors at the node origin.
     const y0 = base === "middle" ? -((n - 1) / 2) * lineHeightPx : base === "bottom" || base === "alphabetic" ? -(n - 1) * lineHeightPx : 0;
-    for (let i = 0; i < n; i++) paintLine(ctx, lines[i]!, y0 + i * lineHeightPx, fill, stroke, strokeWidth);
+    for (let i = 0; i < n; i++) paintLine(ctx, lines[i]!, y0 + i * lineHeightPx, fillStyle, stroke, strokeWidth);
   }
 
   if (hasLetterSpacing) ctx.letterSpacing = "0px"; // reset shared ctx state
@@ -538,7 +543,8 @@ function drawPath(ctx: SKRSContext2D, res: NodeResolver): void {
   const d = res.raw("d");
   if (typeof d !== "string" || d.trim() === "") return;
   const fill = res.color("fill");
-  const stroke = res.color("stroke") ?? (fill === undefined ? "#000000" : undefined);
+  const hasGradient = typeof res.raw("gradient") === "object" && res.raw("gradient") !== null;
+  const stroke = res.color("stroke") ?? (fill === undefined && !hasGradient ? "#000000" : undefined);
   const strokeWidth = Math.max(0, res.num("strokeWidth", 2));
   const progress = Math.max(0, Math.min(1, res.num("progress", 1)));
   if (progress <= 0) return;
