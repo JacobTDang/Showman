@@ -29,7 +29,8 @@
     "worker": "node dist/service/worker.js",
     "coordinator": "node dist/distributed/coordinatorMain.js",
     "shard-worker": "node dist/distributed/remoteWorkerMain.js",
-    "mcp": "node dist/mcp/main.js"
+    "mcp": "node dist/mcp/main.js",
+    "interaction-demo": "tsx scripts/interaction-demo.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

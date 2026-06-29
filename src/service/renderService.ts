@@ -15,6 +15,8 @@ import { renderFrame } from "../engine/render.js";
 import { totalFrames, LIMITS } from "../spec/schema.js";
 import { encodeSceneToFile } from "../encode/encodeVideo.js";
 import { describeScene, type SchemaDescription } from "../spec/describe.js";
+import { validateInteractions, toInteractionsJson } from "../interaction/index.js";
+import type { InteractionTrack } from "../interaction/types.js";
 import type { ObjectStorage, StoredObject } from "./storage.js";
 import { synthesizeNarration, narrationCharCount, measureNarration, fitSceneDuration, type TtsProvider } from "../audio/tts.js";
 import { muxAudioVideo } from "../audio/mux.js";
@@ -30,6 +32,8 @@ export interface RenderOptions {
   narrate?: boolean;
   /** Emit WebVTT + SRT caption sidecars from the narration. Default true. */
   captions?: boolean;
+  /** Emit the interactions.json sidecar when the scene has interactions. Default true. */
+  interactions?: boolean;
   /** Run the content-safety gate before rendering. Default true (when a provider is configured). */
   moderate?: boolean;
   /** Extend the scene duration to fit real narration audio (avoids a truncated last line). Default false. */
@@ -59,6 +63,8 @@ export interface RenderSuccess {
   captions?: StoredObject;
   /** SubRip (.srt) caption sidecar, alongside the WebVTT one. */
   captionsSrt?: StoredObject;
+  /** Interaction sidecar (`interactions.json`), when the scene has interactions. */
+  interactions?: StoredObject;
   hasAudio: boolean;
   width: number;
   height: number;
@@ -180,6 +186,7 @@ export class RenderService {
 
     const wantNarration = !!scene.narration?.segments?.length && options.narrate !== false && !!this.tts;
     const wantCaptions = !!scene.narration?.segments?.length && options.captions !== false;
+    const wantInteractions = !!scene.interactions?.cues?.length && options.interactions !== false;
 
     // Cost/abuse guard: cap total narration characters BEFORE any (paid) TTS call — including
     // the measureNarration pass below (which synthesizes every segment to measure it).
@@ -216,11 +223,20 @@ export class RenderService {
       }
     }
 
-    const key = this.jobKey(renderScene, options);
+    // The mp4 is interaction-blind, so the video cache key excludes interactions — editing a
+    // quiz over a stable video reuses the encode and only the sidecar is rewritten.
+    const key = this.jobKey({ ...renderScene, interactions: undefined }, options);
     const captionKey = key.replace(/\.mp4$/, ".vtt");
+    const interKey = key.replace(/\.mp4$/, ".interactions.json");
     const existing = await this.storage.stat(key);
     const fps = renderScene.fps;
     const frameCount = totalFrames(renderScene.fps, renderScene.duration);
+    // Fail fast on a malformed track — validated against the SAME (fitted, frame-rounded)
+    // duration the emitted sidecar uses, before any expensive encode.
+    if (wantInteractions) {
+      const iErrors = validateInteractions(renderScene.interactions!, { duration: frameCount / fps });
+      if (iErrors.length > 0) throw new Error(`Invalid interactions: ${iErrors.map((e) => `${e.path}: ${e.message}`).join("; ")}`);
+    }
     if (existing) {
       let caps: { captions: StoredObject; captionsSrt: StoredObject } | undefined;
       if (wantCaptions) {
@@ -231,10 +247,13 @@ export class RenderService {
         caps =
           vtt && srt ? { captions: vtt, captionsSrt: srt } : await this.putCaptions(captionKey, renderScene.narration!, frameCount / fps);
       }
+      // Always rewrite the sidecar from the current interactions (the video key ignores them).
+      const inter = wantInteractions ? await this.putInteractions(interKey, renderScene.interactions!, frameCount / fps) : undefined;
       return {
         ok: true,
         video: existing,
         ...(caps ?? {}),
+        ...(inter ? { interactions: inter } : {}),
         hasAudio: wantNarration,
         width: renderScene.width,
         height: renderScene.height,
@@ -273,11 +292,13 @@ export class RenderService {
       const caps = wantCaptions
         ? await this.putCaptions(captionKey, renderScene.narration!, frameCount / fps, segmentDurations)
         : undefined;
+      const inter = wantInteractions ? await this.putInteractions(interKey, renderScene.interactions!, frameCount / fps) : undefined;
 
       return {
         ok: true,
         video,
         ...(caps ?? {}),
+        ...(inter ? { interactions: inter } : {}),
         hasAudio: wantNarration,
         width: renderScene.width,
         height: renderScene.height,
@@ -307,5 +328,14 @@ export class RenderService {
       "application/x-subrip",
     );
     return { captions, captionsSrt };
+  }
+
+  /** Validate and write the interactions.json sidecar; throws on an invalid track. */
+  private async putInteractions(interKey: string, track: InteractionTrack, sceneDuration: number): Promise<StoredObject> {
+    const errors = validateInteractions(track, { duration: sceneDuration });
+    if (errors.length > 0) {
+      throw new Error(`Invalid interactions: ${errors.map((e) => `${e.path}: ${e.message}`).join("; ")}`);
+    }
+    return this.storage.put(interKey, Buffer.from(toInteractionsJson(track), "utf8"), "application/json");
   }
 }

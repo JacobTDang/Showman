@@ -66,7 +66,7 @@ export interface ValidationResult {
   errors: ValidationError[];
 }
 
-const TOP_LEVEL_KEYS = ["specVersion", "width", "height", "fps", "duration", "seed", "background", "nodes", "narration"];
+const TOP_LEVEL_KEYS = ["specVersion", "width", "height", "fps", "duration", "seed", "background", "nodes", "narration", "interactions"];
 
 const TEXT_ALIGN = ["left", "center", "right"];
 const TEXT_BASELINE = ["top", "middle", "alphabetic", "bottom"];

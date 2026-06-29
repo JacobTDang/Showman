@@ -10,6 +10,8 @@
  * is independent of fps and re-rendering at a different fps preserves motion.
  */
 
+import type { InteractionTrack } from "../interaction/types.js";
+
 /** A color string: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb(...)`, `rgba(...)`, or a supported named color. */
 export type Color = string;
 
@@ -308,4 +310,7 @@ export interface SceneSpec {
   nodes: Node[];
   /** Reserved for M5. Ignored by the M0 renderer. */
   narration?: NarrationTrack;
+  /** Interaction sidecar (quizzes / pauses / hotspots). Ignored by the renderer; emitted
+   * as `interactions.json` and overlaid by the player. See {@link InteractionTrack}. */
+  interactions?: InteractionTrack;
 }
