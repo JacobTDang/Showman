@@ -8,3 +8,4 @@ export * from "./equation.js";
 export * from "./molecule.js";
 export * from "./reaction.js";
 export * from "./graphs.js";
+export * from "./phaseGraphs.js";
