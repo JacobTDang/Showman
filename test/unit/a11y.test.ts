@@ -32,6 +32,33 @@ describe("flash safety (WCAG 2.3.1)", () => {
     expect(r.passed).toBe(false);
     expect(r.findings.some((f) => f.code === "flash" && f.severity === "serious")).toBe(true);
   });
+  it("flags a smoothly-keyframed (sine-sampled) full-amplitude strobe (review: false-negative fix)", () => {
+    const kfs: Keyframe[] = [];
+    const freq = 6;
+    const samplesPerCycle = 8;
+    const dt = 1 / (freq * samplesPerCycle);
+    for (let i = 0; i < 6 * samplesPerCycle; i++) {
+      const p = (i / samplesPerCycle) * 2 * Math.PI;
+      kfs.push({ t: i * dt, value: (1 - Math.cos(p)) / 2 }); // raised sine 0..1, 6 Hz
+    }
+    const r = auditScene(
+      scene([
+        { id: "glow", type: "rect", x: 0, y: 0, width: 50, height: 50, fill: "#fff", tracks: [{ property: "opacity", keyframes: kfs }] },
+      ]),
+    );
+    expect(r.passed).toBe(false);
+    expect(r.findings.some((f) => f.code === "flash")).toBe(true);
+  });
+  it("does not flag a smooth, finely-sampled single fade-in (no false positive)", () => {
+    const kfs: Keyframe[] = [];
+    for (let i = 0; i <= 20; i++) kfs.push({ t: i * 0.05, value: i / 20 }); // monotonic 0→1 over 1s
+    const r = auditScene(
+      scene([
+        { id: "fade", type: "rect", x: 0, y: 0, width: 50, height: 50, fill: "#000", tracks: [{ property: "opacity", keyframes: kfs }] },
+      ]),
+    );
+    expect(r.findings.some((f) => f.code === "flash")).toBe(false);
+  });
   it("does not flag a slow flash (≤ 3/second)", () => {
     const r = auditScene(
       scene([
