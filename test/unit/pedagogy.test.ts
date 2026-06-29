@@ -52,6 +52,13 @@ describe("branching graph", () => {
   it("flags a missing start", () => {
     expect(validateGraph({ start: "ghost", segments: [{ id: "a" }] }).map((p) => p.code)).toContain("MISSING_START");
   });
+  it("reachability follows the runtime (first-wins) edge on duplicate ids (review fix)", () => {
+    const g: pedagogy.LessonGraph = { start: "a", segments: [{ id: "a", next: "b" }, { id: "a", next: "c" }, { id: "b" }, { id: "c" }] };
+    const probs = validateGraph(g);
+    expect(walk(g, ["x"])).toEqual(["a", "b"]); // runtime takes the first 'a' → b
+    expect(probs.some((p) => p.code === "UNREACHABLE" && p.segmentId === "b")).toBe(false); // b IS reached
+    expect(probs.some((p) => p.code === "UNREACHABLE" && p.segmentId === "c")).toBe(true); // c is the dead one
+  });
 });
 
 describe("hint ladder", () => {
@@ -91,5 +98,10 @@ describe("hintCard", () => {
       nodes: [card as Node],
     };
     expect(validateScene(spec)).toMatchObject({ valid: true });
+  });
+  it("grows the card for multi-line (newline) hints so text doesn't overflow (review fix)", () => {
+    const cardH = (h: string): number =>
+      (hintCard({ hint: h, x: 0, y: 0 }).children.find((n) => n.id.endsWith("-card")) as { height: number }).height;
+    expect(cardH("a\nb\nc\nd\ne\nf")).toBeGreaterThan(cardH("short") * 2);
   });
 });
