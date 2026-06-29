@@ -60,6 +60,45 @@ export function popIn(opts: TimingOptions = {}): Track[] {
   ];
 }
 
+/** Pop in with a true spring settle (scale 0 → 1 via easeOutSpring + fade) — livelier than popIn. */
+export function springIn(opts: TimingOptions = {}): Track[] {
+  const { t0, t1 } = window(opts, 0.7);
+  return [
+    {
+      property: "opacity",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t0 + (t1 - t0) * 0.4, value: 1, easing: "easeOutQuad" },
+      ],
+    },
+    {
+      property: "scale",
+      keyframes: [
+        { t: t0, value: 0 },
+        { t: t1, value: 1, easing: "easeOutSpring" },
+      ],
+    },
+  ];
+}
+
+export interface FollowPathOptions extends TimingOptions {
+  /** Waypoints in parent coordinates; the node's x/y animate through them in order. */
+  points: { x: number; y: number }[];
+}
+
+/** Animate a node along a path of waypoints (x/y tracks timed evenly across the window). */
+export function followPath(opts: FollowPathOptions): Track[] {
+  const pts = opts.points;
+  if (pts.length < 2) return [];
+  const { t0, t1 } = window(opts, 1);
+  const at = (i: number): number => t0 + ((t1 - t0) * i) / (pts.length - 1);
+  const track = (axis: "x" | "y"): Track => ({
+    property: axis,
+    keyframes: pts.map((p, i) => ({ t: at(i), value: p[axis], ...(i > 0 && opts.easing !== undefined ? { easing: opts.easing } : {}) })),
+  });
+  return [track("x"), track("y")];
+}
+
 /** Spin in (rotation -180 → 0 with overshoot, plus fade). */
 export function spinIn(opts: TimingOptions = {}): Track[] {
   const { t0, t1 } = window(opts);

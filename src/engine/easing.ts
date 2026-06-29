@@ -16,8 +16,32 @@ const c1 = 1.70158; // back overshoot
 const c2 = c1 * 1.525;
 const c3 = c1 + 1;
 const c4 = (2 * Math.PI) / 3; // elastic
+const c5 = (2 * Math.PI) / 4.5; // in-out elastic
 const n1 = 7.5625; // bounce
 const d1 = 2.75;
+
+function outBounce(t: number): number {
+  if (t < 1 / d1) return n1 * t * t;
+  if (t < 2 / d1) {
+    const u = t - 1.5 / d1;
+    return n1 * u * u + 0.75;
+  }
+  if (t < 2.5 / d1) {
+    const u = t - 2.25 / d1;
+    return n1 * u * u + 0.9375;
+  }
+  const u = t - 2.625 / d1;
+  return n1 * u * u + 0.984375;
+}
+
+/** A closed-form damped spring settling to 1 (overshoots, then oscillates to rest). */
+function spring(damping: number, freq: number): (t: number) => number {
+  return (t) => {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    return 1 - Math.exp(-damping * t) * Math.cos(freq * t);
+  };
+}
 
 const NAMED: Record<EasingName, (t: number) => number> = {
   linear: (t) => t,
@@ -30,6 +54,22 @@ const NAMED: Record<EasingName, (t: number) => number> = {
   easeOutCubic: (t) => 1 - Math.pow(1 - t, 3),
   easeInOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
 
+  easeInQuart: (t) => t * t * t * t,
+  easeOutQuart: (t) => 1 - Math.pow(1 - t, 4),
+  easeInOutQuart: (t) => (t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2),
+
+  easeInQuint: (t) => t * t * t * t * t,
+  easeOutQuint: (t) => 1 - Math.pow(1 - t, 5),
+  easeInOutQuint: (t) => (t < 0.5 ? 16 * Math.pow(t, 5) : 1 - Math.pow(-2 * t + 2, 5) / 2),
+
+  easeInExpo: (t) => (t === 0 ? 0 : Math.pow(2, 10 * t - 10)),
+  easeOutExpo: (t) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+  easeInOutExpo: (t) => (t === 0 ? 0 : t === 1 ? 1 : t < 0.5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2),
+
+  easeInCirc: (t) => 1 - Math.sqrt(1 - Math.pow(t, 2)),
+  easeOutCirc: (t) => Math.sqrt(1 - Math.pow(t - 1, 2)),
+  easeInOutCirc: (t) => (t < 0.5 ? (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) / 2 : (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1) / 2),
+
   easeInSine: (t) => 1 - Math.cos((t * Math.PI) / 2),
   easeOutSine: (t) => Math.sin((t * Math.PI) / 2),
   easeInOutSine: (t) => -(Math.cos(Math.PI * t) - 1) / 2,
@@ -39,25 +79,30 @@ const NAMED: Record<EasingName, (t: number) => number> = {
   easeInOutBack: (t) =>
     t < 0.5 ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2 : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2,
 
+  easeInElastic: (t) => {
+    if (t === 0) return 0;
+    if (t === 1) return 1;
+    return -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+  },
   easeOutElastic: (t) => {
     if (t === 0) return 0;
     if (t === 1) return 1;
     return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
   },
-
-  easeOutBounce: (t) => {
-    if (t < 1 / d1) return n1 * t * t;
-    if (t < 2 / d1) {
-      const u = t - 1.5 / d1;
-      return n1 * u * u + 0.75;
-    }
-    if (t < 2.5 / d1) {
-      const u = t - 2.25 / d1;
-      return n1 * u * u + 0.9375;
-    }
-    const u = t - 2.625 / d1;
-    return n1 * u * u + 0.984375;
+  easeInOutElastic: (t) => {
+    if (t === 0) return 0;
+    if (t === 1) return 1;
+    return t < 0.5
+      ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2
+      : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
   },
+
+  easeInBounce: (t) => 1 - outBounce(1 - t),
+  easeOutBounce: outBounce,
+  easeInOutBounce: (t) => (t < 0.5 ? (1 - outBounce(1 - 2 * t)) / 2 : (1 + outBounce(2 * t - 1)) / 2),
+
+  easeOutSpring: spring(7, 9),
+  easeOutSpringy: spring(5, 14),
 };
 
 /** Evaluate a cubic-bezier easing `[x1, y1, x2, y2]` at progress `t` (CSS semantics). */
