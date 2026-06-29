@@ -17,6 +17,7 @@ import { flowchart, table } from "../../src/diagram/index.js";
 import { reaction } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
+import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -497,6 +498,38 @@ function codeCase(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 380, height: 150, fps: 1, duration: 1, seed: 1, background: "#e2e8f0", nodes: [node] };
 }
 
+/** Physics: a free-body diagram beside a small circuit (battery–resistor–lamp). All polylines /
+ * ellipses / text — no blur or gradient — so it's deterministic cross-platform. */
+function physicsCase(): SceneSpec {
+  const fbd = forceDiagram({
+    id: "fd",
+    x: 110,
+    y: 80,
+    bodyLabel: "m",
+    bodyRadius: 18,
+    forces: [
+      { label: "N", magnitude: 50, angle: 90, color: "#16a34a" },
+      { label: "mg", magnitude: 50, angle: 270, color: "#dc2626" },
+      { label: "F", magnitude: 70, angle: 0, color: "#2563eb" },
+    ],
+  });
+  const b = battery({ id: "b", x: 40, y: 210, label: "9V" });
+  const r = resistor({ id: "r", x: 150, y: 210, label: "R" });
+  const l = lamp({ id: "l", x: 260, y: 210 });
+  const w = wire({ id: "w", points: [b.b, r.a] });
+  const w2 = wire({ id: "w2", points: [r.b, l.a] });
+  return {
+    specVersion: SPEC_VERSION,
+    width: 360,
+    height: 280,
+    fps: 1,
+    duration: 1,
+    seed: 1,
+    background: "#f8fafc",
+    nodes: [fbd, w, w2, b.node, r.node, l.node],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -505,6 +538,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "chemistry", spec: chemistry(), frames: [0] },
   { name: "chart", spec: chartCase(), frames: [0] },
   { name: "code", spec: codeCase(), frames: [0] },
+  { name: "physics", spec: physicsCase(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
