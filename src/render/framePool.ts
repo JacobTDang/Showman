@@ -12,6 +12,7 @@
 import { Worker } from "node:worker_threads";
 import { availableParallelism } from "node:os";
 import { renderFrame } from "../engine/render.js";
+import { prepareImages } from "../engine/imageRegistry.js";
 import type { SceneSpec } from "../spec/types.js";
 
 export interface RenderedFrame {
@@ -73,11 +74,12 @@ export class FramePool {
 
   /** Spawn the workers (idempotent). On any failure, the pool runs sequentially. */
   async start(): Promise<void> {
-    if (this.started || this.sequentialMode) {
-      this.started = true;
-      return;
-    }
+    if (this.started) return;
     this.started = true;
+    // Populate this (main) thread's image registry too, so the <=1-frame fast path and the
+    // sequential fallback decode images identically to the workers.
+    await prepareImages(this.spec);
+    if (this.sequentialMode) return;
     let handles: Worker[] = [];
     try {
       const { url, execArgv } = workerEntry();

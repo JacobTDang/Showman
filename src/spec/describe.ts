@@ -26,6 +26,7 @@ const REQUIRED_BY_TYPE: Record<string, string[]> = {
   group: ["children"],
   polyline: ["points"],
   path: ["d"],
+  image: ["src"],
 };
 
 export interface SchemaDescription {
