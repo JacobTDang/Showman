@@ -20,6 +20,8 @@ import { codeBlock } from "../../src/code/index.js";
 import { forceDiagram, battery, resistor, lamp, wire } from "../../src/physics/index.js";
 import { icon, iconNames } from "../../src/icon/index.js";
 import { titleCard } from "../../src/brand/index.js";
+import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/index.js";
+import { makeRng } from "../../src/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -583,6 +585,13 @@ function cameraCase(): SceneSpec {
   };
 }
 
+/** A multiple-choice quiz card (parametric item) with the correct answer revealed. Rect + text. */
+function quizCase(): SceneSpec {
+  const item = generateItem(multiplicationTemplate, makeRng(1));
+  const card = quizCard({ id: "quiz", item, x: 30, y: 24, width: 440, theme: "ocean", reveal: true });
+  return { specVersion: SPEC_VERSION, width: 500, height: 360, fps: 1, duration: 1, seed: 1, background: "#eef2f7", nodes: [card] };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -602,6 +611,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
     ),
     frames: [0],
   },
+  { name: "quiz", spec: quizCase(), frames: [0] },
   { name: "path-morph", spec: pathMorph(), frames: [0] },
   { name: "math-typeset", spec: mathTypeset(), frames: [0] },
   { name: "compositing", spec: compositing(), frames: [0] },
