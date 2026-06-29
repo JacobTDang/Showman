@@ -24,6 +24,7 @@ import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/
 import { makeRng } from "../../src/index.js";
 import { hintCard } from "../../src/pedagogy/index.js";
 import { penStroke } from "../../src/handwriting/index.js";
+import { projectile, energyBars } from "../../src/physics/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -594,6 +595,56 @@ function quizCase(): SceneSpec {
   return { specVersion: SPEC_VERSION, width: 500, height: 360, fps: 1, duration: 1, seed: 1, background: "#eef2f7", nodes: [card] };
 }
 
+/** Projectile motion mid-flight: a self-drawing parabola + a ball + energy bars. Vector + text. */
+function projectileCase(): SceneSpec {
+  const plane = coordinatePlane({
+    id: "p",
+    x: 50,
+    y: 24,
+    width: 380,
+    height: 250,
+    xMin: 0,
+    xMax: 10,
+    yMin: 0,
+    yMax: 5,
+    theme: "ocean",
+    step: 1,
+  });
+  const proj = projectile(plane, {
+    id: "pr",
+    speed: 9.6,
+    angle: 55,
+    g: 9.8,
+    color: "#2563eb",
+    markerColor: "#f59e0b",
+    animate: true,
+    start: 0,
+    duration: 2,
+  });
+  const bars = energyBars({
+    id: "e",
+    x: 470,
+    y: 40,
+    width: 130,
+    height: 230,
+    bars: [
+      { label: "KE", value: 7, color: "#2563eb" },
+      { label: "PE", value: 3, color: "#16a34a" },
+    ],
+    max: 10,
+  });
+  return {
+    specVersion: SPEC_VERSION,
+    width: 630,
+    height: 320,
+    fps: 24,
+    duration: 2.2,
+    seed: 1,
+    background: "#f8fbfe",
+    nodes: [plane.node, proj, bars],
+  };
+}
+
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "shapes", spec: shapes, frames: [0] },
   { name: "typography", spec: typography(), frames: [0] },
@@ -614,6 +665,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
     frames: [0],
   },
   { name: "quiz", spec: quizCase(), frames: [0] },
+  { name: "projectile", spec: projectileCase(), frames: [18] },
   {
     name: "handwriting",
     spec: {

@@ -8,7 +8,7 @@
  * use two of the same builder in one scene.
  */
 
-import type { Node, GroupNode, PolylineNode, Color } from "../spec/types.js";
+import type { Node, GroupNode, PolylineNode, Color, Track, EasingSpec } from "../spec/types.js";
 import { getTheme, idGen, fmtTick, clamp, finiteNum, posSize, intCount, type Theme } from "./shared.js";
 
 // ───────────────────────── Coordinate plane + graphing (algebra) ─────────────────────────
@@ -236,6 +236,111 @@ export function plotFunction(
     stroke: style.stroke ?? plane.theme.palette.primary,
     strokeWidth: style.strokeWidth ?? 4,
     lineJoin: "round",
+  };
+}
+
+/**
+ * Plot a parametric curve `t → {x, y}` (data coords) onto a plane — the foundation for trajectories
+ * (projectile, circular motion, orbits) that `plotFunction`'s single-valued y=f(x) can't express.
+ * Sampled at build time; non-finite and out-of-range points are dropped so the spec stays valid.
+ */
+export function plotParametric(
+  plane: Plane,
+  fn: (t: number) => { x: number; y: number },
+  opts: { tMin?: number; tMax?: number; samples?: number } = {},
+  style: PlotStyle = {},
+): PolylineNode {
+  const samples = intCount(opts.samples, 96);
+  const tMin = finiteNum(opts.tMin, 0);
+  const tMax = finiteNum(opts.tMax, 1);
+  const { xMin, xMax, yMin, yMax } = plane.range;
+  const eps = (yMax - yMin) * 1e-9;
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = samples > 0 ? tMin + ((tMax - tMin) * i) / samples : tMin;
+    const d = fn(t);
+    if (!d || !Number.isFinite(d.x) || !Number.isFinite(d.y)) continue;
+    if (d.x < xMin - eps || d.x > xMax + eps || d.y < yMin - eps || d.y > yMax + eps) continue; // clip to box
+    points.push(plane.toLocal(d.x, d.y));
+  }
+  const pts = points.length >= 2 ? points : [plane.toLocal(xMin, yMin), plane.toLocal(xMax, yMin)];
+  return {
+    id: style.id ?? `${plane.idPrefix}-param`,
+    type: "polyline",
+    x: plane.originX,
+    y: plane.originY,
+    points: pts,
+    stroke: style.stroke ?? plane.theme.palette.primary,
+    strokeWidth: style.strokeWidth ?? 4,
+    lineJoin: "round",
+  };
+}
+
+export interface MovingMarkerOptions {
+  id?: string;
+  tMin?: number;
+  tMax?: number;
+  /** Animation window in seconds. */
+  start?: number;
+  duration?: number;
+  samples?: number;
+  radius?: number;
+  fill?: Color;
+  /** Optional easing of the time parameter; omit for physically-correct constant Δt (speed = |dr/dt|). */
+  easing?: EasingSpec;
+}
+
+/**
+ * A marker (dot) that rides a parametric trajectory over a time window. Because the samples are spaced
+ * at uniform Δt and the keyframes at uniform time, the marker's on-screen speed equals |dr/dt| — it
+ * naturally slows at a projectile's apex and speeds up falling, with no per-frame engine work.
+ */
+export function movingMarker(plane: Plane, traj: (t: number) => { x: number; y: number }, opts: MovingMarkerOptions = {}): Node {
+  const samples = Math.max(2, intCount(opts.samples, 60));
+  const tMin = finiteNum(opts.tMin, 0);
+  const tMax = finiteNum(opts.tMax, 1);
+  const start = finiteNum(opts.start, 0);
+  const dur = Math.max(1e-3, finiteNum(opts.duration, 2));
+  const r = finiteNum(opts.radius, 7);
+  const { xMin, xMax, yMin, yMax } = plane.range;
+  const xk: Track["keyframes"] = [];
+  const yk: Track["keyframes"] = [];
+  let firstX = plane.originX;
+  let firstY = plane.originY;
+  let have = false;
+  for (let i = 0; i <= samples; i++) {
+    const f = i / samples;
+    const d = traj(tMin + (tMax - tMin) * f);
+    if (!d || !Number.isFinite(d.x) || !Number.isFinite(d.y)) continue;
+    const loc = plane.toLocal(clamp(d.x, xMin, xMax), clamp(d.y, yMin, yMax)); // keep the marker in-frame
+    const ax = plane.originX + loc.x;
+    const ay = plane.originY + loc.y;
+    const t = start + f * dur;
+    const ease = opts.easing !== undefined && i > 0 ? { easing: opts.easing } : {};
+    xk.push({ t, value: ax - r, ...ease });
+    yk.push({ t, value: ay - r, ...ease });
+    if (!have) {
+      firstX = ax;
+      firstY = ay;
+      have = true;
+    }
+  }
+  return {
+    id: opts.id ?? `${plane.idPrefix}-marker`,
+    type: "ellipse",
+    x: firstX - r,
+    y: firstY - r,
+    width: r * 2,
+    height: r * 2,
+    fill: opts.fill ?? plane.theme.palette.accent,
+    ...(xk.length >= 2
+      ? {
+          tracks: [
+            { property: "x", keyframes: xk },
+            { property: "y", keyframes: yk },
+          ],
+        }
+      : {}),
   };
 }
 
