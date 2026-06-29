@@ -98,7 +98,7 @@ export { createRemoteWorker, startRemoteWorker } from "./distributed/remoteWorke
 export type { PolygonNode, PolylineNode, PathNode, ImageNode, ArcNode, CounterNode, NarrationSegment } from "./spec/types.js";
 export { prepareImages, inlineAssets, registerImage, getRegisteredImage, clearImageRegistry } from "./engine/imageRegistry.js";
 export * as assets from "./assets/index.js";
-export type { AssetStore, AssetMeta, AssetGenerator, AssetRequest, Provenance } from "./assets/index.js";
+export type { AssetStore, AssetMeta, AssetGenerator, AssetRequest, Provenance, StyleCapsule } from "./assets/index.js";
 export { THEMES, DEFAULT_THEME, getTheme, swatch } from "./theme/themes.js";
 export type { Theme, Palette } from "./theme/themes.js";
 export * as motion from "./motion/index.js";
