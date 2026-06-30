@@ -10,6 +10,7 @@
  */
 
 import { extractJson, type AuthorContext, type SpecAuthor } from "./agent.js";
+import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 
 export interface OpenRouterAuthorOptions {
   apiKey?: string;
@@ -19,6 +20,8 @@ export interface OpenRouterAuthorOptions {
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Prompt pack (externalized templates). Defaults to the bundled/`SHOWMAN_PROMPT_DIR` pack. */
+  prompts?: AuthorPrompts;
 }
 
 type MessageContent = string | null | Array<{ type?: string; text?: string }>;
@@ -43,6 +46,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly prompts: AuthorPrompts;
 
   constructor(opts: OpenRouterAuthorOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
@@ -52,18 +56,13 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
     this.baseUrl = (opts.baseUrl ?? process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? 90_000;
     this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.prompts = opts.prompts ?? loadPrompts();
     if (!this.apiKey) throw new Error("OpenRouterSpecAuthor requires an API key (OPENROUTER_API_KEY).");
   }
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
-    const system =
-      "You are an expert author of beautiful, warm, pedagogically-structured animated lessons for young children. " +
-      "Given a brief, output ONLY a single JSON Scene Spec object — no prose, no markdown fences, no comments. " +
-      "Use ONLY the node types, properties, easings, and fonts described in this schema, and respect its limits:\n" +
-      JSON.stringify(ctx.schema);
-    const correction = ctx.feedback?.errors?.length
-      ? `\n\nYour previous attempt failed validation. Fix EXACTLY these errors and output the corrected full spec:\n${JSON.stringify(ctx.feedback.errors, null, 2)}`
-      : "";
+    const system = this.prompts.system(JSON.stringify(ctx.schema));
+    const correction = this.prompts.correction(ctx.feedback?.errors ?? []);
 
     let res: Response;
     try {
