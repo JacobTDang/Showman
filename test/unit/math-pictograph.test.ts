@@ -67,8 +67,11 @@ describe("pictograph", () => {
     expect(validateScene(spec).valid).toBe(true);
     const f = renderFrame(spec, 0);
     const target = hexRgb(swatch(getTheme(), 0));
-    // With an empty label the single star sits at local x=0; its center is at (radius, radius).
-    expect(isColorNear(samplePixel(f, iconSize / 2, iconSize / 2), target)).toBe(true);
+    // depth: the star carries a shaded gradient fading to the exact swatch.
+    const star = pg.children.find((n) => n.type === "polygon") as { gradient?: { stops: { color: string }[] } };
+    expect(star.gradient?.stops.at(-1)?.color).toBe(swatch(getTheme(), 0));
+    // With an empty label the single star sits at local x=0; its center is at (radius, radius) — shaded swatch.
+    expect(isColorNear(samplePixel(f, iconSize / 2, iconSize / 2), target, 30)).toBe(true);
   });
 
   it("renders empty rows[] as a valid empty-ish group", () => {

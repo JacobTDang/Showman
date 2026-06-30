@@ -9,6 +9,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, clamp, finiteNum, posSize, intCount } from "./shared.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Area grid ─────────────────────────
 
@@ -26,6 +27,8 @@ export interface AreaGridOptions {
   /** How many cells (row-major) are shaded. Default all (`rows*cols`). Clamped to 0..total. */
   shaded?: number;
   theme?: string;
+  /** Dimensionality of the shaded cells (a gradient). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /** An area model: a `rows`×`cols` grid of unit squares with dimension + area labels. */
@@ -50,12 +53,14 @@ export function buildAreaGrid(opts: AreaGridOptions): GroupNode {
   const labelFont = clamp(unit * 0.6, 12, 28);
 
   const fill = theme.palette.accent;
+  const cellGrad = fillRamp(fill, unit, opts.depth ?? "soft"); // shaded-cell gradient
   const children: Node[] = [];
 
   // Unit-square cells (row-major); the first `shaded` are filled.
   for (let i = 0; i < total; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
+    const on = i < shaded;
     children.push({
       id: nid(),
       type: "rect",
@@ -63,7 +68,8 @@ export function buildAreaGrid(opts: AreaGridOptions): GroupNode {
       y: margin + row * unit,
       width: unit,
       height: unit,
-      fill: i < shaded ? fill : "transparent",
+      fill: on ? fill : "transparent",
+      ...(on && cellGrad ? { gradient: cellGrad } : {}),
       stroke: theme.palette.muted,
       strokeWidth: 2,
     });

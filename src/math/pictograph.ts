@@ -10,6 +10,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, swatch, idGen, approxTextWidth, fmtTick, finiteNum, posSize, intCount } from "./shared.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Pictograph ─────────────────────────
 
@@ -34,6 +35,8 @@ export interface PictographOptions {
   /** Spacing between icons and around the label column / key. Default 8. */
   gap?: number;
   theme?: string;
+  /** Dimensionality of the icons (a shaded gradient). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /**
@@ -101,6 +104,7 @@ export function buildPictograph(opts: PictographOptions): GroupNode {
     // ceil(count / unit) star icons, left-to-right, tinted by the row's swatch.
     const iconCount = Math.ceil(row.count / unit);
     const fill = swatch(theme, i);
+    const iconGrad = fillRamp(fill, iconSize, opts.depth ?? "soft");
     for (let j = 0; j < iconCount; j++) {
       children.push({
         id: nid(),
@@ -111,6 +115,7 @@ export function buildPictograph(opts: PictographOptions): GroupNode {
         radius,
         innerRadius,
         fill,
+        ...(iconGrad ? { gradient: iconGrad } : {}),
       });
     }
   });

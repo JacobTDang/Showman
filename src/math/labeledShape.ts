@@ -9,6 +9,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, clamp, finiteNum, posSize, intCount } from "./shared.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Labeled shape ─────────────────────────
 
@@ -26,6 +27,8 @@ export interface LabeledShapeOptions {
   sideLabel?: string;
   /** When true, draws a small angle marker at the first vertex. */
   showAngle?: boolean;
+  /** Dimensionality of the polygon face (a shaded gradient). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /** Excel-style vertex name: 0→"A", 25→"Z", 26→"AA", … (always non-empty). */
@@ -63,6 +66,7 @@ export function buildLabeledShape(opts: LabeledShapeOptions): GroupNode {
   const children: Node[] = [];
 
   // The polygon itself (a single polygon node — center at (radius, radius) local).
+  const faceGrad = fillRamp(theme.palette.secondary, radius * 2, opts.depth ?? "soft");
   children.push({
     id: nid(),
     type: "polygon",
@@ -71,6 +75,7 @@ export function buildLabeledShape(opts: LabeledShapeOptions): GroupNode {
     sides,
     radius,
     fill: theme.palette.secondary,
+    ...(faceGrad ? { gradient: faceGrad } : {}),
     stroke: theme.palette.primary,
     strokeWidth: 3,
   });

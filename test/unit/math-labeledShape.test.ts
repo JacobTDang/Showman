@@ -44,8 +44,11 @@ describe("labeled shape", () => {
     expect(validateScene(spec).valid).toBe(true);
     const f = renderFrame(spec, 0);
     const secondary = hexRgb(getTheme().palette.secondary);
-    // Center of the polygon: group origin (120,120) + local center (radius,radius).
-    expect(isColorNear(samplePixel(f, 120 + radius, 120 + radius), secondary)).toBe(true);
+    // depth: the polygon face is a shaded gradient fading to the exact secondary.
+    const poly = s.children.find((n) => n.type === "polygon") as { gradient?: { stops: { color: string }[] } };
+    expect(poly.gradient?.stops.at(-1)?.color).toBe(getTheme().palette.secondary);
+    // Center of the polygon: group origin (120,120) + local center (radius,radius) — shaded secondary.
+    expect(isColorNear(samplePixel(f, 120 + radius, 120 + radius), secondary, 30)).toBe(true);
   });
 
   it("clamps sides to >= 3 for degenerate input (sides:1) and stays valid", () => {
