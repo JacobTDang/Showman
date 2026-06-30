@@ -111,6 +111,24 @@ jobs:
       - run: go test ./...
       - run: go build ./...
 
+  orchestrator:
+    name: Test + build (Go orchestrator)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: orchestrator/go.mod
+      - name: gofmt (check)
+        run: test -z "$(gofmt -l .)" || (echo 'gofmt found unformatted files:' && gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build ./...
+
   images:
     name: Build container images
     runs-on: ubuntu-latest
