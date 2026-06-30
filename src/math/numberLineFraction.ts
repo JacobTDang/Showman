@@ -9,6 +9,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, fmtTick, clamp, finiteNum, posSize, intCount } from "./shared.js";
+import { chipRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Fraction on a number line ─────────────────────────
 
@@ -26,6 +27,8 @@ export interface NumberLineFractionOptions {
   /** The fraction's denominator — the line is split into this many equal parts. */
   denominator: number;
   theme?: string;
+  /** Dimensionality of the marker dot (a spherical highlight). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /**
@@ -96,7 +99,8 @@ export function buildNumberLineFraction(opts: NumberLineFractionOptions): GroupN
     lineCap: "round",
   });
 
-  // Marker dot at the fraction.
+  // Marker dot at the fraction — a dimensional sphere.
+  const markerGrad = chipRamp(markerColor, r, opts.depth ?? "soft");
   children.push({
     id: nid(),
     type: "ellipse",
@@ -105,6 +109,7 @@ export function buildNumberLineFraction(opts: NumberLineFractionOptions): GroupN
     width: r * 2,
     height: r * 2,
     fill: markerColor,
+    ...(markerGrad ? { gradient: markerGrad } : {}),
   });
 
   // Fraction label above the marker.

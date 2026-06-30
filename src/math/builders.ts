@@ -10,6 +10,7 @@
 
 import type { Node, GroupNode, PolylineNode, Color, Track, EasingSpec } from "../spec/types.js";
 import { getTheme, idGen, fmtTick, clamp, finiteNum, posSize, intCount, type Theme } from "./shared.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Coordinate plane + graphing (algebra) ─────────────────────────
 
@@ -478,6 +479,8 @@ export interface FractionOptions {
   denominator: number;
   theme?: string;
   fill?: Color;
+  /** Dimensionality of the filled portion (a gradient sheen). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /** A fraction as a pie: whole outline + `numerator/denominator` filled + part dividers. */
@@ -507,8 +510,18 @@ export function fractionCircle(opts: FractionOptions): GroupNode {
       stroke: theme.palette.muted,
       strokeWidth: 4,
     },
-    // filled portion
-    { id: nid(), type: "arc", x: 0, y: 0, radius: r, startAngle: 0, endAngle: (num / denom) * 360, fill },
+    // filled portion — with a gentle sheen
+    {
+      id: nid(),
+      type: "arc",
+      x: 0,
+      y: 0,
+      radius: r,
+      startAngle: 0,
+      endAngle: (num / denom) * 360,
+      fill,
+      ...(fillRamp(fill, r * 2, opts.depth ?? "soft") ? { gradient: fillRamp(fill, r * 2, opts.depth ?? "soft")! } : {}),
+    },
   ];
   // part dividers (center -> edge)
   for (let i = 0; i < denom; i++) {
@@ -540,9 +553,11 @@ export function fractionBar(opts: FractionOptions & { width?: number; height?: n
   const num = clamp(Math.floor(finiteNum(opts.numerator, 0)), 0, denom);
   const fill = opts.fill ?? theme.palette.accent;
   const cellW = w / denom;
+  const cellGrad = fillRamp(fill, h, opts.depth ?? "soft");
 
   const children: Node[] = [];
   for (let i = 0; i < denom; i++) {
+    const on = i < num;
     children.push({
       id: nid(),
       type: "rect",
@@ -550,7 +565,8 @@ export function fractionBar(opts: FractionOptions & { width?: number; height?: n
       y: 0,
       width: cellW,
       height: h,
-      fill: i < num ? fill : "transparent",
+      fill: on ? fill : "transparent",
+      ...(on && cellGrad ? { gradient: cellGrad } : {}),
       stroke: theme.palette.muted,
       strokeWidth: 2,
     });

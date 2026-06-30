@@ -119,8 +119,14 @@ describe("fractions", () => {
     const fc = fractionCircle({ id: "fc", x: 0, y: 0, radius: 50, numerator: 1, denominator: 4, fill: "red" });
     const spec = scene([fc], 100, 100);
     expect(validateScene(spec).valid).toBe(true);
-    // 1/4 fills the top-right wedge.
-    expect(isColorNear(samplePixel(renderFrame(spec, 0), 65, 35), { r: 255, g: 0, b: 0 })).toBe(true);
+    // depth: the filled wedge carries a sheen gradient fading to the exact fill.
+    const arc = fc.children.find((n) => n.type === "arc") as { gradient?: { stops: { color: string }[] } };
+    expect(arc.gradient?.stops.at(-1)?.color).toBe("red");
+    // 1/4 fills the top-right wedge — the sheen lightens it, but it stays red.
+    const p = samplePixel(renderFrame(spec, 0), 65, 35);
+    expect(p.r).toBeGreaterThan(150);
+    expect(p.g).toBeLessThan(140);
+    expect(p.b).toBeLessThan(140);
   });
 
   it("fractionBar fills the first `numerator` cells", () => {
@@ -128,7 +134,10 @@ describe("fractions", () => {
     const spec = scene([fb], 100, 40);
     expect(validateScene(spec).valid).toBe(true);
     const f = renderFrame(spec, 0);
-    expect(isColorNear(samplePixel(f, 12, 20), { r: 255, g: 0, b: 0 })).toBe(true); // cell 0 filled
-    expect(isColorNear(samplePixel(f, 87, 20), { r: 255, g: 255, b: 255 })).toBe(true); // cell 3 empty
+    const p = samplePixel(f, 12, 20); // cell 0 filled — sheen-lightened but clearly red
+    expect(p.r).toBeGreaterThan(150);
+    expect(p.g).toBeLessThan(140);
+    expect(p.b).toBeLessThan(140);
+    expect(isColorNear(samplePixel(f, 87, 20), { r: 255, g: 255, b: 255 })).toBe(true); // cell 3 empty (strict)
   });
 });

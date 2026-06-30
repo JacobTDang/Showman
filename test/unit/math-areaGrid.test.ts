@@ -41,11 +41,14 @@ describe("area grid", () => {
     const f = renderFrame(spec, 0);
     const accent = hexRgb(getTheme().palette.accent);
 
+    // depth: shaded cells carry a gradient fading to the exact accent.
+    const cell0 = g.children[0] as { gradient?: { stops: { color: string }[] } };
+    expect(cell0.gradient?.stops.at(-1)?.color).toBe(getTheme().palette.accent);
     // Grid sits at local (margin, margin) with margin === unit; cell 0 center is
-    // at (unit + unit/2, unit + unit/2). It is shaded → reads as accent.
+    // at (unit + unit/2, unit + unit/2). It is shaded → reads as a (shaded) accent.
     const cx = unit + unit / 2;
     const cy = unit + unit / 2;
-    expect(isColorNear(samplePixel(f, cx, cy), accent)).toBe(true);
+    expect(isColorNear(samplePixel(f, cx, cy), accent, 30)).toBe(true);
 
     // The last cell (index 11) is unshaded → stays white.
     const lastCx = unit + 3 * unit + unit / 2;

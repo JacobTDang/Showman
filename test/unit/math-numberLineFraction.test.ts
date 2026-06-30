@@ -59,10 +59,13 @@ describe("number-line fraction", () => {
 
     const markerX = gx + (3 / 4) * width; // 290
 
-    // A point along the highlighted segment (midpoint, away from any tick) reads primary.
+    // A point along the highlighted segment (midpoint, away from any tick) reads primary (a stroke, exact).
     expect(isColorNear(samplePixel(f, gx + 135, gy), primary)).toBe(true);
-    // The marker dot center reads secondary.
-    expect(isColorNear(samplePixel(f, markerX, gy), secondary)).toBe(true);
+    // depth: the marker dot is a sphere — a chip gradient fading to the exact secondary.
+    const marker = nl.children.find((n) => n.type === "ellipse") as { gradient?: { stops: { color: string }[] } };
+    expect(marker.gradient?.stops.at(-1)?.color).toBe(theme.palette.secondary);
+    // The marker dot center reads secondary (the chip lightens it a touch).
+    expect(isColorNear(samplePixel(f, markerX, gy), secondary, 40)).toBe(true);
     // Above the line beyond the marker stays white background.
     expect(isColorNear(samplePixel(f, gx + width - 10, gy - 30), { r: 255, g: 255, b: 255 })).toBe(true);
   });
