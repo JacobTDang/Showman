@@ -33,7 +33,16 @@ import { generateItem, quizCard, multiplicationTemplate } from "../../src/items/
 import { makeRng } from "../../src/index.js";
 import { hintCard } from "../../src/pedagogy/index.js";
 import { penStroke } from "../../src/handwriting/index.js";
-import { projectile, energyBars, inclinedPlane, pointCharge, emSpectrum, rayDiagram, bohrAtom } from "../../src/physics/index.js";
+import {
+  projectile,
+  energyBars,
+  inclinedPlane,
+  pointCharge,
+  emSpectrum,
+  rayDiagram,
+  bohrAtom,
+  motionGraph,
+} from "../../src/physics/index.js";
 
 export interface GoldenCase {
   name: string;
@@ -701,6 +710,36 @@ export const GOLDEN_CASES: GoldenCase[] = [
   },
   { name: "quiz", spec: quizCase(), frames: [0] },
   { name: "projectile", spec: projectileCase(), frames: [18] },
+  {
+    name: "motion-graph",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 420,
+      height: 380,
+      fps: 24,
+      duration: 2.6,
+      seed: 1,
+      background: "#f8fbfe",
+      nodes: [
+        motionGraph({
+          id: "mg",
+          x: 50,
+          y: 16,
+          width: 340,
+          height: 348,
+          tMax: 5,
+          start: 0,
+          duration: 1.6,
+          series: [
+            { label: "x", fn: (t) => 0.5 * 2 * t * t, color: "#2563eb" },
+            { label: "v", fn: (t) => 2 * t, color: "#16a34a" },
+            { label: "a", fn: () => 2, color: "#dc2626", yMin: 0, yMax: 4 },
+          ],
+        }),
+      ],
+    },
+    frames: [44],
+  },
   { name: "energy-diagram", spec: energyDiagramCase(), frames: [0] },
   {
     name: "periodic-table",
