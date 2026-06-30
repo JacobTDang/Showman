@@ -6,7 +6,7 @@
 
 import type { Node, GroupNode, Color, Track } from "../spec/types.js";
 import type { Plane } from "../math/index.js";
-import { plotParametric, movingMarker } from "../math/index.js";
+import { plotParametric, movingMarker, coordinatePlane, plotFunction } from "../math/index.js";
 import { getTheme } from "../theme/themes.js";
 
 const DEG = Math.PI / 180;
@@ -81,6 +81,155 @@ export function projectile(plane: Plane, opts: ProjectileOptions): GroupNode {
         samples: opts.samples ?? 60,
       }),
     );
+  }
+  return { id, type: "group", x: 0, y: 0, children };
+}
+
+export interface MotionSeries {
+  /** Axis label, e.g. "x", "v", "a". */
+  label: string;
+  /** Value as a function of time. */
+  fn: (t: number) => number;
+  color?: Color;
+  yMin?: number;
+  yMax?: number;
+}
+
+export interface MotionGraphOptions {
+  id?: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  /** Total time on the shared x-axis. */
+  tMax: number;
+  /** One stacked graph per series (e.g. position / velocity / acceleration). */
+  series: MotionSeries[];
+  /** Trace dot on each curve + a vertical time sweep. Default true. */
+  trace?: boolean;
+  start?: number;
+  duration?: number;
+  theme?: string;
+}
+
+/**
+ * Synced kinematics graphs — a stack of value-vs-time plots (x-t / v-t / a-t) that draw on in lockstep
+ * over one shared time window, each with a trace dot riding the curve and a single vertical sweep line
+ * crossing all of them. The canonical "moving man" motion-graph visual.
+ */
+export function motionGraph(opts: MotionGraphOptions): GroupNode {
+  const id = opts.id ?? "motion";
+  const theme = getTheme(opts.theme);
+  const W = opts.width ?? 360;
+  const H = opts.height ?? 360;
+  const n = Math.max(1, opts.series.length);
+  const gap = 18;
+  const planeH = (H - gap * (n - 1)) / n;
+  const start = opts.start ?? 0.2;
+  const dur = Math.max(1e-3, opts.duration ?? 2);
+  const trace = opts.trace !== false;
+  const children: Node[] = [];
+
+  opts.series.forEach((s, i) => {
+    const py = opts.y + i * (planeH + gap);
+    let yMin = s.yMin;
+    let yMax = s.yMax;
+    if (yMin === undefined || yMax === undefined) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let k = 0; k <= 40; k++) {
+        const v = s.fn((opts.tMax * k) / 40);
+        if (Number.isFinite(v)) {
+          lo = Math.min(lo, v);
+          hi = Math.max(hi, v);
+        }
+      }
+      if (!Number.isFinite(lo)) {
+        lo = 0;
+        hi = 1;
+      }
+      const pad = (hi - lo || 1) * 0.15;
+      yMin = yMin ?? lo - pad;
+      yMax = yMax ?? hi + pad;
+    }
+    const color = s.color ?? theme.palette.swatches[i % theme.palette.swatches.length]!;
+    const plane = coordinatePlane({
+      id: `${id}-p${i}`,
+      x: opts.x,
+      y: py,
+      width: W,
+      height: planeH,
+      xMin: 0,
+      xMax: opts.tMax,
+      yMin,
+      yMax,
+      step: (yMax - yMin) / 2,
+      showGrid: false,
+      showLabels: false,
+    });
+    const curve = plotFunction(plane, s.fn, { samples: 80 }, { id: `${id}-c${i}`, stroke: color, strokeWidth: 3 });
+    curve.progress = 0;
+    curve.tracks = [
+      {
+        property: "progress",
+        keyframes: [
+          { t: start, value: 0 },
+          { t: start + dur, value: 1 },
+        ],
+      },
+    ] as Track[];
+    children.push(plane.node, curve);
+    children.push({
+      id: `${id}-lbl${i}`,
+      type: "text",
+      x: opts.x + 6,
+      y: py + 12,
+      text: s.label,
+      fontFamily: theme.bodyFont,
+      fontWeight: 700,
+      fontSize: 14,
+      fill: color,
+      align: "left",
+      baseline: "middle",
+    });
+    if (trace)
+      children.push(
+        movingMarker(plane, (t) => ({ x: t, y: s.fn(t) }), {
+          id: `${id}-dot${i}`,
+          tMin: 0,
+          tMax: opts.tMax,
+          start,
+          duration: dur,
+          radius: 5,
+          fill: color,
+        }),
+      );
+  });
+
+  // One vertical sweep line crossing every graph, advancing left → right over the same window.
+  if (trace) {
+    children.push({
+      id: `${id}-sweep`,
+      type: "polyline",
+      x: 0,
+      y: 0,
+      points: [
+        { x: opts.x, y: opts.y },
+        { x: opts.x, y: opts.y + H },
+      ],
+      stroke: theme.palette.muted,
+      strokeWidth: 1.5,
+      dash: [5, 4],
+      tracks: [
+        {
+          property: "x",
+          keyframes: [
+            { t: start, value: 0 },
+            { t: start + dur, value: W },
+          ],
+        },
+      ] as Track[],
+    });
   }
   return { id, type: "group", x: 0, y: 0, children };
 }
