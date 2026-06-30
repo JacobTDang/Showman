@@ -18,3 +18,5 @@ export * from "./vsepr.js";
 export * from "./electronConfig.js";
 
 export * from "./moleculeLibrary.js";
+
+export * from "./apparatus.js";
