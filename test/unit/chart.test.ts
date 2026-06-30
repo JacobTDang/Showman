@@ -60,6 +60,57 @@ describe("barChart", () => {
     expect(bar.anchor).toBeDefined(); // scales from its bottom edge
     expect(ok(c)).toBe(true);
   });
+  it("maps data → pixels: bar height is proportional to value (min=0 linear scale)", () => {
+    const c = barChart({
+      id: "bc",
+      x: 10,
+      y: 10,
+      width: 380,
+      height: 260,
+      categories: ["A", "B", "C"],
+      series: [{ name: "x", values: [10, 30, 20] }],
+    });
+    const h = (ci: number): number => (kids(c).find((n) => n.id === `bc-bar-${ci}-0`) as { height: number }).height;
+    expect(h(1)).toBeGreaterThan(h(0));
+    expect(h(1)).toBeCloseTo(h(0) * 3, 1); // value 30 vs 10 → 3× the pixels
+    expect(h(2)).toBeCloseTo(h(0) * 2, 1); // value 20 vs 10 → 2×
+  });
+  it("stacks the second series directly on top of the first (no gap/overlap)", () => {
+    const c = barChart({
+      id: "bc",
+      x: 10,
+      y: 10,
+      width: 380,
+      height: 260,
+      stacked: true,
+      categories: ["A"],
+      series: [
+        { name: "x", values: [10] },
+        { name: "y", values: [20] },
+      ],
+    });
+    const b0 = kids(c).find((n) => n.id === "bc-bar-0-0") as { y: number; height: number };
+    const b1 = kids(c).find((n) => n.id === "bc-bar-0-1") as { y: number; height: number };
+    expect(b1.y + b1.height).toBeCloseTo(b0.y, 1); // series-1's bottom edge meets series-0's top edge
+    expect(b1.height).toBeCloseTo(b0.height * 2, 1); // height still encodes value (20 vs 10)
+  });
+  it("survives degenerate data (empty series, all-negative values) without crashing", () => {
+    expect(() => barChart({ id: "e1", x: 10, y: 10, width: 380, height: 260, categories: [], series: [] })).not.toThrow();
+    expect(() =>
+      barChart({ id: "e2", x: 10, y: 10, width: 380, height: 260, categories: ["A", "B"], series: [{ name: "n", values: [-5, -10] }] }),
+    ).not.toThrow();
+    // no bars drawn for all-negative data (every h ≤ 0.5 is skipped), but the axes/scaffold are still valid
+    const neg = barChart({
+      id: "e2",
+      x: 10,
+      y: 10,
+      width: 380,
+      height: 260,
+      categories: ["A", "B"],
+      series: [{ name: "n", values: [-5, -10] }],
+    });
+    expect(kids(neg).filter((n) => n.id.includes("-bar-"))).toHaveLength(0);
+  });
 });
 
 describe("lineChart", () => {

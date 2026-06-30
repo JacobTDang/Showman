@@ -76,6 +76,21 @@ describe("flattenPath", () => {
     expect(a[0]!.length).toBeGreaterThan(2);
   });
 
+  it("S's implicit control is the reflection of the previous cubic's (== explicit C)", () => {
+    // After "C0 10 10 10 10 0": last control = (10,10), current = (10,0).
+    // S's reflected first control = 2·(10,0) − (10,10) = (10,−10), so S20 -10 20 0 ≡ C10 -10 20 -10 20 0.
+    const smooth = flattenPath("M0 0 C0 10 10 10 10 0 S20 -10 20 0");
+    const explicit = flattenPath("M0 0 C0 10 10 10 10 0 C10 -10 20 -10 20 0");
+    expect(smooth).toEqual(explicit);
+  });
+
+  it("T's implicit control is the reflection of the previous quadratic's (== explicit Q)", () => {
+    // After "Q25 5 30 0": control = (25,5), current = (30,0) → T's reflected control = (35,−5).
+    const smooth = flattenPath("M0 0 Q25 5 30 0 T40 0");
+    const explicit = flattenPath("M0 0 Q25 5 30 0 Q35 -5 40 0");
+    expect(smooth).toEqual(explicit);
+  });
+
   it("is deterministic for a multi-command path", () => {
     const d = "M0 0 C0 10 10 10 10 0 S20 -10 20 0 Q25 5 30 0 T40 0 A5 5 0 1 1 50 0 H60 V70 Z";
     expect(flattenPath(d)).toEqual(flattenPath(d));
