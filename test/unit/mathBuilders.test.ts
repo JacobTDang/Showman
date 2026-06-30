@@ -64,6 +64,41 @@ describe("coordinate plane + graphing", () => {
     const f = renderFrame(scene([line]), 0);
     expect(isColorNear(samplePixel(f, 150, 120), { r: 255, g: 0, b: 0 })).toBe(true);
   });
+
+  it("samples land on the plane's toLocal mapping", () => {
+    // Parabola vertex y = 0.2x² − 2 at x=0 is (0, −2) → local (150, 168).
+    const parab = plotFunction(plane, (x) => 0.2 * x * x - 2);
+    const vertex = parab.points.find((p) => Math.abs(p.x - 150) < 1e-6);
+    expect(vertex).toBeDefined();
+    expect(vertex!.y).toBeCloseTo(plane.toLocal(0, -2).y); // 168
+    // y = x crosses the origin at (0,0) → local (150, 120).
+    const line = plotLine(plane, { m: 1, b: 0 });
+    const mid = line.points.find((p) => Math.abs(p.x - 150) < 1e-6);
+    expect(mid).toBeDefined();
+    expect(mid!.y).toBeCloseTo(plane.toLocal(0, 0).y); // 120
+  });
+
+  it("degrades an out-of-range curve to finite fallback points (never NaN)", () => {
+    // Entirely above yMax: every sample clamps to the top edge — finite, not dropped.
+    const clamped = plotFunction(plane, () => 1000);
+    expect(clamped.points.length).toBeGreaterThanOrEqual(2);
+    expect(clamped.points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+    // Entirely non-finite: falls back to a minimal 2-point flat segment.
+    const allNaN = plotFunction(plane, () => NaN);
+    expect(allNaN.points.length).toBe(2);
+    expect(allNaN.points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+  });
+
+  it("plotPoints places an ellipse at the mapped data coordinate", () => {
+    const [ellipse] = plotPoints(plane, [{ x: 2, y: 2 }]);
+    expect(ellipse!.type).toBe("ellipse");
+    // toLocal(2,2) = (210, 72); ellipse top-left = origin + loc − radius(6).
+    const loc = plane.toLocal(2, 2);
+    if (ellipse!.type === "ellipse") {
+      expect(ellipse.x).toBeCloseTo(plane.originX + loc.x - 6); // 204
+      expect(ellipse.y).toBeCloseTo(plane.originY + loc.y - 6); // 66
+    }
+  });
 });
 
 describe("number line", () => {

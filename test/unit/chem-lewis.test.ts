@@ -38,8 +38,14 @@ describe("lewisStructure", () => {
       ],
     });
     expect(kids(c).filter((n) => /^c-b0-\d+$/.test(n.id))).toHaveLength(2); // double bond → 2 lines
-    expect(kids(c).filter((n) => /^c-lig0-lp\d+-[ab]$/.test(n.id)).length).toBeGreaterThan(0); // ligand lone pairs
+    // lonePairs:2 on O → 2 pairs × 2 dots = 4 dot nodes on this ligand.
+    expect(kids(c).filter((n) => /^c-lig0-lp\d+-[ab]$/.test(n.id))).toHaveLength(4);
     expect(validateScene(scene([c]))).toMatchObject({ valid: true });
+  });
+  it("draws triple bonds as three lines (C≡O)", () => {
+    const t = lewisStructure({ id: "t", x: 130, y: 110, center: "C", ligands: [{ el: "O", bonds: 3, lonePairs: 1 }] });
+    expect(kids(t).filter((n) => /^t-b0-\d+$/.test(n.id))).toHaveLength(3); // triple bond → 3 lines
+    expect(validateScene(scene([t]))).toMatchObject({ valid: true });
   });
   it("shows a formal charge", () => {
     const ion = lewisStructure({

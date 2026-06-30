@@ -20,18 +20,30 @@ describe("apparatus", () => {
   it("each piece draws an outline and renders validly", () => {
     for (const make of glassware) {
       const g = make({ x: 200, y: 200 });
-      expect(kids(g).some((n) => /-(out|bulb)$/.test(n.id) || /-out$/.test(n.id))).toBe(true);
+      expect(kids(g).some((n) => /-(out|bulb)$/.test(n.id))).toBe(true);
       expect(validateScene(scene([g]))).toMatchObject({ valid: true });
     }
   });
   it("shows a liquid fill only when liquid > 0, clamped to [0,1]", () => {
     expect(kids(beaker({ id: "b", x: 100, y: 100, liquid: 0.5 })).some((n) => n.id === "b-liq")).toBe(true);
     expect(kids(beaker({ id: "b", x: 100, y: 100 })).some((n) => n.id === "b-liq")).toBe(false);
-    // Over-full clamps without producing an invalid (over-tall) liquid rect.
+    // Over-full clamps to lvl=1 → height = 1*(height-8) = 92, never the raw 5× overflow.
     const full = beaker({ id: "b", x: 100, y: 140, height: 100, liquid: 5 });
     const liq = kids(full).find((n) => n.id === "b-liq") as { height: number };
-    expect(liq.height).toBeLessThanOrEqual(100);
+    expect(liq.height).toBe(92);
     expect(validateScene(scene([full]))).toMatchObject({ valid: true });
+  });
+  it("fills the body of round-bottom flasks, test tubes, and graduated cylinders", () => {
+    for (const make of [roundFlask, testTube, graduatedCylinder]) {
+      const g = make({ id: "g", x: 100, y: 200, liquid: 0.5 });
+      expect(kids(g).some((n) => n.id === "g-liq")).toBe(true);
+      expect(validateScene(scene([g]))).toMatchObject({ valid: true });
+    }
+  });
+  it("omits the liquid fill for a negative level", () => {
+    for (const make of [beaker, roundFlask, testTube, graduatedCylinder]) {
+      expect(kids(make({ id: "g", x: 100, y: 200, liquid: -1 })).some((n) => n.id === "g-liq")).toBe(false);
+    }
   });
   it("a zero-height Erlenmeyer with liquid stays valid (no 0/0 NaN) (review fix)", () => {
     expect(validateScene(scene([erlenmeyerFlask({ x: 100, y: 200, height: 0, liquid: 0.5 })]))).toMatchObject({ valid: true });

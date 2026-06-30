@@ -30,10 +30,38 @@ describe("base-ten place-value blocks", () => {
     expect(more.children.length).toBeGreaterThan(g.children.length);
   });
 
-  it("ones=4 yields at least 4 unit squares", () => {
+  it("ones=4 yields exactly 4 unit squares", () => {
     const unit = 16;
     const g = buildBaseTenBlocks({ ones: 4, unit });
-    expect(countUnitRects(g, unit)).toBeGreaterThanOrEqual(4);
+    expect(countUnitRects(g, unit)).toBe(4);
+  });
+
+  it("decomposes each place value into the right internal grid (flat=18, rod=9, unit=0)", () => {
+    const polys = (n: Node): number => (n.type === "polyline" ? 1 : n.type === "group" ? n.children.reduce((s, c) => s + polys(c), 0) : 0);
+    const rects = (n: Node): number => (n.type === "rect" ? 1 : n.type === "group" ? n.children.reduce((s, c) => s + rects(c), 0) : 0);
+
+    // A hundreds "flat" is a 10×10 grid: 9 vertical + 9 horizontal internal lines.
+    const flat = buildBaseTenBlocks({ hundreds: 1 });
+    expect(flat.children.length).toBe(1);
+    expect(polys(flat.children[0]!)).toBe(18);
+    expect(rects(flat.children[0]!)).toBe(1);
+
+    // A tens "rod" is a 1×10 column: 9 horizontal internal lines, no verticals.
+    const rod = buildBaseTenBlocks({ tens: 1 });
+    expect(rod.children.length).toBe(1);
+    expect(polys(rod.children[0]!)).toBe(9);
+
+    // A ones "unit" is a single cell: no internal grid lines at all.
+    const unit = buildBaseTenBlocks({ ones: 1 });
+    expect(unit.children.length).toBe(1);
+    expect(polys(unit.children[0]!)).toBe(0);
+    expect(rects(unit.children[0]!)).toBe(1);
+  });
+
+  it("yields zero blocks for empty options", () => {
+    const g = buildBaseTenBlocks({});
+    expect(g.children.length).toBe(0);
+    expect(validateScene(scene([g])).valid).toBe(true);
   });
 
   it("is a pure function of its options (same opts → identical spec)", () => {

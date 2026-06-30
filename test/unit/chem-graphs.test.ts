@@ -49,6 +49,15 @@ describe("phScale", () => {
   it("omits the pointer when no value is given", () => {
     expect(kids(phScale({ id: "ph", x: 0, y: 0 })).some((n) => n.id === "ph-ptr")).toBe(false);
   });
+  it("clamps an out-of-range value to the bar edges", () => {
+    const ptrX = (value: number): number =>
+      (kids(phScale({ id: "ph", x: 0, y: 0, width: 280, value })).find((n) => n.id === "ph-ptr") as { x: number }).x;
+    expect(ptrX(20)).toBe(280); // pH > 14 pins to the right edge (x + w)
+    expect(ptrX(-3)).toBe(0); //  pH < 0 pins to the left edge (x)
+  });
+  it("omits the pointer for a non-finite value (determinism guard)", () => {
+    expect(kids(phScale({ id: "ph", x: 0, y: 0, width: 280, value: NaN })).some((n) => n.id === "ph-ptr")).toBe(false);
+  });
 });
 
 describe("reaction conditions placement (fix)", () => {

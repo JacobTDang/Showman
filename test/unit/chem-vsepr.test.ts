@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { validateScene, SPEC_VERSION, chem } from "../../src/index.js";
 import type { SceneSpec, Node, GroupNode } from "../../src/index.js";
 
-const { vseprShape, electronConfig, electronConfiguration, configNotation } = chem;
+const { vseprShape, electronConfig, electronConfiguration, configNotation, GEOMETRY_NAMES } = chem;
 const scene = (nodes: Node[]): SceneSpec => ({
   specVersion: SPEC_VERSION,
   width: 500,
@@ -27,13 +27,19 @@ describe("vseprShape", () => {
     expect((kids(t).find((n) => n.id === "t-ang") as { text?: string }).text).toBe("109.5°");
     expect(validateScene(scene([t]))).toMatchObject({ valid: true });
   });
-  it("places the right number of terminals for each geometry", () => {
-    expect(
-      kids(vseprShape({ id: "l", x: 100, y: 100, geometry: "linear", center: "C" })).filter((n) => /^l-t\d+$/.test(n.id)),
-    ).toHaveLength(2);
-    expect(
-      kids(vseprShape({ id: "o", x: 100, y: 100, geometry: "octahedral", center: "S" })).filter((n) => /^o-t\d+$/.test(n.id)),
-    ).toHaveLength(6);
+  it("places the right number of terminals for every geometry", () => {
+    const expected: Record<string, number> = {
+      linear: 2,
+      bent: 2,
+      "trigonal-planar": 3,
+      tetrahedral: 4,
+      "trigonal-pyramidal": 3,
+      octahedral: 6,
+    };
+    for (const geometry of GEOMETRY_NAMES) {
+      const g = vseprShape({ id: "g", x: 100, y: 100, geometry, center: "C" });
+      expect(kids(g).filter((n) => /^g-t\d+$/.test(n.id))).toHaveLength(expected[geometry]!);
+    }
   });
 });
 
@@ -42,6 +48,10 @@ describe("electron configuration", () => {
     expect(electronConfiguration(8).map((s) => `${s.sub}${s.electrons}`)).toEqual(["1s2", "2s2", "2p4"]); // oxygen
     expect(configNotation(26)).toBe("1s2 2s2 2p6 3s2 3p6 4s2 3d6"); // iron
     for (const z of [1, 6, 10, 18, 26, 54]) expect(electronConfiguration(z).reduce((s, f) => s + f.electrons, 0)).toBe(z);
+  });
+  it("returns nothing for zero electrons", () => {
+    expect(electronConfiguration(0)).toEqual([]);
+    expect(configNotation(0)).toBe("");
   });
   it("renders orbital boxes (Hund) + a notation caption", () => {
     const e = electronConfig({ id: "e", x: 20, y: 20, z: 8 });
