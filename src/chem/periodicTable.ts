@@ -6,6 +6,7 @@
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
 import { getTheme } from "../theme/themes.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 import { ELEMENTS, CATEGORY_COLOR } from "./elements.js";
 
 export interface PeriodicTableOptions {
@@ -19,6 +20,8 @@ export interface PeriodicTableOptions {
   /** Dim non-highlighted cells when something is highlighted. Default true. */
   dimRest?: boolean;
   theme?: string;
+  /** Dimensionality of the cells (a subtle category-color gradient). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 export function periodicTable(opts: PeriodicTableOptions): GroupNode {
@@ -30,6 +33,7 @@ export function periodicTable(opts: PeriodicTableOptions): GroupNode {
   const highlight = new Set(opts.highlight ?? []);
   const hasHi = highlight.size > 0;
   const accent = theme.palette.accent;
+  const depth = opts.depth ?? "soft";
   const children: Node[] = [];
 
   for (const el of ELEMENTS) {
@@ -41,6 +45,7 @@ export function periodicTable(opts: PeriodicTableOptions): GroupNode {
     const hi = highlight.has(el.sym);
     const dim = hasHi && !hi && opts.dimRest !== false;
     const fill: Color = CATEGORY_COLOR[el.category];
+    const cellGrad = fillRamp(fill, inner, depth); // a subtle shaded cell
     children.push({
       id: `${id}-c${el.z}`,
       type: "rect",
@@ -50,6 +55,7 @@ export function periodicTable(opts: PeriodicTableOptions): GroupNode {
       height: inner,
       radius: Math.max(2, cell * 0.08),
       fill,
+      ...(cellGrad ? { gradient: cellGrad } : {}),
       ...(hi ? { stroke: accent, strokeWidth: 3 } : {}),
       opacity: dim ? 0.35 : 1,
     });
