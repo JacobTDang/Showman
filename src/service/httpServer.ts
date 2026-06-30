@@ -22,6 +22,7 @@ import type { ObjectStorage } from "./storage.js";
 import { guessContentType } from "./storage.js";
 import { encodeSceneToStream } from "../encode/encodeVideo.js";
 import type { SceneSpec } from "../spec/types.js";
+import { defaultRegistry, describeCatalogCompact, CatalogError, type CatalogDomain } from "../catalog/index.js";
 
 export interface ServerDeps {
   service: RenderService;
@@ -99,6 +100,48 @@ export function createServer(deps: ServerDeps): http.Server {
     if (method === "GET" && path === "/healthz") return sendJson(res, 200, { ok: true });
 
     if (method === "GET" && path === "/schema") return sendJson(res, 200, service.getSchema());
+
+    // Builder tool-catalog (what the orchestrator's Domain Selector chooses from).
+    if (method === "GET" && path === "/catalog") {
+      const registry = defaultRegistry();
+      const domain = (url.searchParams.get("domain") as CatalogDomain | null) ?? undefined;
+      const tools = registry.list(domain).map((t) => ({
+        name: t.name,
+        domain: t.domain,
+        level: t.level,
+        description: t.description,
+        keywords: t.keywords,
+        jsonSchema: registry.jsonSchema(t.name),
+      }));
+      return sendJson(res, 200, { tools });
+    }
+
+    if (method === "GET" && path === "/catalog/digest") {
+      const domain = (url.searchParams.get("domain") as CatalogDomain | null) ?? undefined;
+      return sendJson(res, 200, { digest: describeCatalogCompact(defaultRegistry(), domain) });
+    }
+
+    // Invoke one builder by name with validated params -> a node or a whole SceneSpec.
+    if (method === "POST" && path === "/build") {
+      const body = (await readJson(req, limit)) as { builder?: unknown; params?: unknown };
+      const builder = typeof body?.builder === "string" ? body.builder : "";
+      if (!builder) return sendJson(res, 400, { ok: false, error: "missing_builder" });
+      const registry = defaultRegistry();
+      const tool = registry.get(builder);
+      if (!tool) return sendJson(res, 404, { ok: false, error: "unknown_builder", builder });
+      try {
+        if (tool.level === "scene") {
+          return sendJson(res, 200, { ok: true, sceneSpec: registry.invokeScene(builder, body?.params ?? {}) });
+        }
+        const out = registry.invokeNode(builder, body?.params ?? {});
+        return sendJson(res, 200, { ok: true, node: out.node, ...(out.bbox ? { bbox: out.bbox } : {}) });
+      } catch (err) {
+        if (err instanceof CatalogError) {
+          return sendJson(res, 422, { ok: false, error: err.code, builder, issues: err.issues ?? null });
+        }
+        throw err;
+      }
+    }
 
     if (method === "POST" && path === "/validate") {
       const body = (await readJson(req, limit)) as { spec?: unknown };

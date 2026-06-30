@@ -73,6 +73,10 @@ export { REGISTERED_FONT_FAMILIES } from "./spec/schema.js";
 export { describeScene, describeSceneCompact, exampleScene } from "./spec/describe.js";
 export type { SchemaDescription } from "./spec/describe.js";
 
+// Builder tool-catalog (orchestrator-facing; the selector chooses tools from this)
+export { BuilderRegistry, CatalogError, describeCatalogCompact, createDefaultRegistry, defaultRegistry } from "./catalog/index.js";
+export type { BuilderTool, BuilderOutput, BBox, CatalogDomain, BuilderLevel, CatalogErrorCode } from "./catalog/index.js";
+
 // Service layer (M1.3 HTTP capability surface + storage)
 export { RenderService, stableStringify } from "./service/renderService.js";
 export type { RenderOptions, RenderResultRef, PreviewResult, RenderServiceOptions } from "./service/renderService.js";
