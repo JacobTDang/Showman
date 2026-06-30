@@ -48,6 +48,10 @@ describe("SM-2 scheduler", () => {
     expect(c2.intervalDays).toBe(6);
     const c3 = scheduleReview(c2, 4, NOW);
     expect(c3.intervalDays).toBeGreaterThan(6); // 6 × ease
+    expect(c3.ease).toBeCloseTo(2.5, 10); // q=4 leaves ease unchanged
+    expect(c3.intervalDays).toBe(15); // round(6 × 2.5)
+    expect(c3.reps).toBe(3);
+    expect(c3.dueAt).toBe(NOW + 15 * DAY);
   });
   it("resets the interval on a lapse and floors the ease at 1.3", () => {
     const passed = scheduleReview(scheduleReview(newCard(NOW), 5, NOW), 5, NOW);

@@ -39,6 +39,12 @@ describe("gradeCue", () => {
     expect(gradeCue(n, 3.15).correct).toBe(true);
     expect(gradeCue(n, 3.2).correct).toBe(false);
     expect(gradeCue(n, "nope" as unknown as number).correct).toBe(false);
+    // Exactly-representable boundary (no float-format fragility): |0.75 − 0.5| = 0.25 == tolerance → pass;
+    // just outside → fail. Pins the `<=` comparison in gradeCue.
+    const n2 = numeric({ id: "n2", t: 1, prompt: "half?", answer: 0.5, tolerance: 0.25 });
+    expect(gradeCue(n2, 0.75).correct).toBe(true); // diff exactly at tolerance
+    expect(gradeCue(n2, 0.25).correct).toBe(true);
+    expect(gradeCue(n2, 0.76).correct).toBe(false); // 0.26 > 0.25
     const fr = freeResponse({ id: "f", t: 1, prompt: "capital?", accept: ["Paris", "paris"] });
     expect(gradeCue(fr, "  PARIS ").correct).toBe(true);
     expect(gradeCue(fr, "London").correct).toBe(false);

@@ -33,6 +33,10 @@ describe("icon", () => {
     expect(c.stroke).toBeDefined(); // check is stroked
     expect(c.fill).toBe("transparent");
     expect(c.strokeWidth).toBeCloseTo(1); // 2 / scale(2) → constant visual width
+    // at half the grid size the pre-divided stroke doubles, keeping the post-scale width constant
+    const small = makeIcon({ id: "i2", name: "check", x: 0, y: 0, size: 12 }) as { scaleX?: number; strokeWidth?: number };
+    expect(small.scaleX).toBe(0.5); // 12/24
+    expect(small.strokeWidth).toBeCloseTo(4); // 2 / scale(0.5)
     const unknown = makeIcon({ name: "nope", x: 0, y: 0 }) as { type: string; children?: unknown[] };
     expect(unknown.type).toBe("group");
     expect(unknown.children).toHaveLength(0);
@@ -50,6 +54,7 @@ describe("icon", () => {
   });
   it("offers a set of names and produces a valid scene", () => {
     expect(iconNames().length).toBeGreaterThan(20);
+    expect(iconNames().length).toBe(Object.keys(ICONS).length); // names() exposes every defined icon
     const nodes = iconNames().map((name, i) =>
       makeIcon({ id: `i${i}`, name, x: (i % 6) * 30 + 5, y: Math.floor(i / 6) * 30 + 5, size: 22 }),
     );

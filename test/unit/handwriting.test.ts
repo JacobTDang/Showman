@@ -53,6 +53,19 @@ describe("penStroke", () => {
     const xk = pen.tracks!.find((t) => t.property === "x")!.keyframes;
     expect(xk[0]!.value).toBeCloseTo(pts[0]!.x - 4.5, 1); // starts at the first point (minus nib half)
     expect(xk[xk.length - 1]!.value).toBeCloseTo(pts[2]!.x - 4.5, 1); // ends at the last point
+    // The nib is precomputed by ARC LENGTH, not by keyframe index. For these monotonic-x points the x
+    // track must be non-decreasing, and the mid keyframe must sit at the arc-length midpoint (x≈87.75)
+    // rather than the geometric mid-vertex (x=80) — the assertion that the interior sampling is correct.
+    for (let i = 1; i < xk.length; i++) expect(xk[i]!.value as number).toBeGreaterThanOrEqual(xk[i - 1]!.value as number);
+    expect(xk).toHaveLength(21); // n = round(161.55/8) = 20 → 21 samples
+    expect(xk[10]!.value).toBeCloseTo(83.25, 1); // arc-length midpoint − nib half (87.75 − 4.5)
+  });
+  it("omits the nib for a single-point stroke but still emits a drawable line", () => {
+    const g = penStroke({ id: "s", points: [{ x: 20, y: 20 }], duration: 1 }) as GroupNode;
+    expect(g.children.some((n) => n.id.endsWith("-pen"))).toBe(false); // <2 points → no nib
+    const line = g.children.find((n) => n.id === "s-line") as { type: string; tracks?: Track[] };
+    expect(line.type).toBe("polyline");
+    expect(line.tracks!.some((t) => t.property === "progress")).toBe(true);
   });
   it("omits the nib when pen:false, and hides it before a delayed start", () => {
     expect((penStroke({ points: pts, pen: false }) as GroupNode).children.some((n) => n.id.endsWith("-pen"))).toBe(false);

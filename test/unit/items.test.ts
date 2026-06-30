@@ -44,6 +44,12 @@ describe("parametric items", () => {
     expect(bank.length).toBeGreaterThan(40);
     expect(new Set(bank.map((i) => i.stem)).size).toBe(bank.length); // all distinct
   });
+  it("handles the empty (count 0) and singleton (count 1) requests", () => {
+    expect(generateBank(additionTemplate, 0, 7)).toEqual([]);
+    const one = generateBank(additionTemplate, 1, 7);
+    expect(one).toHaveLength(1);
+    expect(one[0]!.choices[one[0]!.correctIndex]).toBe(String(one[0]!.answer));
+  });
 });
 
 describe("quizCard", () => {
@@ -76,5 +82,7 @@ describe("quizCard", () => {
     // A non-correct row is dimmed on reveal.
     const otherIdx = item.choices.findIndex((_, i) => i !== item.correctIndex);
     expect(row(revealed, otherIdx).opacity).toBeLessThan(1);
+    expect(row(revealed, otherIdx).opacity).toBe(0.5); // exact dim factor
+    expect(row(plain, otherIdx).opacity).toBe(1); // not dimmed before reveal
   });
 });

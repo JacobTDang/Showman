@@ -76,6 +76,42 @@ describe("flash safety (WCAG 2.3.1)", () => {
     );
     expect(r.findings.some((f) => f.code === "flash")).toBe(false);
   });
+  it("sits exactly on the 3-flashes-per-second threshold without flagging (boundary)", () => {
+    // WCAG 2.3.1 trips above 3 flashes in any 1s window; an exact-3/s strobe (3 luminance peaks
+    // ≤ 1s apart) must NOT be flagged — the source uses `fps > 3`, so 3 passes and 4 fails.
+    const at3 = auditScene(
+      scene([
+        {
+          id: "f",
+          type: "rect",
+          x: 0,
+          y: 0,
+          width: 50,
+          height: 50,
+          fill: "#000",
+          tracks: [{ property: "opacity", keyframes: flashKfs(3) }],
+        },
+      ]),
+    );
+    expect(at3.findings.some((f) => f.code === "flash")).toBe(false);
+    expect(at3.passed).toBe(true);
+    const at4 = auditScene(
+      scene([
+        {
+          id: "f",
+          type: "rect",
+          x: 0,
+          y: 0,
+          width: 50,
+          height: 50,
+          fill: "#000",
+          tracks: [{ property: "opacity", keyframes: flashKfs(4) }],
+        },
+      ]),
+    );
+    expect(at4.findings.some((f) => f.code === "flash" && f.severity === "serious")).toBe(true);
+    expect(at4.passed).toBe(false);
+  });
   it("flags a rapidly alternating fill color (luminance flash)", () => {
     const kfs: Keyframe[] = flashKfs(5).map((k) => ({ t: k.t, value: k.value === 1 ? "#ffffff" : "#000000" }));
     const r = auditScene(
@@ -122,6 +158,20 @@ describe("contrast (WCAG 1.4.3)", () => {
     // #888 on white ≈ 3.5:1 — fails as normal text, passes as large text (≥24px)
     expect(auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 16, fill: "#888888" }])).findings.length).toBe(1);
     expect(auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 30, fill: "#888888" }])).findings.length).toBe(0);
+  });
+  it("treats the exact 4.5:1 normal-text boundary as pass, just-below as fail", () => {
+    // #767676 on white = 4.542:1 (≥ 4.5 → passes); #777777 = 4.478:1 (< 4.5 → one warning).
+    // The source compares `ratio < threshold`, so this pins the boundary direction.
+    expect(auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 16, fill: "#767676" }])).findings).toHaveLength(0);
+    const below = auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 16, fill: "#777777" }])).findings;
+    expect(below).toHaveLength(1);
+    expect(below[0]!.code).toBe("contrast");
+    expect(below[0]!.severity).toBe("warning");
+  });
+  it("treats the exact 3:1 large-text boundary as pass, just-below as fail", () => {
+    // #949494 on white = 3.033:1 (≥ 3 → large text passes); #969696 = 2.958:1 (< 3 → fails).
+    expect(auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 30, fill: "#949494" }])).findings).toHaveLength(0);
+    expect(auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 30, fill: "#969696" }])).findings).toHaveLength(1);
   });
   it("skips gradient text + transparent fills", () => {
     const grad = {
