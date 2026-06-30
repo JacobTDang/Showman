@@ -7,7 +7,7 @@ import type { Node, GroupNode } from "../spec/types.js";
 import type { GeneratedItem } from "./items.js";
 import { getTheme } from "../theme/themes.js";
 import { readableOn, withAlpha } from "../engine/color.js";
-import { fillRamp, elevation, glowNode, surfaceFill, type Depth } from "../theme/depth.js";
+import { fillRamp, elevation, type Depth } from "../theme/depth.js";
 
 export interface QuizCardOptions {
   id?: string;
@@ -39,7 +39,6 @@ export function quizCard(opts: QuizCardOptions): GroupNode {
   const n = item.choices.length;
   const cardH = pad + stemH + n * (rowH + gap) + pad - gap;
   const depth = opts.depth ?? "soft";
-  const cardFill = surfaceFill(p.bg, cardH, depth); // gentle surface gradient (or the bare bg when flat)
 
   const children: Node[] = [
     {
@@ -51,7 +50,6 @@ export function quizCard(opts: QuizCardOptions): GroupNode {
       height: cardH,
       radius: 16,
       fill: p.bg,
-      ...(typeof cardFill === "string" ? {} : { gradient: cardFill }),
       stroke: withAlpha(p.muted, 0.35),
       strokeWidth: 1.5,
       ...(elevation(depth) ? { shadow: elevation(depth)! } : {}),
@@ -79,11 +77,6 @@ export function quizCard(opts: QuizCardOptions): GroupNode {
     const rowFill = highlight ? p.accent : withAlpha(p.primary, 0.06);
     const badge = highlight ? readableOn(p.accent, "#0f172a", "#f8fafc") : p.primary;
     const textColor = highlight ? readableOn(p.accent, "#0f172a", "#f8fafc") : p.text;
-    // On reveal, the correct row gets a warm glow halo behind it (golden-safe radial gradient).
-    if (highlight) {
-      const halo = glowNode(`${id}-glow-${i}`, x + w / 2, rowY + rowH / 2, rowH * 0.7, p.accent, depth);
-      if (halo) children.push(halo);
-    }
     const rowGrad = highlight ? fillRamp(p.accent, rowH, depth) : undefined; // sheen on the revealed answer
     children.push({
       id: `${id}-row-${i}`,
