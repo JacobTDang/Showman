@@ -22,7 +22,9 @@ describe("forceDiagram", () => {
   it("draws an arrow + label per force and a central body; validates", () => {
     const d = forceDiagram(opts);
     expect(kids(d).filter((n) => /-f\d+$/.test(n.id))).toHaveLength(2); // a connector group per force
-    expect(kids(d).some((n) => n.id === "fd-body")).toBe(true);
+    const body = kids(d).find((n) => n.id === "fd-body") as { fill?: string; gradient?: { stops: { color: string }[] } };
+    expect(body).toBeDefined();
+    expect(body.gradient?.stops.at(-1)?.color).toBe(body.fill); // depth: a spherical chip fading to the body color
     expect(kids(d).some((n) => n.id === "fd-lbl-0")).toBe(true);
     expect(validateScene(scene([d]))).toMatchObject({ valid: true });
   });
