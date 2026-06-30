@@ -179,6 +179,38 @@ export function createServer(deps: ServerDeps): http.Server {
       return sendJson(res, 202, { jobId: result.jobId, attempts: result.attempts, statusUrl: `/jobs/${result.jobId}` });
     }
 
+    // The atomic "agent tool" call: a brief in, a finished MP4 out, in one synchronous request.
+    // No schema fetch, no spec authoring, no job polling for the caller — just `{ brief }`.
+    if (method === "POST" && (path === "/v1/generate" || path === "/generate")) {
+      if (!deps.authoringAgent) return sendJson(res, 501, { error: "authoring_disabled" });
+      const body = (await readJson(req, limit)) as { brief?: unknown; options?: Record<string, unknown> };
+      const brief = typeof body?.brief === "string" ? body.brief : "";
+      if (!brief.trim()) return sendJson(res, 400, { error: "missing_brief", message: "Provide a non-empty 'brief' string." });
+      const authored = await deps.authoringAgent.authorSpec(brief);
+      if (!authored.ok || !authored.spec) {
+        return sendJson(res, 422, { error: "authoring_failed", attempts: authored.attempts, history: authored.history });
+      }
+      const result = await service.render(authored.spec, stripModerateOptOut(body?.options));
+      if (!result.ok) {
+        if ("blocked" in result) return sendJson(res, 422, { error: "content_safety", findings: result.findings });
+        return sendJson(res, 400, { error: "invalid_spec", errors: result.errors });
+      }
+      return sendJson(res, 200, {
+        videoUrl: result.video.url,
+        video: result.video,
+        brief,
+        attempts: authored.attempts,
+        ...(result.captions ? { captions: result.captions } : {}),
+        hasAudio: result.hasAudio,
+        width: result.width,
+        height: result.height,
+        fps: result.fps,
+        frameCount: result.frameCount,
+        durationSec: result.durationSec,
+        cached: result.cached,
+      });
+    }
+
     if (method === "POST" && path === "/jobs") {
       if (!deps.jobRunner) return sendJson(res, 501, { error: "jobs_disabled" });
       const body = (await readJson(req, limit)) as { spec?: unknown; options?: Record<string, unknown> };

@@ -56,8 +56,14 @@ export class AuthoringAgent {
     private readonly options: AuthoringOptions = {},
   ) {}
 
-  /** Run the loop for `brief`. Returns the submitted jobId on success. */
-  async run(brief: string): Promise<AuthoringResult> {
+  /**
+   * Author a valid, preview-passing spec for `brief` WITHOUT submitting it to render.
+   * The self-correction loop (propose → validate → preview) is identical to `run`; this
+   * just stops at a good spec so callers can render synchronously (the atomic API path).
+   */
+  async authorSpec(
+    brief: string,
+  ): Promise<{ ok: boolean; spec?: SceneSpec; attempts: number; history: AuthoringAttempt[]; error?: string }> {
     const maxAttempts = Math.max(1, this.options.maxAttempts ?? 3);
     const schema = await this.client.getSchema();
     const history: AuthoringAttempt[] = [];
@@ -84,18 +90,26 @@ export class AuthoringAgent {
         previewed = true;
       }
 
-      const submitted = await this.client.submit(spec, this.options.renderOptions ?? {});
-      if (!submitted.ok) {
-        history.push({ attempt, valid: true, errorCount: submitted.errors.length, previewed });
-        feedback = { errors: submitted.errors as ValidationError[], note: "Submit rejected the spec." };
-        continue;
-      }
-
       history.push({ attempt, valid: true, errorCount: 0, previewed });
-      return { ok: true, spec: spec as SceneSpec, jobId: submitted.jobId, attempts: attempt, history };
+      return { ok: true, spec: spec as SceneSpec, attempts: attempt, history };
     }
+    return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid spec" };
+  }
 
-    return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid, submittable spec" };
+  /** Run the loop for `brief`, then submit for async render. Returns the submitted jobId on success. */
+  async run(brief: string): Promise<AuthoringResult> {
+    const authored = await this.authorSpec(brief);
+    if (!authored.ok || !authored.spec) {
+      return { ok: false, attempts: authored.attempts, history: authored.history, error: authored.error ?? "authoring failed" };
+    }
+    const history = authored.history;
+    const previewed = history[history.length - 1]?.previewed ?? false;
+    const submitted = await this.client.submit(authored.spec, this.options.renderOptions ?? {});
+    if (!submitted.ok) {
+      history.push({ attempt: authored.attempts, valid: true, errorCount: submitted.errors.length, previewed });
+      return { ok: false, attempts: authored.attempts, history, error: "submit rejected the spec" };
+    }
+    return { ok: true, spec: authored.spec, jobId: submitted.jobId, attempts: authored.attempts, history };
   }
 }
 
