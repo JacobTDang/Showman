@@ -11,6 +11,22 @@ import type { SchemaDescription } from "../spec/describe.js";
 import type { ValidationResult } from "../validator/validate.js";
 import type { RenderService, RenderOptions } from "../service/renderService.js";
 import type { JobRunner, JobView } from "../service/jobs.js";
+import { AuthoringAgent } from "../authoring/agent.js";
+import { createDefaultAuthor } from "../authoring/templateAuthor.js";
+
+/** Result of the atomic "brief → MP4" tool: a finished video reference, or a failure. */
+export type GenerateResult =
+  | {
+      ok: true;
+      videoUrl: string;
+      video: { key: string; url: string };
+      durationSec: number;
+      width: number;
+      height: number;
+      fps: number;
+      attempts: number;
+    }
+  | { ok: false; error: string; attempts?: number };
 
 export interface PreviewOk {
   ok: true;
@@ -30,14 +46,24 @@ export interface ShowmanClient {
   preview(spec: unknown, frame: number): Promise<PreviewOk | CapabilityErr>;
   submit(spec: unknown, options: RenderOptions): Promise<{ ok: true; jobId: string } | CapabilityErr>;
   status(jobId: string): Promise<JobView | null>;
+  /** The atomic path: a plain-English brief in, a finished MP4 reference out, in one call. */
+  generate(brief: string, options?: RenderOptions): Promise<GenerateResult>;
 }
 
 /** In-process backend backed by the RenderService + JobRunner. */
 export class DirectBackend implements ShowmanClient {
+  private agent?: AuthoringAgent;
   constructor(
     private readonly service: RenderService,
     private readonly jobRunner: JobRunner,
-  ) {}
+    /** Authoring agent for `generate`. Defaults to one over this backend + the default author. */
+    authoringAgent?: AuthoringAgent,
+  ) {
+    if (authoringAgent) this.agent = authoringAgent;
+  }
+  private authoring(): AuthoringAgent {
+    return (this.agent ??= new AuthoringAgent(this, createDefaultAuthor(), { maxAttempts: 3 }));
+  }
 
   async getSchema(): Promise<SchemaDescription> {
     return this.service.getSchema();
@@ -57,6 +83,22 @@ export class DirectBackend implements ShowmanClient {
   }
   async status(jobId: string): Promise<JobView | null> {
     return this.jobRunner.status(jobId);
+  }
+  async generate(brief: string, options?: RenderOptions): Promise<GenerateResult> {
+    const authored = await this.authoring().authorSpec(brief);
+    if (!authored.ok || !authored.spec) return { ok: false, error: authored.error ?? "authoring failed", attempts: authored.attempts };
+    const r = await this.service.render(authored.spec, options ?? {});
+    if (!r.ok) return { ok: false, error: "blocked" in r ? "content_safety" : "invalid_spec", attempts: authored.attempts };
+    return {
+      ok: true,
+      videoUrl: r.video.url,
+      video: { key: r.video.key, url: r.video.url },
+      durationSec: r.durationSec,
+      width: r.width,
+      height: r.height,
+      fps: r.fps,
+      attempts: authored.attempts,
+    };
   }
 }
 
@@ -95,6 +137,21 @@ export class HttpBackend implements ShowmanClient {
     if (r.status === 404) return null;
     return r.json() as Promise<JobView>;
   }
+  async generate(brief: string, options?: RenderOptions): Promise<GenerateResult> {
+    const r = await this.fetchImpl(this.url("/v1/generate"), { method: "POST", body: JSON.stringify({ brief, options }) });
+    const j = (await r.json()) as Record<string, unknown>;
+    if (!r.ok) return { ok: false, error: typeof j.error === "string" ? j.error : `http_${r.status}` };
+    return {
+      ok: true,
+      videoUrl: j.videoUrl as string,
+      video: j.video as { key: string; url: string },
+      durationSec: j.durationSec as number,
+      width: j.width as number,
+      height: j.height as number,
+      fps: j.fps as number,
+      attempts: (j.attempts as number) ?? 1,
+    };
+  }
 }
 
 export interface ToolDefinition {
@@ -107,6 +164,20 @@ const objSpec = { type: "object", description: "A Showman Scene Spec object." };
 
 /** The tools an agent sees. Schemas are intentionally permissive; the validator is the gate. */
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    name: "showman_generate_video",
+    description:
+      'Generate a finished narrated MP4 from a plain-English brief in ONE call (e.g. "graph y=2x+1" or "teach counting to five with stars"). ' +
+      "Authors the scene, validates and renders it for you, and returns the video URL + duration. Use this unless you specifically want to hand-author a Scene Spec yourself.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        brief: { type: "string", description: "What to make a video of, in plain English." },
+        options: { type: "object", description: "Optional render options (deterministic, crf, preset)." },
+      },
+      required: ["brief"],
+    },
+  },
   {
     name: "showman_get_schema",
     description:
@@ -147,6 +218,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 /** Dispatch a tool call to the backend. Returns plain data (the MCP server formats it). */
 export async function callTool(client: ShowmanClient, name: string, args: Record<string, unknown>): Promise<unknown> {
   switch (name) {
+    case "showman_generate_video":
+      return client.generate(String(args.brief ?? ""), (args.options as RenderOptions) ?? {});
     case "showman_get_schema":
       return client.getSchema();
     case "showman_validate_scene":

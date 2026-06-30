@@ -2,10 +2,22 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RenderService, LocalObjectStorage, InMemoryJobStore, JobRunner } from "../../src/index.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { RenderService, LocalObjectStorage, InMemoryJobStore, JobRunner, TemplateAuthor } from "../../src/index.js";
 import { DirectBackend, TOOL_DEFINITIONS, callTool } from "../../src/mcp/showmanTools.js";
 import { AuthoringAgent, ScriptedAuthor, extractJson } from "../../src/authoring/agent.js";
 import type { SceneSpec } from "../../src/index.js";
+
+const execFileAsync = promisify(execFile);
+async function hasFfmpeg(): Promise<boolean> {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function validScene(): SceneSpec {
   return {
@@ -32,13 +44,36 @@ beforeAll(() => {
 afterAll(() => rmSync(dataDir, { recursive: true, force: true }));
 
 describe("MCP tools (M4.1/M4.2)", () => {
-  it("exposes the six-ish capability tools", () => {
+  it("exposes the capability tools incl. the atomic generate-video tool", () => {
     const names = TOOL_DEFINITIONS.map((t) => t.name);
+    expect(names).toContain("showman_generate_video");
     expect(names).toContain("showman_get_schema");
     expect(names).toContain("showman_validate_scene");
     expect(names).toContain("showman_preview_scene");
     expect(names).toContain("showman_submit_render");
     expect(names).toContain("showman_job_status");
+  });
+
+  it("showman_generate_video makes a finished MP4 from a brief in ONE tool call", async () => {
+    if (!(await hasFfmpeg())) return expect.unreachable("ffmpeg required");
+    // A small offline author keeps the render fast; inject it so generate() doesn't lazy-build a big one.
+    const storage = new LocalObjectStorage(join(dataDir, "gen-objects"));
+    const service = new RenderService({ storage, workDir: join(dataDir, "gen-tmp") });
+    const jobRunner = new JobRunner(service, new InMemoryJobStore(), { maxConcurrent: 1 });
+    const agent = new AuthoringAgent(new DirectBackend(service, jobRunner), new TemplateAuthor({ width: 320, height: 180, fps: 8 }), {
+      maxAttempts: 2,
+    });
+    const gb = new DirectBackend(service, jobRunner, agent);
+    const res = (await callTool(gb, "showman_generate_video", { brief: "teach counting to three with stars" })) as {
+      ok: boolean;
+      videoUrl?: string;
+      durationSec?: number;
+      attempts?: number;
+    };
+    expect(res.ok).toBe(true);
+    expect(res.videoUrl).toBeTruthy();
+    expect(res.durationSec!).toBeGreaterThan(0);
+    expect(res.attempts!).toBeGreaterThanOrEqual(1);
   });
 
   it("get_schema returns the self-describing contract", async () => {

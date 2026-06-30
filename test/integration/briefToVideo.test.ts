@@ -90,4 +90,28 @@ describe("brief -> finished video, end to end (the product goal)", () => {
     const r = await fetch(`${baseUrl}/author`, { method: "POST", body: JSON.stringify({ brief: "  " }) });
     expect(r.status).toBe(400);
   });
+
+  it("POST /v1/generate returns a finished MP4 in ONE synchronous call (the atomic agent tool)", async () => {
+    if (!ffmpeg) return expect.unreachable("ffmpeg required");
+    const r = await fetch(`${baseUrl}/v1/generate`, {
+      method: "POST",
+      body: JSON.stringify({ brief: "teach counting to three with stars" }),
+    });
+    expect(r.status).toBe(200); // synchronous — no 202, no jobId, no polling
+    const out = await body(r);
+    expect(out.videoUrl).toBeTruthy();
+    expect(out.video.key).toBeTruthy();
+    expect(out.durationSec).toBeGreaterThan(0);
+    expect(out.attempts).toBeGreaterThanOrEqual(1);
+    // The returned reference fetches a real MP4 (ftyp box).
+    const obj = await fetch(`${baseUrl}/objects/${out.video.key}`);
+    expect(obj.headers.get("content-type")).toBe("video/mp4");
+    const mp4 = Buffer.from(await obj.arrayBuffer());
+    expect(mp4.subarray(4, 8).toString("latin1")).toBe("ftyp");
+  });
+
+  it("POST /v1/generate rejects an empty brief", async () => {
+    const r = await fetch(`${baseUrl}/v1/generate`, { method: "POST", body: JSON.stringify({ brief: "" }) });
+    expect(r.status).toBe(400);
+  });
 });
