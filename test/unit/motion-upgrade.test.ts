@@ -25,6 +25,51 @@ describe("easing library", () => {
       expect(EASING_NAMES).toContain(name);
     }
   });
+  it("computes correct interior values (catches a wrong formula, not just a present name)", () => {
+    const near = (name: EasingName, t: number, v: number): void => expect(applyEasing(name, t)).toBeCloseTo(v, 5);
+    // Polynomial in/out at the midpoint.
+    near("easeInQuad", 0.5, 0.25);
+    near("easeOutQuad", 0.5, 0.75);
+    near("easeInCubic", 0.5, 0.125);
+    near("easeOutCubic", 0.5, 0.875);
+    near("easeInQuart", 0.5, 0.0625);
+    near("easeOutQuart", 0.5, 0.9375);
+    near("easeInQuint", 0.5, 0.03125);
+    near("easeOutQuint", 0.5, 0.96875);
+    // Exponential / circular / sine.
+    near("easeInExpo", 0.5, 0.03125);
+    near("easeOutExpo", 0.5, 0.96875);
+    near("easeInCirc", 0.5, 1 - Math.sqrt(0.75));
+    near("easeOutCirc", 0.5, Math.sqrt(0.75));
+    near("easeInSine", 0.5, 1 - Math.SQRT1_2);
+    near("easeOutSine", 0.5, Math.SQRT1_2);
+    // Every in-out curve is symmetric → exactly 0.5 at t=0.5 (catches a transposed branch).
+    for (const n of [
+      "easeInOutQuad",
+      "easeInOutCubic",
+      "easeInOutQuart",
+      "easeInOutQuint",
+      "easeInOutExpo",
+      "easeInOutCirc",
+      "easeInOutSine",
+    ] as EasingName[])
+      near(n, 0.5, 0.5);
+    // Bounce is exact piecewise arithmetic.
+    near("easeOutBounce", 0.5, 0.765625);
+    near("easeInBounce", 0.5, 0.234375);
+    // Back: anticipation dips below 0 going in, overshoots past 1 going out.
+    expect(applyEasing("easeInBack", 0.3)).toBeLessThan(0);
+    expect(applyEasing("easeOutBack", 0.7)).toBeGreaterThan(1);
+    // Elastic: in undershoots well below 0, out overshoots above 1.
+    let minIn = 1;
+    let maxOut = 0;
+    for (let i = 0; i <= 40; i++) {
+      minIn = Math.min(minIn, applyEasing("easeInElastic", i / 40));
+      maxOut = Math.max(maxOut, applyEasing("easeOutElastic", i / 40));
+    }
+    expect(minIn).toBeLessThan(-0.05);
+    expect(maxOut).toBeGreaterThan(1.05);
+  });
   it("springs overshoot past 1 before settling", () => {
     let maxV = 0;
     for (let i = 0; i <= 20; i++) maxV = Math.max(maxV, applyEasing("easeOutSpring", i / 20));

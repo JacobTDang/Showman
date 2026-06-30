@@ -27,6 +27,15 @@ const unsafeScene = (): SceneSpec => ({
   background: "#fff",
   nodes: [{ id: "t", type: "text", x: 4, y: 30, text: "shoot the gun and kill", fontSize: 12, fill: "#000" }],
 });
+const safeScene = (): SceneSpec => ({
+  specVersion: 1,
+  width: 64,
+  height: 64,
+  fps: 5,
+  duration: 0.4,
+  background: "#fff",
+  nodes: [{ id: "t", type: "text", x: 4, y: 30, text: "the quick brown fox", fontSize: 12, fill: "#000" }],
+});
 
 let server: Server;
 let baseUrl: string;
@@ -52,6 +61,13 @@ afterAll(async () => {
 const post = (p: string, payload: unknown) => fetch(`${baseUrl}${p}`, { method: "POST", body: JSON.stringify(payload) });
 
 describe("content-safety gate cannot be bypassed (post-review hardening)", () => {
+  it("lets SAFE content through /preview (the gate isn't simply rejecting everything)", async () => {
+    const r = await post("/preview", { spec: safeScene() });
+    // Without this positive case, a moderation that blocked EVERYTHING would pass every other test here.
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("image/png");
+  });
+
   it("blocks /render", async () => {
     expect((await post("/render", { spec: unsafeScene() })).status).toBe(422);
   });
