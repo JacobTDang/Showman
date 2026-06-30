@@ -23,6 +23,10 @@ import {
   periodicTable,
   vseprShape,
   moleculeFrom,
+  beaker,
+  erlenmeyerFlask,
+  testTube,
+  bunsenBurner,
 } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
@@ -752,6 +756,25 @@ export const GOLDEN_CASES: GoldenCase[] = [
       seed: 1,
       background: "#f8fafc",
       nodes: [periodicTable({ id: "pt", x: 16, y: 16, cellSize: 40, highlight: ["O", "Na", "Fe"] })],
+    },
+    frames: [0],
+  },
+  {
+    name: "apparatus",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 420,
+      height: 230,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#f8fafc",
+      nodes: [
+        beaker({ id: "bk", x: 70, y: 200, liquid: 0.5, liquidColor: "#86efac" }),
+        erlenmeyerFlask({ id: "ef", x: 190, y: 200, liquid: 0.45, liquidColor: "#fca5a5" }),
+        testTube({ id: "tt", x: 290, y: 200, liquid: 0.55, liquidColor: "#fcd34d" }),
+        bunsenBurner({ id: "bb", x: 370, y: 200 }),
+      ],
     },
     frames: [0],
   },

@@ -129,6 +129,8 @@ export type {
   SubshellFill,
   MoleculeFromOptions,
   MoleculeName,
+  GlasswareOptions,
+  BunsenBurnerOptions,
 } from "./chem/index.js";
 export * as chart from "./chart/index.js";
 export type {
