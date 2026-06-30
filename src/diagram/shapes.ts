@@ -7,6 +7,7 @@
 
 import type { Node, GroupNode, Color, Gradient, Shadow } from "../spec/types.js";
 import type { Point } from "./connector.js";
+import { fillRamp, elevation, type Depth } from "../theme/depth.js";
 
 export type BoxShape = "rect" | "rounded" | "ellipse" | "diamond" | "parallelogram" | "hexagon" | "cylinder";
 
@@ -25,6 +26,9 @@ export interface BoxOptions {
   strokeWidth?: number;
   gradient?: Gradient;
   shadow?: Shadow;
+  /** Dimensionality: a crisp card-lift (+ a fill sheen for box shapes). Default "soft"; "flat" = none.
+   * An explicit `gradient`/`shadow` always wins over the depth-derived one. */
+  depth?: Depth;
   labelColor?: Color;
   fontFamily?: string;
   fontSize?: number;
@@ -40,12 +44,18 @@ export interface Box {
 function shapeNode(id: string, opts: BoxOptions): Node {
   const { x, y, width: w, height: h } = opts;
   const shape = opts.shape ?? "rect";
+  const depth = opts.depth ?? "soft";
+  // A fill sheen only for box-aligned shapes (their gradient coords match the node box); the crisp
+  // lift works for every shape. An explicit gradient/shadow always overrides the depth-derived one.
+  const canSheen = shape === "rect" || shape === "rounded" || shape === "ellipse";
+  const derivedGrad = canSheen && opts.fill ? fillRamp(opts.fill, h, depth) : undefined;
+  const derivedShadow = elevation(depth);
   const paint = {
     fill: opts.fill ?? "#ffffff",
     ...(opts.stroke !== undefined ? { stroke: opts.stroke } : { stroke: "#334155" }),
     strokeWidth: opts.strokeWidth ?? 2,
-    ...(opts.gradient ? { gradient: opts.gradient } : {}),
-    ...(opts.shadow ? { shadow: opts.shadow } : {}),
+    ...(opts.gradient ? { gradient: opts.gradient } : derivedGrad ? { gradient: derivedGrad } : {}),
+    ...(opts.shadow ? { shadow: opts.shadow } : derivedShadow ? { shadow: derivedShadow } : {}),
   };
   switch (shape) {
     case "rect":
