@@ -22,3 +22,5 @@ export * from "./moleculeLibrary.js";
 export * from "./apparatus.js";
 
 export * from "./mechanism.js";
+
+export * from "./smiles.js";
