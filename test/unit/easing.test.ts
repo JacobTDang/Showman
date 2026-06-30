@@ -4,11 +4,42 @@ import type { EasingName } from "../../src/index.js";
 
 describe("easing", () => {
   it("every named easing pins the endpoints (0->0, 1->1)", () => {
-    expect(EASING_NAMES.length).toBeGreaterThanOrEqual(26); // the full library, not a hand-maintained subset
+    expect(EASING_NAMES.length).toBe(33); // the full pinned library — exact count guards against drops/dupes
     for (const name of EASING_NAMES) {
       expect(applyEasing(name as EasingName, 0)).toBeCloseTo(0, 6);
       expect(applyEasing(name as EasingName, 1)).toBeCloseTo(1, 6);
     }
+  });
+
+  it("pins exact interior values so a wrong constant can't slip through", () => {
+    expect(applyEasing("easeInQuad", 0.5)).toBeCloseTo(0.25, 12); // 0.5^2
+    expect(applyEasing("easeInCubic", 0.5)).toBeCloseTo(0.125, 12); // 0.5^3
+    expect(applyEasing("easeInExpo", 0.5)).toBeCloseTo(0.03125, 12); // 2^-5
+    expect(applyEasing("easeOutQuad", 0.5)).toBeCloseTo(0.75, 12); // 1-(1-t)^2
+  });
+
+  it("easeOutBack's overshoot peaks at its known interior maximum (~1.10)", () => {
+    // The analytic maximum of easeOutBack is at t* = 1 - 2*c1/(3*c3) ≈ 0.5801025,
+    // where the value is ≈ 1.1000041 — not merely "> 1".
+    const tStar = 0.5801025079151212;
+    expect(applyEasing("easeOutBack", tStar)).toBeCloseTo(1.1000041, 6);
+    const samples = Array.from({ length: 10001 }, (_, i) => applyEasing("easeOutBack", i / 10000));
+    expect(Math.max(...samples)).toBeCloseTo(1.1000041, 4);
+  });
+
+  it("named curves extrapolate outside [0,1] (no clamp) — current contract", () => {
+    // The named maps are evaluated directly, so out-of-range t flows through the formula.
+    expect(applyEasing("easeInQuad", -1)).toBe(1); // (-1)^2
+    expect(applyEasing("easeInQuad", 2)).toBe(4); // 2^2
+    expect(applyEasing("linear", -0.5)).toBe(-0.5); // identity, unclamped
+  });
+
+  it("cubicBezier clamps t outside [0,1] to the endpoints — current contract", () => {
+    // Unlike the named curves, the bezier solver short-circuits t<=0 and t>=1.
+    expect(applyEasing([0.42, 0, 0.58, 1], -1)).toBe(0);
+    expect(applyEasing([0.42, 0, 0.58, 1], 2)).toBe(1);
+    expect(cubicBezier(0.42, 0, 0.58, 1, -3)).toBe(0);
+    expect(cubicBezier(0.42, 0, 0.58, 1, 5)).toBe(1);
   });
 
   it("linear is the identity", () => {

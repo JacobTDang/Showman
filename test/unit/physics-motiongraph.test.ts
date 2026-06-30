@@ -37,8 +37,17 @@ describe("motionGraph", () => {
     const pts = (i: number) => (kids(mg).find((n) => n.id === `mg-c${i}`) as PolylineNode).points;
     const xt = pts(0);
     expect(xt[xt.length - 1]!.y).toBeLessThan(xt[0]!.y); // x grows → curve climbs (local y down)
+    // v-t is v = a0·t → a straight line: every point sits on the chord through its endpoints.
+    const vt = pts(1);
+    const x0 = vt[0]!.x;
+    const y0 = vt[0]!.y;
+    const xN = vt[vt.length - 1]!.x;
+    const yN = vt[vt.length - 1]!.y;
+    const maxDev = Math.max(...vt.map((p) => Math.abs(y0 + ((yN - y0) * (p.x - x0)) / (xN - x0) - p.y)));
+    expect(maxDev).toBeLessThan(1e-6); // collinear → genuinely linear
+    expect(yN).toBeLessThan(y0); // v rises with t → local y falls
     const at = pts(2);
-    expect(at[0]!.y).toBeCloseTo(at[at.length - 1]!.y, 0); // a is constant → flat line
+    expect(at[0]!.y).toBeCloseTo(at[at.length - 1]!.y, 5); // a is constant → flat line (exact)
     expect(kids(mg).filter((n) => /^mg-dot\d+$/.test(n.id))).toHaveLength(0); // trace:false → no dots
     expect(kids(mg).some((n) => n.id === "mg-sweep")).toBe(false);
   });

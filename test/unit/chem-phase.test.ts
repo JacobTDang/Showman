@@ -34,6 +34,11 @@ describe("titrationCurve", () => {
     expect(kids(t).some((n) => n.id === "t-eq")).toBe(true); // equivalence marker
     expect(validateScene(scene([t]))).toMatchObject({ valid: true });
   });
+  it("draws the curve on with a progress track when animated", () => {
+    const t = titrationCurve({ id: "t", x: 40, y: 20, width: 360, height: 280, animate: true });
+    const curve = kids(t).find((n) => n.id === "t-curve") as { tracks?: { property: string }[] };
+    expect(curve.tracks!.some((tr) => tr.property === "progress")).toBe(true);
+  });
 });
 
 describe("heatingCurve", () => {
@@ -44,6 +49,11 @@ describe("heatingCurve", () => {
     expect(curve.points[1]!.y).toBeCloseTo(curve.points[2]!.y, 5); // melting plateau (flat)
     expect(curve.points[3]!.y).toBeCloseTo(curve.points[4]!.y, 5); // boiling plateau (flat)
     expect(validateScene(scene([c]))).toMatchObject({ valid: true });
+  });
+  it("draws the curve on with a progress track when animated", () => {
+    const c = heatingCurve({ id: "h", x: 40, y: 20, width: 360, height: 280, animate: true });
+    const curve = kids(c).find((n) => n.id === "h-curve") as { tracks?: { property: string }[] };
+    expect(curve.tracks!.some((tr) => tr.property === "progress")).toBe(true);
   });
 });
 

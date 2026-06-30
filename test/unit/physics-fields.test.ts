@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateScene, SPEC_VERSION, physics } from "../../src/index.js";
-import type { SceneSpec, Node, GroupNode } from "../../src/index.js";
+import type { SceneSpec, Node, GroupNode, PolylineNode } from "../../src/index.js";
 
 const { vectorField, pointCharge, emSpectrum, switchSym, inductor, acSource, diode, meter } = physics;
 const scene = (nodes: Node[]): SceneSpec => ({
@@ -28,12 +28,37 @@ describe("vectorField", () => {
       field: (nx, ny) => ({ vx: nx - 0.5, vy: ny - 0.5 }),
     });
     const arrows = kids(vf).filter((n) => /-a\d+$/.test(n.id));
-    expect(arrows.length).toBeGreaterThan(10); // most of the 20 cells (the dead-center null is skipped)
+    // No sampled cell is null here (vy never hits 0 over the sampled ny rows), so all 20 draw.
+    expect(arrows).toHaveLength(20);
     expect(validateScene(scene([vf]))).toMatchObject({ valid: true });
   });
   it("skips null-magnitude points (no zero-length arrow)", () => {
     const vf = vectorField({ id: "vf", x: 0, y: 0, width: 100, height: 100, cols: 3, rows: 3, field: () => ({ vx: 0, vy: 0 }) });
     expect(kids(vf).filter((n) => /-a\d+$/.test(n.id))).toHaveLength(0);
+  });
+  it("skips only the cell a field actually nulls (the sampled dead center)", () => {
+    // cols:3,rows:3 samples nx,ny ∈ {0,0.5,1}; this field is (0,0) exactly at nx=ny=0.5 — one cell.
+    const vf = vectorField({
+      id: "vf",
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 120,
+      cols: 3,
+      rows: 3,
+      field: (nx, ny) => ({ vx: nx - 0.5, vy: ny - 0.5 }),
+    });
+    expect(kids(vf).filter((n) => /-a\d+$/.test(n.id))).toHaveLength(8); // 9 cells − 1 null center
+  });
+  it("scales arrow length with vector magnitude", () => {
+    // nx ∈ {0,0.5,1}; |v| = nx so cell i=0 is null, i=1 has |v|=0.5, i=2 has |v|=1 (the longest).
+    const vf = vectorField({ id: "vf", x: 0, y: 0, width: 300, height: 200, cols: 3, rows: 2, field: (nx) => ({ vx: nx, vy: 0 }) });
+    const lenOf = (k: number): number => {
+      const arrow = kids(vf).find((n) => n.id === `vf-a${k}`) as GroupNode;
+      const p = (arrow.children.find((n) => n.id === `vf-a${k}-line`) as PolylineNode).points;
+      return Math.hypot(p[1]!.x - p[0]!.x, p[1]!.y - p[0]!.y);
+    };
+    expect(lenOf(2)).toBeGreaterThan(lenOf(1)); // larger |v| → longer arrow
   });
 });
 
@@ -47,6 +72,19 @@ describe("pointCharge", () => {
     const neg = pointCharge({ id: "n", x: 0, y: 0, charge: -2 });
     expect((kids(neg).find((n) => n.id === "n-sign") as { text?: string }).text).toBe("−");
     expect(validateScene(scene([p, neg]))).toMatchObject({ valid: true });
+  });
+  it("+ field arrows point outward, − field arrows point inward", () => {
+    const cx = 100;
+    const cy = 100;
+    const dist = (pt: { x: number; y: number }): number => Math.hypot(pt.x - cx, pt.y - cy);
+    const arrowLine = (g: Node, fid: string): { x: number; y: number }[] => {
+      const arrow = kids(g).find((n) => n.id === fid) as GroupNode;
+      return (arrow.children.find((n) => n.id === `${fid}-line`) as PolylineNode).points;
+    };
+    const pos = arrowLine(pointCharge({ id: "pp", x: cx, y: cy, charge: 1, fieldArrows: true, arrowCount: 8 }), "pp-f0");
+    expect(dist(pos[pos.length - 1]!)).toBeGreaterThan(dist(pos[0]!)); // arrowhead farther from charge → outward
+    const neg = arrowLine(pointCharge({ id: "nn", x: cx, y: cy, charge: -1, fieldArrows: true, arrowCount: 8 }), "nn-f0");
+    expect(dist(neg[neg.length - 1]!)).toBeLessThan(dist(neg[0]!)); // arrowhead nearer the charge → inward
   });
 });
 
@@ -76,6 +114,6 @@ describe("circuit symbol expansion", () => {
   it("an inductor has a multi-bump coil polyline", () => {
     const ind = inductor({ id: "ind", x: 0, y: 40, size: 80 });
     const coil = kids(ind.node).find((n) => n.id === "ind-coil") as { points?: unknown[] };
-    expect(coil.points!.length).toBeGreaterThan(20); // 4 sampled bumps
+    expect(coil.points!.length).toBe(34); // start + 4 bumps × 8 samples + end
   });
 });

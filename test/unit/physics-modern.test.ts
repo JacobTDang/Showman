@@ -42,6 +42,16 @@ describe("energyLevels", () => {
     expect((kids(e).find((n) => n.id === "e-photon") as { text?: string }).text).toBe("photon out"); // emission (3→2)
     expect(validateScene(scene([e]))).toMatchObject({ valid: true });
   });
+  it("places each level at its 1 − 1/k² fractional height", () => {
+    const e = energyLevels({ id: "e", x: 20, y: 20, width: 200, height: 240, levels: 4 });
+    const yOf = (k: number) => (kids(e).find((n) => n.id === `e-L${k}`) as PolylineNode).points[0]!.y;
+    const expected = (k: number) => 20 + 240 - (1 - 1 / (k * k)) * 240; // y + h − (1−1/k²)·h
+    for (const k of [1, 2, 3, 4]) expect(yOf(k)).toBeCloseTo(expected(k), 5);
+  });
+  it("labels an absorption transition 'photon in' when from < to", () => {
+    const e = energyLevels({ id: "e", x: 20, y: 20, width: 200, height: 240, levels: 4, transition: { from: 2, to: 4 } });
+    expect((kids(e).find((n) => n.id === "e-photon") as { text?: string }).text).toBe("photon in");
+  });
 });
 
 describe("pvDiagram", () => {

@@ -296,9 +296,152 @@ describe("validateScene", () => {
     };
     const { errors } = validateScene(messySpec);
     expect(errors.length).toBeGreaterThan(5);
+    const seen = errors.map((e) => e.code);
+    // Pin a few specific codes the messy spec is known to surface, so the count
+    // assertion can't pass on the wrong mix of errors.
+    expect(seen).toContain("UNSUPPORTED_VERSION");
+    expect(seen).toContain("UNKNOWN_TYPE");
+    expect(seen).toContain("DUPLICATE_ID");
+    expect(seen).toContain("NOT_ASCENDING");
+    expect(seen).toContain("INVALID_EASING");
     for (const e of errors) {
       expect(VALIDATION_CODES).toContain(e.code);
     }
+  });
+
+  describe("camera (validator reject branches)", () => {
+    it("accepts a well-formed static and animated camera with no errors", () => {
+      expect(validateScene(baseScene({ camera: { x: 100, y: 50, zoom: 1.5 } })).valid).toBe(true);
+      const animated = baseScene({
+        camera: {
+          zoom: 1,
+          tracks: [
+            {
+              property: "zoom",
+              keyframes: [
+                { t: 0, value: 1 },
+                { t: 1, value: 2 },
+              ],
+            },
+          ],
+        },
+      });
+      expect(validateScene(animated).errors).toEqual([]);
+    });
+
+    it("rejects a camera that is not an object", () => {
+      expect(codes(baseScene({ camera: 5 as never }))).toContain("INVALID_TYPE");
+    });
+
+    it("rejects non-finite camera x / y / zoom (INVALID_VALUE)", () => {
+      expect(codes(baseScene({ camera: { x: Number.NaN } as never }))).toContain("INVALID_VALUE");
+      expect(codes(baseScene({ camera: { y: Number.POSITIVE_INFINITY } as never }))).toContain("INVALID_VALUE");
+      expect(codes(baseScene({ camera: { zoom: Number.NaN } as never }))).toContain("INVALID_VALUE");
+    });
+
+    it("rejects camera.zoom <= 0 (OUT_OF_RANGE)", () => {
+      expect(codes(baseScene({ camera: { zoom: 0 } as never }))).toContain("OUT_OF_RANGE");
+      expect(codes(baseScene({ camera: { zoom: -1 } as never }))).toContain("OUT_OF_RANGE");
+    });
+
+    it("rejects camera.tracks that is not an array", () => {
+      expect(codes(baseScene({ camera: { tracks: 7 } as never }))).toContain("INVALID_TYPE");
+    });
+
+    it("rejects a camera track with a bad property (INVALID_VALUE)", () => {
+      const spec = baseScene({
+        camera: { tracks: [{ property: "scale", keyframes: [{ t: 0, value: 1 }] }] } as never,
+      });
+      expect(codes(spec)).toContain("INVALID_VALUE");
+    });
+
+    it("rejects empty camera track keyframes (EMPTY)", () => {
+      const spec = baseScene({ camera: { tracks: [{ property: "zoom", keyframes: [] }] } as never });
+      expect(codes(spec)).toContain("EMPTY");
+    });
+  });
+
+  describe("keyframe time + base-coord edge cases", () => {
+    function track(keyframes: unknown[]): SceneSpec {
+      return baseScene({ nodes: [{ id: "n", type: "rect", tracks: [{ property: "x", keyframes }] as never }] });
+    }
+
+    it("rejects a negative keyframe t (INVALID_VALUE, distinct from NOT_ASCENDING)", () => {
+      expect(codes(track([{ t: -1, value: 0 }]))).toContain("INVALID_VALUE");
+    });
+
+    it("rejects a non-finite keyframe t (INVALID_VALUE)", () => {
+      expect(codes(track([{ t: Number.NaN, value: 0 }]))).toContain("INVALID_VALUE");
+    });
+
+    it("rejects Infinity / NaN base coordinates (INVALID_TYPE)", () => {
+      expect(codes(baseScene({ nodes: [{ id: "n", type: "rect", x: Number.POSITIVE_INFINITY }] }))).toContain("INVALID_TYPE");
+      expect(codes(baseScene({ nodes: [{ id: "n", type: "rect", rotation: Number.NaN }] }))).toContain("INVALID_TYPE");
+    });
+  });
+
+  describe("custom cubic-bezier easing reject branches", () => {
+    function easing(e: unknown): SceneSpec {
+      return baseScene({
+        nodes: [
+          {
+            id: "n",
+            type: "rect",
+            tracks: [
+              {
+                property: "x",
+                keyframes: [
+                  { t: 0, value: 0 },
+                  { t: 1, value: 1, easing: e },
+                ],
+              },
+            ] as never,
+          },
+        ],
+      });
+    }
+
+    it("rejects an easing array whose length is not 4", () => {
+      expect(codes(easing([0.1, 0.2, 0.3]))).toContain("INVALID_EASING");
+    });
+
+    it("rejects an easing array with a non-finite entry", () => {
+      expect(codes(easing([0.1, 0.2, Number.NaN, 1]))).toContain("INVALID_EASING");
+    });
+
+    it("rejects bezier x control points outside [0, 1]", () => {
+      expect(codes(easing([1.5, 0, 0.5, 1]))).toContain("INVALID_EASING");
+      expect(codes(easing([0.5, 0, -0.2, 1]))).toContain("INVALID_EASING");
+    });
+  });
+
+  it("rejects an animated opacity keyframe below 0 (OUT_OF_RANGE)", () => {
+    const spec = baseScene({
+      nodes: [
+        {
+          id: "n",
+          type: "rect",
+          tracks: [
+            {
+              property: "opacity",
+              keyframes: [
+                { t: 0, value: -0.5 },
+                { t: 1, value: 1 },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(codes(spec)).toContain("OUT_OF_RANGE");
+  });
+
+  it("rejects a node tree deeper than the max depth (LIMIT_EXCEEDED)", () => {
+    let node: unknown = { id: "leaf", type: "rect", width: 1, height: 1 };
+    for (let i = 0; i < 40; i++) {
+      node = { id: `g${i}`, type: "group", children: [node] };
+    }
+    expect(codes(baseScene({ nodes: [node as never] }))).toContain("LIMIT_EXCEEDED");
   });
 
   describe("assertValidScene", () => {

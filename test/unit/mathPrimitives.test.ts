@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderFrame, validateScene } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 import { samplePixel, isColorNear } from "../helpers.js";
+import { finiteNum, posSize, intCount, fmtTick, clamp } from "../../src/math/shared.js";
 
 const RED = { r: 255, g: 0, b: 0 };
 const WHITE = { r: 255, g: 255, b: 255 };
@@ -165,5 +166,48 @@ describe("counter primitive", () => {
     expect(codes({ id: "c", type: "counter", decimals: -1 })).toContain("OUT_OF_RANGE");
     expect(codes({ id: "c", type: "counter", prefix: 5 })).toContain("INVALID_TYPE");
     expect(codes({ id: "c", type: "counter", fontFamily: "Arial" })).toContain("INVALID_VALUE");
+  });
+});
+
+// The shared sanitizers are the last line of defense against invalid specs (non-finite
+// or negative dimensions, unbounded loop counts). Test them directly, not just via builders.
+describe("math shared sanitizers", () => {
+  it("finiteNum keeps finite values, clamps to [min,max], and falls back on non-finite", () => {
+    expect(finiteNum(3.5, 0)).toBe(3.5);
+    expect(finiteNum(NaN, 7)).toBe(7);
+    expect(finiteNum(Infinity, 7)).toBe(7);
+    expect(finiteNum("nope", 7)).toBe(7); // non-number → fallback
+    expect(finiteNum(100, 0, 0, 10)).toBe(10); // clamp to max
+    expect(finiteNum(-100, 0, -10, 10)).toBe(-10); // clamp to min
+  });
+
+  it("posSize requires a finite, strictly-positive size and clamps to [min,max]", () => {
+    expect(posSize(42, 10)).toBe(42);
+    expect(posSize(-3, 10)).toBe(10); // not > 0 → fallback
+    expect(posSize(0, 10)).toBe(10); // not > 0 → fallback
+    expect(posSize(NaN, 10)).toBe(10);
+    expect(posSize(0.2, 10)).toBe(1); // clamps up to default min 1
+    expect(posSize(1e9, 10)).toBe(100000); // clamps down to default max
+  });
+
+  it("intCount floors, clamps to [0,max], and caps unbounded counts", () => {
+    expect(intCount(4.9, 0)).toBe(4); // floor
+    expect(intCount(-5, 0)).toBe(0); // clamp to 0
+    expect(intCount(NaN, 3)).toBe(3); // fallback
+    expect(intCount(1e9, 0)).toBe(1000); // default cap
+    expect(intCount(1e9, 0, 250)).toBe(250); // custom cap
+  });
+
+  it("fmtTick prints integers bare and others to one decimal", () => {
+    expect(fmtTick(2)).toBe("2");
+    expect(fmtTick(2.5)).toBe("2.5");
+    expect(fmtTick(2.567)).toBe("2.6"); // rounds to 1 dp
+    expect(fmtTick(-3)).toBe("-3");
+  });
+
+  it("clamp bounds a value to [lo,hi]", () => {
+    expect(clamp(5, 0, 10)).toBe(5);
+    expect(clamp(-1, 0, 10)).toBe(0);
+    expect(clamp(11, 0, 10)).toBe(10);
   });
 });
