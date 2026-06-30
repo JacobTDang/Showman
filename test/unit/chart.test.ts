@@ -133,9 +133,20 @@ describe("lineChart", () => {
         },
       ],
     });
-    const line = kids(c).find((n) => n.id.includes("-line-")) as { tracks?: { property: string }[] };
+    const line = kids(c).find((n) => n.id.includes("-line-")) as { tracks?: { property: string }[]; points: { x: number; y: number }[] };
     expect(line.tracks?.[0]?.property).toBe("progress"); // draws on
-    expect(kids(c).filter((n) => n.id.includes("-pt-"))).toHaveLength(3);
+    const dots = kids(c).filter((n) => n.id.includes("-pt-")) as unknown as { x: number; y: number }[];
+    expect(dots).toHaveLength(3);
+    // data x is evenly spaced (0,1,2) → pixel x evenly spaced (linear scale maps data→pixels)
+    expect(dots[1]!.x - dots[0]!.x).toBeCloseTo(dots[2]!.x - dots[1]!.x, 5);
+    // y axis inverts data: value 3 (idx1) sits highest (smallest pixel-y), value 1 (idx0) lowest
+    expect(dots[1]!.y).toBeLessThan(dots[2]!.y);
+    expect(dots[2]!.y).toBeLessThan(dots[0]!.y);
+    // value 2 is the exact midpoint of 1 and 3 → its pixel-y is their average (linear mapping)
+    expect(dots[2]!.y).toBeCloseTo((dots[0]!.y + dots[1]!.y) / 2, 5);
+    // the polyline tracks the same mapped points as the markers (dot.x = pt.x - 4 radius)
+    expect(line.points[1]!.x).toBeCloseTo(dots[1]!.x + 4, 5);
+    expect(line.points[1]!.y).toBeCloseTo(dots[1]!.y + 4, 5);
     expect(ok(c)).toBe(true);
   });
 });
@@ -153,8 +164,20 @@ describe("areaChart + scatter", () => {
         { x: 2, y: 3 },
       ],
     });
-    expect(kids(c).some((n) => n.id.endsWith("-fill"))).toBe(true);
-    expect(kids(c).some((n) => n.id.endsWith("-line"))).toBe(true);
+    const fill = kids(c).find((n) => n.id.endsWith("-fill")) as { closed?: boolean; points: { x: number; y: number }[] };
+    const aline = kids(c).find((n) => n.id.endsWith("-line")) as { points: { x: number; y: number }[] };
+    expect(fill).toBeDefined();
+    expect(aline).toBeDefined();
+    // the fill is a CLOSED polygon: the 3 data points plus a baseline corner under the first and last
+    expect(fill.closed).toBe(true);
+    expect(fill.points).toHaveLength(aline.points.length + 2); // 3 data pts + 2 baseline corners = 5
+    const baseY = fill.points[0]!.y;
+    // both baseline corners sit at the same y (the plot floor) and under the first/last data points
+    expect(fill.points[fill.points.length - 1]!.y).toBeCloseTo(baseY, 5);
+    expect(fill.points[0]!.x).toBeCloseTo(aline.points[0]!.x, 5); // corner under first data point
+    expect(fill.points[fill.points.length - 1]!.x).toBeCloseTo(aline.points[aline.points.length - 1]!.x, 5);
+    // the closing baseline is BELOW every data point (area is filled down to the floor)
+    for (const p of aline.points) expect(baseY).toBeGreaterThan(p.y);
     expect(ok(c)).toBe(true);
   });
   it("scatter: a dot per point, popping in when animated", () => {
@@ -174,10 +197,19 @@ describe("areaChart + scatter", () => {
         },
       ],
     });
-    const dots = kids(c).filter((n) => n.id.includes("-pt-"));
+    const dots = kids(c).filter((n) => n.id.includes("-pt-")) as unknown as {
+      x: number;
+      y: number;
+      anchor?: { x: number; y: number };
+      tracks?: { property: string }[];
+    }[];
     expect(dots).toHaveLength(2);
     // animate:true must actually attach a pop-in (scale) track — not be a silent no-op.
-    expect((dots[0] as { tracks?: { property: string }[] }).tracks?.some((t) => t.property === "scale")).toBe(true);
+    expect(dots[0]!.tracks?.some((t) => t.property === "scale")).toBe(true);
+    // data→pixel mapping: point (3,4) is right of and above point (1,2)
+    expect(dots[1]!.x).toBeGreaterThan(dots[0]!.x); // larger data-x → larger pixel-x
+    expect(dots[1]!.y).toBeLessThan(dots[0]!.y); // larger data-y → smaller pixel-y (inverted axis)
+    expect(dots[0]!.anchor).toEqual({ x: 5, y: 5 }); // scales/pops from its own center (radius 5)
     expect(ok(c)).toBe(true);
   });
 });
@@ -195,10 +227,31 @@ describe("candlestick", () => {
         { open: 108, high: 112, low: 102, close: 104 },
       ],
     });
-    const bodies = kids(c).filter((n) => n.id.includes("-body-")) as { fill?: string }[];
+    const bodies = kids(c).filter((n) => n.id.includes("-body-")) as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fill?: string;
+    }[];
     expect(bodies[0]!.fill).toBe("#16a34a"); // up (close>open) green
     expect(bodies[1]!.fill).toBe("#dc2626"); // down red
-    expect(kids(c).filter((n) => n.id.includes("-wick-"))).toHaveLength(2);
+    const wicks = kids(c).filter((n) => n.id.includes("-wick-")) as unknown as { points: { x: number; y: number }[] }[];
+    expect(wicks).toHaveLength(2);
+    // candle 0: body spans open(100)→close(108); wick spans low(95)→high(110), so it extends
+    // ABOVE the body top and BELOW the body bottom.
+    const b0 = bodies[0]!;
+    const w0 = wicks[0]!;
+    const wickTop = Math.min(w0.points[0]!.y, w0.points[1]!.y); // high (smallest pixel-y)
+    const wickBot = Math.max(w0.points[0]!.y, w0.points[1]!.y); // low (largest pixel-y)
+    expect(b0.height).toBeGreaterThan(0);
+    expect(wickTop).toBeLessThan(b0.y); // high(110) above body top(108)
+    expect(wickBot).toBeGreaterThan(b0.y + b0.height); // low(95) below body bottom(100)
+    expect(w0.points[0]!.x).toBeCloseTo(b0.x + b0.width / 2, 5); // wick runs through the body center
+    // both candles top out at value 108 (close of #0, open of #1) → identical body-top pixel-y
+    expect(b0.y).toBeCloseTo(bodies[1]!.y, 5);
+    // candle 0 body (open→close span 8) is taller than candle 1 (span 4)
+    expect(b0.height).toBeGreaterThan(bodies[1]!.height);
     expect(ok(c)).toBe(true);
   });
   it("renders deterministically", () => {

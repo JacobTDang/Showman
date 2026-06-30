@@ -36,8 +36,11 @@ describe("blur", () => {
   it("spreads color beyond the shape edge, and is deterministic", () => {
     const sharp = scene([{ id: "r", type: "rect", x: 20, y: 20, width: 20, height: 20, fill: "#000000" }]);
     const blurred = scene([{ id: "r", type: "rect", x: 20, y: 20, width: 20, height: 20, fill: "#000000", blur: 5 }]);
+    expect(validateScene(blurred).valid).toBe(true);
     expect(isColorNear(samplePixel(renderFrame(sharp, 0), 16, 30), WHITE)).toBe(true); // crisp edge — still white
-    expect(isColorNear(samplePixel(renderFrame(blurred, 0), 16, 30), WHITE)).toBe(false); // blur bleeds out
+    const bf = renderFrame(blurred, 0);
+    expect(isColorNear(samplePixel(bf, 16, 30), WHITE)).toBe(false); // blur bleeds out past the left edge
+    expect(isColorNear(samplePixel(bf, 44, 30), WHITE)).toBe(false); // …and symmetrically past the right edge
     expect(Buffer.compare(renderFrame(blurred, 0).toPNG(), renderFrame(blurred, 0).toPNG())).toBe(0);
   });
 

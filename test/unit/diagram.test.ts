@@ -47,6 +47,13 @@ describe("connector", () => {
     const c = connector({ from: { x: 20, y: 100 }, to: { x: 260, y: 100 }, stroke: "#000000" });
     const r = renderFrame(scene([c]), 0);
     expect(hasInk(r, 255, 100)).toBe(true); // arrowhead tip region
+    // the arrowhead is a wedge: a column just behind the tip is taller than the bare 2px line.
+    const colInk = (x: number): number => {
+      let n = 0;
+      for (let y = 80; y < 120; y++) if (hasInk(r, x, y)) n++;
+      return n;
+    };
+    expect(colInk(252)).toBeGreaterThan(colInk(140) + 4); // wedge near tip vs thin shaft mid-line
   });
 });
 

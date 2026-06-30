@@ -10,8 +10,13 @@ describe("brandTheme", () => {
     expect(t.palette.primary).toBe("#6d28d9");
     for (const k of ["bg", "primary", "secondary", "accent", "text", "muted"] as const) expect(typeof t.palette[k]).toBe("string");
     expect(t.palette.swatches.length).toBeGreaterThanOrEqual(4);
+    expect(t.palette.swatches.length).toBe(6); // primary, accent, secondary + 3 fixed
+    // default light theme resolves dark text on white — a known, near-maximal ratio
+    expect(t.palette.text).toBe("#0f172a");
+    expect(t.palette.bg).toBe("#ffffff");
     // text is readable on the (light, default) background
     expect(contrastRatio(t.palette.text, t.palette.bg)).toBeGreaterThan(7);
+    expect(contrastRatio(t.palette.text, t.palette.bg)).toBeCloseTo(17.85, 1);
     // secondary is a distinct sibling of primary (direction depends on primary's lightness)
     expect(t.palette.secondary).not.toBe(t.palette.primary);
     expect(t.palette.accent).not.toBe(t.palette.primary);
@@ -77,6 +82,18 @@ describe("brand assets", () => {
     expect(logo.type).toBe("image");
     expect(logo.height).toBe(40);
     expect(logo.width).toBe(80); // aspect 2:1 preserved
+    // the produced watermark node is a valid scene node
+    const spec = {
+      specVersion: SPEC_VERSION,
+      width: 640,
+      height: 360,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#fff",
+      nodes: [word as unknown as Node],
+    };
+    expect(validateScene(spec)).toMatchObject({ valid: true });
   });
   it("titleCard is a valid, branded intro scene", () => {
     const tc = titleCard(kit, { title: "Quarterly Review", subtitle: "FY2026" });

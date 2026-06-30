@@ -59,7 +59,11 @@ describe("InMemoryLrs", () => {
     lrs.send([lessonStatement(ctx, "initialized")]);
     lrs.send([lessonStatement(ctx, "completed")]);
     expect(lrs.statements.length).toBe(2);
-    expect(JSON.parse(lrs.toJson())).toHaveLength(2);
+    const parsed = JSON.parse(lrs.toJson()) as { verb: { id: string } }[];
+    expect(parsed).toHaveLength(2);
+    // content survives the round-trip in order (not just the count)
+    expect(parsed[0]!.verb.id).toBe(VERBS.initialized!.id);
+    expect(parsed[1]!.verb.id).toBe(VERBS.completed!.id);
   });
 });
 
@@ -80,6 +84,8 @@ describe("mastery dashboard", () => {
     expect(count.standard).toBe("K.CC.B.4");
     expect(count.accuracy).toBe(1);
     expect(d.overallMastery).toBeGreaterThan(0);
+    // overallMastery is exactly the mean of the per-skill masteries it reports
+    expect(d.overallMastery).toBeCloseTo(d.skills.reduce((a, s) => a + s.mastery, 0) / d.skills.length, 12);
   });
 
   it("is empty for a fresh learner", () => {

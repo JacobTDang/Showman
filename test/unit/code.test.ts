@@ -30,6 +30,13 @@ describe("tokenize", () => {
     const ln = tokenize(`x   y`, "js")[0]!; // the spaces collapse into one plain run between idents
     expect(ln.filter((t) => t.type === "plain")).toHaveLength(1);
   });
+  it("tolerates empty input and an unterminated string without throwing", () => {
+    expect(() => tokenize("", "js")).not.toThrow();
+    expect(tokenize("", "js")).toHaveLength(1); // one (empty) line
+    expect(() => tokenize('const s = "unterminated', "ts")).not.toThrow();
+    const ln = tokenize('const s = "unterminated', "ts")[0]!;
+    expect(ln.some((t) => t.type === "keyword")).toBe(true); // still classifies the leading `const`
+  });
 });
 
 describe("codeBlock", () => {
@@ -44,6 +51,10 @@ describe("codeBlock", () => {
     // a keyword token is colored with the theme keyword color
     const kw = kids(c).find((n) => n.type === "text" && (n as { text?: string }).text === "function") as { fill?: string };
     expect(kw.fill).toBe(CODE_DARK.token.keyword);
+    // monospace columns: token x-positions on a line increase strictly left→right
+    const line0 = kids(c).filter((n) => n.id.startsWith("c-t-0-")) as unknown as { x: number }[];
+    expect(line0.length).toBeGreaterThan(1);
+    for (let i = 1; i < line0.length; i++) expect(line0[i]!.x).toBeGreaterThan(line0[i - 1]!.x);
     expect(validateScene(scene(c, 420, 200))).toMatchObject({ valid: true });
   });
 
@@ -68,9 +79,13 @@ describe("code review fixes", () => {
   });
   it("truncates a long title to fit the card", () => {
     const long = "a-really-really-long-filename-that-overflows-the-card.tsx";
-    const c = codeBlock({ id: "c", x: 0, y: 0, code: "x", title: long, fontSize: 16 });
+    // give the card a real width so there IS room for a (truncated) title — otherwise the title node
+    // is dropped entirely and the truncation claim would never actually be exercised.
+    const c = codeBlock({ id: "c", x: 0, y: 0, code: "x", title: long, fontSize: 16, width: 200 });
     const title = kids(c).find((n) => n.id === "c-title") as { text?: string } | undefined;
-    if (title) expect((title.text ?? "").length).toBeLessThan(long.length);
+    expect(title).toBeDefined();
+    expect((title!.text ?? "").length).toBeLessThan(long.length);
+    expect((title!.text ?? "").endsWith("…")).toBe(true); // ellipsized, not just clipped
     expect(validateScene(scene(c, 260, 120))).toMatchObject({ valid: true });
   });
 });

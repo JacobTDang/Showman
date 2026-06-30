@@ -37,6 +37,27 @@ function lowestInkRow(r: ReturnType<typeof renderFrame>): number {
   for (let y = r.height - 1; y >= 0; y--) if (rowHasInk(r, y)) return y;
   return -1;
 }
+/** Count vertical "bands" of ink (maximal runs of consecutive inked rows) — a proxy for line count. */
+function inkBands(r: ReturnType<typeof renderFrame>): number {
+  let bands = 0;
+  let prev = false;
+  for (let y = 0; y < r.height; y++) {
+    const cur = rowHasInk(r, y);
+    if (cur && !prev) bands++;
+    prev = cur;
+  }
+  return bands;
+}
+/** The rightmost column that contains any ink (−1 if none) — a proxy for total advance width. */
+function rightmostInkCol(r: ReturnType<typeof renderFrame>): number {
+  for (let x = r.width - 1; x >= 0; x--) {
+    for (let y = 0; y < r.height; y++) {
+      const p = samplePixel(r, x, y);
+      if (p.r < 100 && p.g < 100 && p.b < 100) return x;
+    }
+  }
+  return -1;
+}
 
 describe("pinned fonts", () => {
   it("registers all five families (children + adult) without throwing", () => {
@@ -115,6 +136,9 @@ describe("multi-line text", () => {
     expect(pixelsEqual(single.pixels, wrapped.pixels)).toBe(false);
     // single line stays near the top; wrapping flows several lines further down.
     expect(lowestInkRow(wrapped)).toBeGreaterThan(lowestInkRow(single) + 30);
+    // the un-wrapped text is a single row-band; wrapping to maxWidth 90 produces several
+    expect(inkBands(single)).toBe(1);
+    expect(inkBands(wrapped)).toBeGreaterThanOrEqual(3);
   });
   it("breaks on explicit newlines", () => {
     const r = renderFrame(scene({ id: "t", type: "text", x: 8, y: 10, text: "Alpha\nBeta\nGamma", fontSize: 22, fill: "#000000" }), 0);
@@ -128,6 +152,8 @@ describe("multi-line text", () => {
       0,
     );
     expect(pixelsEqual(tight.pixels, loose.pixels)).toBe(false);
+    // 5 gaps × 10px of extra tracking pushes the final glyph measurably further right
+    expect(rightmostInkCol(loose)).toBeGreaterThan(rightmostInkCol(tight) + 30);
   });
   it("validates the new props", () => {
     const bad = scene({ id: "t", type: "text", x: 0, y: 0, text: "x", maxWidth: -5, lineHeight: 0 } as Node);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateScene, SPEC_VERSION, pedagogy } from "../../src/index.js";
+import { validateScene, SPEC_VERSION, pedagogy, getTheme, contrastRatio, mix } from "../../src/index.js";
 import type { SceneSpec, Node } from "../../src/index.js";
 
 const { nextSegment, walk, validateGraph, nextHint, revealedHints, hintsExhausted, hintCard } = pedagogy;
@@ -79,14 +79,27 @@ describe("hint ladder", () => {
     expect(hintsExhausted(ladder, 2)).toBe(false);
     expect(hintsExhausted(ladder, 3)).toBe(true);
   });
+  it("handles an empty ladder without throwing", () => {
+    expect(nextHint([], 1)).toBeNull();
+    expect(nextHint([], 0)).toBeNull();
+    expect(revealedHints([], 3)).toEqual([]);
+    expect(hintsExhausted([], 0)).toBe(true); // 0 ≥ 0 rungs → vacuously exhausted
+  });
 });
 
 describe("hintCard", () => {
   it("renders a valid card with the level eyebrow and text", () => {
     const card = hintCard({ hint: { level: 2, text: "Try skip-counting by the first number." }, x: 30, y: 30, theme: "sunshine" });
     expect(card.children.some((n) => n.id.endsWith("-edge"))).toBe(true);
-    const eyebrow = card.children.find((n) => n.id.endsWith("-eyebrow")) as { text?: string };
+    const eyebrow = card.children.find((n) => n.id.endsWith("-eyebrow")) as { text?: string; fill?: string };
     expect(eyebrow.text).toBe("HINT 2");
+    // Legibility fix: the eyebrow blends the accent toward text instead of using the raw (pale) accent,
+    // which would fail contrast on the tinted card. Pin the produced fill + verify it reads on the card.
+    const p = getTheme("sunshine").palette;
+    expect(eyebrow.fill).toBe(mix(p.accent, p.text, 0.45));
+    const cardBg = mix(p.bg, p.accent, 0.1); // the card fill is accent @10% over the themed background
+    expect(contrastRatio(eyebrow.fill!, cardBg)).toBeGreaterThanOrEqual(3); // legible on the pale card
+    expect(contrastRatio(eyebrow.fill!, cardBg)).toBeGreaterThan(contrastRatio(p.accent, cardBg)); // better than raw accent
     const spec: SceneSpec = {
       specVersion: SPEC_VERSION,
       width: 480,

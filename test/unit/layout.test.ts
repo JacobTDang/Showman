@@ -70,9 +70,22 @@ describe("slide templates", () => {
     expect(nodes.length).toBe(4); // heading + 3 bullets
     const res = validateScene(asScene(nodes));
     expect(res.valid).toBe(true);
-    // bullets carry a staggered opacity reveal
-    const bullet = nodes[1] as { tracks?: unknown[] };
-    expect(Array.isArray(bullet.tracks)).toBe(true);
+    // bullets carry a staggered opacity reveal: each fades 0→1, and later bullets start later
+    type Track = { property: string; keyframes: { t: number; value: number }[] };
+    const trackOf = (i: number): Track => {
+      const tracks = (nodes[i] as { tracks?: Track[] }).tracks;
+      expect(Array.isArray(tracks)).toBe(true);
+      const op = tracks!.find((t) => t.property === "opacity");
+      expect(op).toBeDefined();
+      return op!;
+    };
+    const t1 = trackOf(1);
+    const t2 = trackOf(2);
+    const t3 = trackOf(3);
+    expect(t1.keyframes.map((k) => k.value)).toEqual([0, 1]); // reveals from transparent to opaque
+    // strictly increasing reveal start time = a real stagger, not three simultaneous fades
+    expect(t2.keyframes[0]!.t).toBeGreaterThan(t1.keyframes[0]!.t);
+    expect(t3.keyframes[0]!.t).toBeGreaterThan(t2.keyframes[0]!.t);
   });
 
   it("composes multiple slides without id collisions via idPrefix (review fix)", () => {
@@ -94,6 +107,14 @@ describe("slide templates", () => {
     for (const n of nodes) expect((n as { y: number }).y).toBeLessThan(700); // nothing starts off-frame
     const ids = nodes.map((n) => (n as { id: string }).id);
     expect(new Set(ids).size).toBe(ids.length);
+    // the produced slide must be a schema-valid scene (was previously unvalidated)
+    expect(validateScene(asScene(nodes)).valid).toBe(true);
+    // bullets are laid top→bottom with strictly increasing y — no overlap/out-of-order stacking
+    const bulletYs = nodes.slice(1).map((n) => (n as { y: number }).y);
+    for (let i = 1; i < bulletYs.length; i++) expect(bulletYs[i]!).toBeGreaterThan(bulletYs[i - 1]!);
+    // the last bullet's top + one line still fits within the frame height
+    const last = nodes[nodes.length - 1] as { y: number; fontSize: number; lineHeight?: number };
+    expect(last.y + last.fontSize * (last.lineHeight ?? 1)).toBeLessThan(720);
   });
 
   it("places the subtitle below a wrapping title (review fix)", () => {

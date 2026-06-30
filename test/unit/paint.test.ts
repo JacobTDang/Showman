@@ -9,32 +9,36 @@ function scene(nodes: Node[], background: SceneSpec["background"] = "#ffffff", w
 
 describe("gradient fills", () => {
   it("renders a left→right linear gradient across a shape", () => {
-    const r = renderFrame(
-      scene([
-        {
-          id: "g",
-          type: "rect",
-          x: 10,
-          y: 10,
-          width: 120,
-          height: 80,
-          gradient: {
-            type: "linear",
-            from: { x: 0, y: 0 },
-            to: { x: 120, y: 0 },
-            stops: [
-              { offset: 0, color: "#ff0000" },
-              { offset: 1, color: "#0000ff" },
-            ],
-          },
+    const s = scene([
+      {
+        id: "g",
+        type: "rect",
+        x: 10,
+        y: 10,
+        width: 120,
+        height: 80,
+        gradient: {
+          type: "linear",
+          from: { x: 0, y: 0 },
+          to: { x: 120, y: 0 },
+          stops: [
+            { offset: 0, color: "#ff0000" },
+            { offset: 1, color: "#0000ff" },
+          ],
         },
-      ]),
-      0,
-    );
+      },
+    ]);
+    expect(validateScene(s).valid).toBe(true);
+    const r = renderFrame(s, 0);
     const left = samplePixel(r, 18, 50);
     const right = samplePixel(r, 122, 50);
     expect(left.r).toBeGreaterThan(right.r); // red fades out left→right
     expect(right.b).toBeGreaterThan(left.b); // blue rises left→right
+    // pin the actual stop colors, not just the ordering: clearly red on the left, blue on the right
+    expect(left.r).toBeGreaterThan(150);
+    expect(left.b).toBeLessThan(100);
+    expect(right.b).toBeGreaterThan(150);
+    expect(right.r).toBeLessThan(100);
   });
 
   it("a gradient paints even when fill is transparent", () => {
@@ -61,7 +65,10 @@ describe("gradient fills", () => {
       ]),
       0,
     );
-    expect(samplePixel(r, 60, 50).g).toBeGreaterThan(120); // green center, not the white bg
+    const center = samplePixel(r, 60, 50);
+    expect(center.g).toBeGreaterThan(180); // near the #22dd22 center stop (g=221), not the white bg
+    expect(center.r).toBeLessThan(120); // and clearly green, not white/grey
+    expect(center.b).toBeLessThan(120);
   });
 });
 
@@ -116,20 +123,19 @@ describe("dashed strokes", () => {
 
 describe("backdrop", () => {
   it("fills a gradient background (top differs from bottom)", () => {
-    const r = renderFrame(
-      scene([], {
-        fill: {
-          type: "linear",
-          from: { x: 0, y: 0 },
-          to: { x: 0, y: 120 },
-          stops: [
-            { offset: 0, color: "#000000" },
-            { offset: 1, color: "#ffffff" },
-          ],
-        },
-      }),
-      0,
-    );
+    const s = scene([], {
+      fill: {
+        type: "linear",
+        from: { x: 0, y: 0 },
+        to: { x: 0, y: 120 },
+        stops: [
+          { offset: 0, color: "#000000" },
+          { offset: 1, color: "#ffffff" },
+        ],
+      },
+    });
+    expect(validateScene(s).valid).toBe(true);
+    const r = renderFrame(s, 0);
     expect(pixelAt(r.pixels, r.width, 80, 4).r).toBeLessThan(pixelAt(r.pixels, r.width, 80, 116).r);
   });
   it("darkens the edges with a vignette", () => {

@@ -24,6 +24,16 @@ describe("store-zip", () => {
     const back = unzipStore(zipStore([{ path: "lesson.mp4", content: bytes }]));
     expect(Buffer.compare(back[0]!.content, bytes)).toBe(0);
   });
+
+  it("produces a valid, deterministic archive for zero entries", () => {
+    const buf = zipStore([]);
+    expect(buf.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x05, 0x06])); // straight to the EOCD record
+    expect(buf).toHaveLength(22); // EOCD only
+    expect(buf.readUInt16LE(8)).toBe(0); // entries on this disk
+    expect(buf.readUInt16LE(10)).toBe(0); // entries total
+    expect(unzipStore(buf)).toEqual([]);
+    expect(Buffer.compare(zipStore([]), zipStore([]))).toBe(0); // deterministic
+  });
 });
 
 describe("manifests", () => {
@@ -58,6 +68,12 @@ describe("manifests", () => {
     expect(m).toContain('<course id="https://showman.app/lessons/counting">');
     expect(m).toContain('launchMethod="OwnWindow"');
     expect(m).toContain("<url>index.html</url>");
+  });
+
+  it("XML-escapes the description, not just the title (cmi5)", () => {
+    const m = cmi5Manifest({ id: "x", title: "T", description: 'A <b>bold</b> & "safe" plan', launch: "index.html" });
+    expect(m).toContain("A &lt;b&gt;bold&lt;/b&gt; &amp; &quot;safe&quot; plan");
+    expect(m).not.toContain("<b>bold</b>");
   });
 
   it("Common Cartridge declares the CC schema + rooted hierarchy", () => {
