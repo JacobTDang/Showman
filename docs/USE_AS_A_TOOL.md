@@ -71,6 +71,16 @@ OPENROUTER_MODEL=openai/gpt-oss-120b
 With no key set, authoring falls back to the deterministic offline template author, so
 `/v1/generate` always works.
 
+### Token efficiency on small/open models
+
+By default the author sends a **compact schema digest** (node types, their keys, limits,
+fonts, easings — a few hundred tokens) instead of the full ~8–15 KB schema JSON, on every
+attempt. It also runs a **mechanical repair pass** before re-prompting: clamping
+out-of-range numbers, renaming typo'd keys, and fixing easing names from the validator's
+own suggestions — so a fixable mistake costs zero extra LLM round-trips. Set
+`SHOWMAN_SCHEMA_MODE=full` to send the complete schema JSON instead (useful for the
+largest models, at a token cost).
+
 ## Tuning the prompts without a rebuild
 
 The system prompt, few-shot examples, and correction text are editable files in

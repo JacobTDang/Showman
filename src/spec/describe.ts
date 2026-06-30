@@ -101,6 +101,70 @@ export function exampleScene(): SceneSpec {
   };
 }
 
+/** Intersection (preserving the first array's order) of several key lists. */
+function intersectKeys(lists: readonly (readonly string[])[]): string[] {
+  if (lists.length === 0) return [];
+  return [...lists[0]!].filter((k) => lists.every((l) => l.includes(k)));
+}
+
+let compactCache: string | undefined;
+
+/**
+ * A *compact* schema digest — the same contract as {@link describeScene} but as a
+ * terse, token-frugal text block instead of an 8–15 KB JSON dump. It states the node
+ * types, their extra keys (beyond the universal ones), what each type can animate,
+ * the limits, fonts, and easings — and nothing else. On a ~120B open model this is
+ * the difference between burning thousands of tokens of schema on *every* attempt and
+ * sending a focused, signal-dense spec the model can actually follow.
+ *
+ * Built entirely from the same registries the validator reads, so it can never drift
+ * from "what validates". Cached (the registries are constant per SPEC_VERSION).
+ */
+export function describeSceneCompact(): string {
+  if (compactCache !== undefined) return compactCache;
+
+  const commonKeys = intersectKeys(NODE_TYPES.map((t) => ALLOWED_KEYS[t]));
+  const commonAnim = intersectKeys(NODE_TYPES.map((t) => ANIMATABLE_BY_TYPE[t]));
+  const baseKeys = commonKeys.filter((k) => k !== "id" && k !== "type");
+
+  const lines: string[] = [];
+  lines.push(`Showman Scene Spec v${SPEC_VERSION} — compact schema. Output EXACTLY ONE JSON object, no prose, no markdown fences.`);
+  lines.push(
+    `Scene: {specVersion:${SPEC_VERSION}, width, height, fps, duration, seed?, background?, nodes:[…]}. Times are seconds; frame N renders at time N/fps.`,
+  );
+  lines.push(
+    `Limits: width 1..${LIMITS.maxWidth}, height 1..${LIMITS.maxHeight}, fps ${LIMITS.minFps}..${LIMITS.maxFps}, ` +
+      `duration ≤${LIMITS.maxDuration}s, fps*duration ≤${LIMITS.maxFrames} frames, ≤${LIMITS.maxNodes} nodes, tree depth ≤${LIMITS.maxTreeDepth}.`,
+  );
+  lines.push(`Every node has: id (unique string), type, and any of: ${baseKeys.join(", ")}.`);
+  lines.push(
+    `Shared shapes: anchor={x,y}; gradient overrides fill — ` +
+      `linear:{type:"linear",from:{x,y},to:{x,y},stops:[{offset:0..1,color}]} or radial:{type:"radial",center:{x,y},radius,stops:[…]}; ` +
+      `shadow:{color?,blur?≥0,offsetX?,offsetY?}; dash=number[] (≥1px each, sum≥1); background=color string OR {fill?,vignette?0..1,grain?0..1}.`,
+  );
+  lines.push("Node types — extra keys beyond the shared set (* = required):");
+  for (const t of NODE_TYPES) {
+    const req = REQUIRED_BY_TYPE[t] ?? [];
+    const extra = ALLOWED_KEYS[t].filter((k) => !commonKeys.includes(k)).map((k) => (req.includes(k) ? `${k}*` : k));
+    lines.push(`  ${t}: ${extra.length ? extra.join(", ") : "(no extra keys)"}`);
+  }
+  lines.push(
+    `Animation: tracks:[{property, keyframes:[{t, value, easing?}]}], keyframe t strictly ascending from 0. ` +
+      `value is a number except fill/stroke which are color strings.`,
+  );
+  lines.push(`All node types animate: ${commonAnim.join(", ")}.`);
+  lines.push("Extra animatable properties per type:");
+  for (const t of NODE_TYPES) {
+    const extra = ANIMATABLE_BY_TYPE[t].filter((k) => !commonAnim.includes(k));
+    if (extra.length) lines.push(`  ${t}: ${extra.join(", ")}`);
+  }
+  lines.push(`Fonts (use ONLY these): ${REGISTERED_FONT_FAMILIES.join(", ")}.`);
+  lines.push(`Easings: ${EASING_NAMES.join(", ")}.`);
+
+  compactCache = lines.join("\n");
+  return compactCache;
+}
+
 /** Describe the Scene Spec contract. */
 export function describeScene(): SchemaDescription {
   const nodeTypes: SchemaDescription["nodeTypes"] = {};

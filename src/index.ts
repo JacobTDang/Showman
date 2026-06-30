@@ -70,7 +70,7 @@ export { ensureFontsRegistered, assetsDir, DEFAULT_FONT_FAMILY, isRegisteredFami
 export { REGISTERED_FONT_FAMILIES } from "./spec/schema.js";
 
 // Self-describing schema (M4 contract)
-export { describeScene, exampleScene } from "./spec/describe.js";
+export { describeScene, describeSceneCompact, exampleScene } from "./spec/describe.js";
 export type { SchemaDescription } from "./spec/describe.js";
 
 // Service layer (M1.3 HTTP capability surface + storage)
@@ -238,7 +238,10 @@ export { DirectBackend, HttpBackend, TOOL_DEFINITIONS, callTool } from "./mcp/sh
 export type { ShowmanClient, ToolDefinition, PreviewOk, CapabilityErr } from "./mcp/showmanTools.js";
 export { createMcpServer, startMcpServer } from "./mcp/server.js";
 export { AuthoringAgent, ScriptedAuthor, AnthropicSpecAuthor, extractJson } from "./authoring/agent.js";
-export type { SpecAuthor, AuthorContext, AuthoringResult, AuthoringOptions, AuthoringAttempt } from "./authoring/agent.js";
+export type { SpecAuthor, AuthorContext, AuthoringResult, AuthoringOptions, AuthoringAttempt, SchemaMode } from "./authoring/agent.js";
+export { sliceBalancedJson, repairJsonText } from "./authoring/jsonRepair.js";
+export { autoRepairSpec } from "./authoring/autoRepair.js";
+export type { AutoRepairResult } from "./authoring/autoRepair.js";
 export { TemplateAuthor, parseBrief, createDefaultAuthor, lessonFromBriefOutline } from "./authoring/templateAuthor.js";
 export type { ParsedBrief, TemplateAuthorOptions } from "./authoring/templateAuthor.js";
 export { OpenRouterSpecAuthor } from "./authoring/openRouterAuthor.js";

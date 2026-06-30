@@ -88,3 +88,20 @@ dead-simple "an agent calls this and gets an MP4" API.*
 
 Each ships as its own PR, verified green (incl. the cross-OS determinism gate), same
 discipline as the visual-depth pass.
+
+## Status
+
+- **1. Prompt pack + loader** — ✅ shipped. `prompts/` files + `loadPrompts()`,
+  `SHOWMAN_PROMPT_DIR` override, bundled in the image.
+- **2. Compact schema digest + repair loop** — ✅ shipped. `describeSceneCompact()`
+  (compact by default, `SHOWMAN_SCHEMA_MODE=full` to opt out), tolerant JSON extraction
+  (`jsonRepair.ts`: fences, prose, trailing commas), and mechanical validator-error
+  auto-repair (`autoRepair.ts`: clamp ranges, rename typo'd keys/easings, bump version)
+  wired into the authoring loop before any LLM retry. Few-shot example lives in
+  `prompts/author-examples.md`.
+- **3. Atomic `generate` API + MCP tool** — ✅ shipped. `POST /v1/generate` +
+  `showman_generate_video`.
+- **4. Container smoke test + docs** — ✅ shipped. `scripts/smoke-container.sh`,
+  `docs/USE_AS_A_TOOL.md`, plus a Docker-free process-level e2e
+  (`test/integration/e2eWorker.test.ts`) and a CI image-build job. ffmpeg pin remains a
+  follow-up.
