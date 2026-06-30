@@ -28,6 +28,7 @@ import {
   testTube,
   bunsenBurner,
   curlyArrow,
+  moleculeFromSmiles,
 } from "../../src/chem/index.js";
 import { lineChart } from "../../src/chart/index.js";
 import { codeBlock } from "../../src/code/index.js";
@@ -757,6 +758,20 @@ export const GOLDEN_CASES: GoldenCase[] = [
       seed: 1,
       background: "#f8fafc",
       nodes: [periodicTable({ id: "pt", x: 16, y: 16, cellSize: 40, highlight: ["O", "Na", "Fe"] })],
+    },
+    frames: [0],
+  },
+  {
+    name: "smiles",
+    spec: {
+      specVersion: SPEC_VERSION,
+      width: 240,
+      height: 240,
+      fps: 1,
+      duration: 1,
+      seed: 1,
+      background: "#ffffff",
+      nodes: [moleculeFromSmiles({ id: "tol", smiles: "Cc1ccccc1", ox: 120, oy: 130, scale: 36, shadow: false })],
     },
     frames: [0],
   },

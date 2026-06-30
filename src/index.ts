@@ -132,6 +132,7 @@ export type {
   GlasswareOptions,
   BunsenBurnerOptions,
   CurlyArrowOptions,
+  MoleculeFromSmilesOptions,
 } from "./chem/index.js";
 export * as chart from "./chart/index.js";
 export type {
