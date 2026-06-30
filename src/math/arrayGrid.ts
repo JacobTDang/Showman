@@ -9,6 +9,7 @@
 
 import type { GroupNode, Node, Color } from "../spec/types.js";
 import { getTheme, idGen, finiteNum, posSize, intCount } from "./shared.js";
+import { chipRamp, type Depth } from "../theme/depth.js";
 
 export interface ArrayGridOptions {
   id?: string;
@@ -26,6 +27,8 @@ export interface ArrayGridOptions {
   theme?: string;
   /** Dot fill color. Defaults to the theme's accent. */
   color?: Color;
+  /** Dimensionality of the dots (a spherical highlight). Default "soft"; "flat" = solid fills. */
+  depth?: Depth;
 }
 
 /** A `rows × cols` array of dots — the area/array model for multiplication. */
@@ -45,6 +48,7 @@ export function buildArrayGrid(opts: ArrayGridOptions): GroupNode {
   const gap = posSize(opts.gap, 40);
   const r = posSize(opts.dotRadius, 12);
   const fill = opts.color ?? theme.palette.accent;
+  const grad = chipRamp(fill, r, opts.depth ?? "soft"); // sphere-like highlight (undefined when flat)
 
   const children: Node[] = [];
   // Row-major so ids run left→right, top→bottom. Each dot's center sits on a
@@ -61,6 +65,7 @@ export function buildArrayGrid(opts: ArrayGridOptions): GroupNode {
         width: r * 2,
         height: r * 2,
         fill,
+        ...(grad ? { gradient: grad } : {}),
       });
     }
   }

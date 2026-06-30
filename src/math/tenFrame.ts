@@ -8,6 +8,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, clamp, finiteNum, posSize, intCount } from "./shared.js";
+import { chipRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Ten-frame ─────────────────────────
 
@@ -23,6 +24,8 @@ export interface TenFrameOptions {
   /** Pixel size of each square cell. Default 48. */
   cellSize?: number;
   theme?: string;
+  /** Dimensionality of the counters (a spherical highlight). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /** A ten-frame: `total` square cells in rows of 5, the first `filled` holding a counter. */
@@ -36,6 +39,7 @@ export function buildTenFrame(opts: TenFrameOptions): GroupNode {
   const cell = posSize(opts.cellSize, 48);
   // Counter radius — comfortably fills the cell so its center reads as `primary`.
   const r = cell * 0.32;
+  const grad = chipRamp(theme.palette.primary, r, opts.depth ?? "soft"); // sphere-like counter
 
   const children: Node[] = [];
   for (let i = 0; i < total; i++) {
@@ -43,7 +47,7 @@ export function buildTenFrame(opts: TenFrameOptions): GroupNode {
     const row = Math.floor(i / cols);
     const cellX = col * cell;
     const cellY = row * cell;
-    // Cell outline.
+    // Cell outline — gently rounded so the frame reads soft, not gridded.
     children.push({
       id: nid(),
       type: "rect",
@@ -51,6 +55,7 @@ export function buildTenFrame(opts: TenFrameOptions): GroupNode {
       y: cellY,
       width: cell,
       height: cell,
+      radius: cell * 0.16,
       fill: "transparent",
       stroke: theme.palette.muted,
       strokeWidth: 2,
@@ -67,6 +72,7 @@ export function buildTenFrame(opts: TenFrameOptions): GroupNode {
         width: r * 2,
         height: r * 2,
         fill: theme.palette.primary,
+        ...(grad ? { gradient: grad } : {}),
       });
     }
   }

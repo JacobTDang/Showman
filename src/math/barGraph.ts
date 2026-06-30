@@ -11,6 +11,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, swatch, clamp, finiteNum, posSize, intCount } from "./shared.js";
+import { fillRamp, elevation, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Bar graph (data) ─────────────────────────
 
@@ -36,6 +37,8 @@ export interface BarGraphOptions {
   /** Value mapped to a full-height bar. Default = the largest bar value. */
   maxValue?: number;
   theme?: string;
+  /** Dimensionality of the bars (gradient + crisp lift). Default "soft"; "flat" = solid fills. */
+  depth?: Depth;
 }
 
 /** A vertical bar graph: baseline axis + one rect per datum, with value + category labels. */
@@ -65,6 +68,7 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
 
   const colW = w / n; // each bar gets an equal column
   const barW = colW * 0.62; // leave a gap between bars
+  const depth = opts.depth ?? "soft";
 
   const children: Node[] = [
     // baseline axis
@@ -92,7 +96,8 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
     // Text nodes require a non-empty string; fall back so a blank label stays valid.
     const label = typeof bar?.label === "string" && bar.label.length > 0 ? bar.label : " ";
 
-    // the bar
+    // the bar — a vertical fill ramp (lighter top → base) with a crisp lift, so it reads as a
+    // dimensional object rather than a flat block. `fill` stays as the flat/`depth:"flat"` fallback.
     children.push({
       id: nid(),
       type: "rect",
@@ -101,7 +106,9 @@ export function buildBarGraph(opts: BarGraphOptions): GroupNode {
       width: barW,
       height: barH,
       fill,
-      radius: 6,
+      ...(fillRamp(fill, barH, depth) ? { gradient: fillRamp(fill, barH, depth)! } : {}),
+      ...(elevation(depth) ? { shadow: elevation(depth)! } : {}),
+      radius: 7,
     });
 
     // value readout above the bar

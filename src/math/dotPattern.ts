@@ -9,6 +9,7 @@
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
 import { getTheme, idGen, clamp, finiteNum, posSize, intCount } from "./shared.js";
+import { chipRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Dot pattern (subitizing) ─────────────────────────
 
@@ -24,6 +25,8 @@ export interface DotPatternOptions {
   theme?: string;
   /** Dot fill. Default `theme.palette.primary`. */
   color?: Color;
+  /** Dimensionality of the dots (a spherical highlight). Default "soft"; "flat" = solid fills. */
+  depth?: Depth;
 }
 
 /** A dot center expressed as a fraction (0..1) of the layout box, then resolved to px. */
@@ -78,6 +81,7 @@ export function buildDotPattern(opts: DotPatternOptions): GroupNode {
 
   // Dice grids breathe more than the denser ten-frame, so scale the dot accordingly.
   const dotR = (n <= 6 ? 0.11 : 0.085) * size;
+  const grad = chipRamp(color, dotR, opts.depth ?? "soft"); // sphere-like highlight (undefined when flat)
 
   const children: Node[] = dotPositions(n, size).map((p) => ({
     id: nid(),
@@ -87,6 +91,7 @@ export function buildDotPattern(opts: DotPatternOptions): GroupNode {
     width: dotR * 2,
     height: dotR * 2,
     fill: color,
+    ...(grad ? { gradient: grad } : {}),
   }));
 
   return { id: prefix, type: "group", x: finiteNum(opts.x, 0), y: finiteNum(opts.y, 0), children };

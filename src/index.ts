@@ -23,6 +23,11 @@ export type {
   Anchor,
   Color,
   NarrationTrack,
+  Gradient,
+  LinearGradient,
+  RadialGradient,
+  GradientStop,
+  Shadow,
 } from "./spec/types.js";
 
 export {
@@ -102,6 +107,8 @@ export * as assets from "./assets/index.js";
 export type { AssetStore, AssetMeta, AssetGenerator, AssetRequest, Provenance, StyleCapsule } from "./assets/index.js";
 export { THEMES, DEFAULT_THEME, getTheme, swatch, monoFamily } from "./theme/themes.js";
 export type { Theme, Palette } from "./theme/themes.js";
+export { fillRamp, chipRamp, elevation, softShadow, glowNode, surfaceFill, DEFAULT_DEPTH } from "./theme/depth.js";
+export type { Depth } from "./theme/depth.js";
 export * as layout from "./layout/index.js";
 export type { Box } from "./layout/layout.js";
 export * as diagram from "./diagram/index.js";

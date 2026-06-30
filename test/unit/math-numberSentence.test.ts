@@ -63,14 +63,23 @@ describe("number sentence", () => {
     const dots = ellipses(g);
     expect(dots.length).toBe(3 + 2); // 3 under `a`, 2 under `b`
 
-    // The dot actually paints: sample its center and match its declared fill.
-    const dot = dots[0]!;
+    // depth: each dot is a sphere — a radial chip gradient that fades to its exact declared fill.
+    const dot = dots[0] as {
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      fill?: string;
+      gradient?: { stops: { color: string }[] };
+    };
+    expect(dot.gradient?.stops.at(-1)?.color).toBe(dot.fill);
+    // …and it actually paints: the chip lightens the center, but it stays a clear shade of that fill.
     const gx = g.x ?? 0;
     const gy = g.y ?? 0;
     const cx = Math.round(gx + (dot.x ?? 0) + (dot.width ?? 0) / 2);
     const cy = Math.round(gy + (dot.y ?? 0) + (dot.height ?? 0) / 2);
     const frame = renderFrame(spec, 0);
-    expect(isColorNear(samplePixel(frame, cx, cy), hexRgb(dot.fill as string))).toBe(true);
+    expect(isColorNear(samplePixel(frame, cx, cy), hexRgb(dot.fill as string), 50)).toBe(true);
   });
 
   it("omits the dots when showDots is false", () => {

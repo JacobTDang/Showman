@@ -13,6 +13,7 @@
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
 import { getTheme, idGen, clamp, approxTextWidth, swatch, finiteNum } from "./shared.js";
+import { chipRamp, type Depth } from "../theme/depth.js";
 
 /** The arithmetic operators a number sentence understands. */
 export type MathOp = "+" | "-" | "×" | "÷";
@@ -41,6 +42,8 @@ export interface NumberSentenceOptions {
   theme?: string;
   /** Draw a small row of counting dots under each operand. Default true. */
   showDots?: boolean;
+  /** Dimensionality of the counting dots (a spherical highlight). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 // Layout constants (local pixels). Numbers are big; operators slightly smaller.
@@ -157,6 +160,7 @@ export function buildNumberSentence(opts: NumberSentenceOptions): GroupNode {
       const centerX = cx + w / 2;
       const rowW = (tok.dots - 1) * DOT_GAP;
       const fill = swatch(theme, tok.swatchIndex);
+      const grad = chipRamp(fill, DOT_R, opts.depth ?? "soft"); // sphere-like counting dot
       for (let i = 0; i < tok.dots; i++) {
         const dcx = centerX - rowW / 2 + i * DOT_GAP;
         children.push({
@@ -167,6 +171,7 @@ export function buildNumberSentence(opts: NumberSentenceOptions): GroupNode {
           width: DOT_R * 2,
           height: DOT_R * 2,
           fill,
+          ...(grad ? { gradient: grad } : {}),
         });
       }
     }
