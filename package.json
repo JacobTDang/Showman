@@ -37,7 +37,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/canvas": "^0.1.65",
-    "mathjax-full": "3.2.2"
+    "mathjax-full": "3.2.2",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.24.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
