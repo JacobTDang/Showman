@@ -18,12 +18,32 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
-# FFmpeg is the encoder. Pin via the distro; for strict cross-host pixel parity,
-# pin a specific FFmpeg build instead of the rolling apt version.
-# ffmpeg = encoder; fontconfig/libfontconfig1 = Skia (@napi-rs/canvas) text rendering on slim Debian.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates fontconfig libfontconfig1 \
-  && rm -rf /var/lib/apt/lists/*
+# FFmpeg is the encoder; fontconfig/libfontconfig1 = Skia (@napi-rs/canvas) text rendering on slim Debian.
+#
+# Pin the apt package set to a frozen Debian snapshot so ffmpeg — and therefore the
+# libx264 build it links — is byte-for-byte the SAME on every image rebuild. The rolling
+# apt pool would otherwise drift ffmpeg between builds, and a different encoder build can
+# emit different bytes for the same frames, breaking reproducible (`deterministic`) encodes
+# and the spec+options content hash that keys the render cache. Freezing the whole apt set
+# (not just ffmpeg) also pins fontconfig, which affects text rendering.
+#
+# Why a snapshot rather than `ffmpeg=<exact-version>`: a hard version pin breaks the day
+# Debian rolls that build out of the main pool; the snapshot keeps resolving forever.
+# http:// (not https) sidesteps a ca-certificates bootstrap — integrity still comes from
+# apt's gpg-signed Release files. check-valid-until=no accepts the (by design) old index.
+# Bump DEBIAN_SNAPSHOT to intentionally move the toolchain forward.
+ARG DEBIAN_SNAPSHOT=20250601T000000Z
+RUN set -eux; \
+  rm -f /etc/apt/sources.list.d/*; \
+  { \
+    echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ bookworm main"; \
+    echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ bookworm-updates main"; \
+    echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/ bookworm-security main"; \
+  } > /etc/apt/sources.list; \
+  apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update; \
+  apt-get install -y --no-install-recommends ffmpeg ca-certificates fontconfig libfontconfig1; \
+  ffmpeg -version | head -n1; \
+  rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./

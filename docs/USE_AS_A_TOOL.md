@@ -57,6 +57,11 @@ curl -X POST http://localhost:8080/v1/generate \
 
 `npm run smoke:container` does all of the above and asserts a real MP4 comes back.
 
+The image pins ffmpeg (and the rest of the apt set) to a frozen Debian snapshot, so the
+encoder is byte-for-byte identical on every rebuild — reproducible `deterministic` encodes
+and a stable render-cache hash. Move the toolchain forward intentionally by bumping the
+build arg: `docker build --build-arg DEBIAN_SNAPSHOT=20260101T000000Z -t showman .`
+
 ## Pointing the author at a 120B open model (GPT-OSS-class)
 
 The default LLM author is **`openai/gpt-oss-120b`** via OpenRouter, but it speaks the
