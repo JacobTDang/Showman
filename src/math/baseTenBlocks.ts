@@ -11,6 +11,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, posSize, intCount, finiteNum } from "./shared.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 
 export interface BaseTenBlocksOptions {
   id?: string;
@@ -26,6 +27,8 @@ export interface BaseTenBlocksOptions {
   /** Pixel size of a single unit square. Default 16. */
   unit?: number;
   theme?: string;
+  /** Dimensionality of the block faces (a shaded gradient). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /**
@@ -47,6 +50,7 @@ export function buildBaseTenBlocks(opts: BaseTenBlocksOptions): GroupNode {
   const fill = theme.palette.secondary; // place-value blocks share one fill
   const outline = theme.palette.text; // darker border around each block
   const gridStroke = theme.palette.bg; // thin internal grid lines
+  const depth = opts.depth ?? "soft";
 
   const flatSide = unit * 10; // a hundreds flat spans 10 units on each side
   const baselineY = flatSide; // common baseline = bottom of the tallest block
@@ -60,7 +64,21 @@ export function buildBaseTenBlocks(opts: BaseTenBlocksOptions): GroupNode {
   // A filled, outlined rect subdivided into `cols × rows` unit cells by thin grid lines.
   // Bottom-aligned to the baseline so every place value rests on the same line.
   const block = (bx: number, w: number, h: number, cols: number, rows: number): GroupNode => {
-    const inner: Node[] = [{ id: nid(), type: "rect", x: 0, y: 0, width: w, height: h, fill, stroke: outline, strokeWidth: 2 }];
+    const faceGrad = fillRamp(fill, h, depth); // a shaded face so the block reads dimensional
+    const inner: Node[] = [
+      {
+        id: nid(),
+        type: "rect",
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        fill,
+        ...(faceGrad ? { gradient: faceGrad } : {}),
+        stroke: outline,
+        strokeWidth: 2,
+      },
+    ];
     for (let c = 1; c < cols; c++) {
       inner.push({
         id: nid(),

@@ -70,16 +70,21 @@ describe("base-ten place-value blocks", () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it("renders the secondary fill for a ones block", () => {
+  it("renders the secondary fill for a ones block (with a depth-shaded face)", () => {
     const unit = 16;
     const g = buildBaseTenBlocks({ id: "ot", ones: 1, unit, x: 10, y: 10, theme: "sunshine" });
     const spec = scene([g], 120, 200);
     expect(validateScene(spec).valid).toBe(true);
+    // depth: the block face is a shaded gradient that fades to the exact secondary token.
+    const block = g.children[0] as { children: { fill?: string; gradient?: { stops: { color: string }[] } }[] };
+    const face = block.children[0]!;
+    expect(face.fill).toBe("#1d6f72"); // sunshine secondary (the flat fallback)
+    expect(face.gradient?.stops.at(-1)?.color).toBe("#1d6f72");
     const f = renderFrame(spec, 0);
     // The ones block rests on the baseline (local y = 10*unit). Sample its center.
     const px = 10 + unit / 2; // 18
     const py = 10 + (10 * unit - unit) + unit / 2; // 10 + 144 + 8 = 162
-    // sunshine secondary = #1d6f72
-    expect(isColorNear(samplePixel(f, Math.round(px), Math.round(py)), { r: 0x1d, g: 0x6f, b: 0x72 })).toBe(true);
+    // center reads a (slightly shaded) secondary teal — clearly that color, not white.
+    expect(isColorNear(samplePixel(f, Math.round(px), Math.round(py)), { r: 0x1d, g: 0x6f, b: 0x72 }, 30)).toBe(true);
   });
 });

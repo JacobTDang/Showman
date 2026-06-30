@@ -12,6 +12,7 @@
 
 import type { Node, GroupNode } from "../spec/types.js";
 import { getTheme, idGen, clamp, finiteNum, posSize } from "./shared.js";
+import { fillRamp, elevation, type Depth } from "../theme/depth.js";
 
 export interface BalanceScaleOptions {
   /** Weight on the left pan — drives the tilt. */
@@ -31,6 +32,8 @@ export interface BalanceScaleOptions {
   rightLabel?: string;
   /** Id prefix; every child id is namespaced from it. Default "balance". */
   id?: string;
+  /** Dimensionality of the beam/pans/fulcrum (gradient + crisp lift). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /** Maximum tilt of the beam, in degrees, in either direction. */
@@ -73,6 +76,7 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
   const total = Math.abs(left) + Math.abs(right);
   const ratio = total === 0 ? 0 : (right - left) / total;
   const tilt = clamp(ratio * MAX_TILT, -MAX_TILT, MAX_TILT);
+  const depth = opts.depth ?? "soft";
 
   /** One hanging pan: a string, the tray, the weight counter, and an optional caption. */
   const pan = (centerX: number, value: number, label?: string): Node[] => {
@@ -99,6 +103,8 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
         height: panH,
         radius: panH / 2,
         fill: theme.palette.accent,
+        ...(fillRamp(theme.palette.accent, panH, depth) ? { gradient: fillRamp(theme.palette.accent, panH, depth)! } : {}),
+        ...(elevation(depth) ? { shadow: elevation(depth)! } : {}),
         stroke: theme.palette.text,
         strokeWidth: 2,
       },
@@ -154,6 +160,7 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
         height: beamH,
         radius: beamH / 2,
         fill: theme.palette.primary,
+        ...(fillRamp(theme.palette.primary, beamH, depth) ? { gradient: fillRamp(theme.palette.primary, beamH, depth)! } : {}),
         stroke: theme.palette.text,
         strokeWidth: 2,
       },
@@ -168,6 +175,7 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
   const baseY = apexY + fulcrumR * 1.5; // a sides-3 polygon is 1.5*radius tall
   const groundW = fulcrumR * 2.1;
 
+  const fulcrumGrad = fillRamp(theme.palette.secondary, fulcrumR * 1.5, depth);
   const fulcrum: Node = {
     id: nid(),
     type: "polygon",
@@ -176,6 +184,7 @@ export function buildBalanceScale(opts: BalanceScaleOptions): GroupNode {
     sides: 3,
     radius: fulcrumR,
     fill: theme.palette.secondary,
+    ...(fulcrumGrad ? { gradient: fulcrumGrad } : {}),
     stroke: theme.palette.text,
     strokeWidth: 2,
   };
