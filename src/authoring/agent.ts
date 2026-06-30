@@ -13,6 +13,7 @@ import type { SchemaDescription } from "../spec/describe.js";
 import type { ValidationError } from "../validator/validate.js";
 import type { ShowmanClient } from "../mcp/showmanTools.js";
 import type { RenderOptions } from "../service/renderService.js";
+import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 
 export interface AuthorContext {
   schema: SchemaDescription;
@@ -114,6 +115,8 @@ export interface AnthropicAuthorOptions {
   model?: string;
   maxTokens?: number;
   fetchImpl?: typeof fetch;
+  /** Prompt pack (externalized templates). Defaults to the bundled/`SHOWMAN_PROMPT_DIR` pack. */
+  prompts?: AuthorPrompts;
 }
 
 /**
@@ -126,23 +129,20 @@ export class AnthropicSpecAuthor implements SpecAuthor {
   private readonly model: string;
   private readonly maxTokens: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly prompts: AuthorPrompts;
 
   constructor(opts: AnthropicAuthorOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY ?? "";
-    this.model = opts.model ?? "claude-opus-4-8";
+    this.model = opts.model ?? process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
     this.maxTokens = opts.maxTokens ?? 4096;
     this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.prompts = opts.prompts ?? loadPrompts();
     if (!this.apiKey) throw new Error("AnthropicSpecAuthor requires an API key (ANTHROPIC_API_KEY).");
   }
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
-    const system =
-      "You are an expert author of beautiful, pedagogically-structured animated lessons for young children. " +
-      "Given a brief, output ONLY a single JSON Scene Spec object (no markdown, no prose) conforming to this schema:\n" +
-      JSON.stringify(ctx.schema);
-    const correction = ctx.feedback?.errors?.length
-      ? `\n\nYour previous attempt had these validation errors — fix them precisely:\n${JSON.stringify(ctx.feedback.errors, null, 2)}`
-      : "";
+    const system = this.prompts.system(JSON.stringify(ctx.schema));
+    const correction = this.prompts.correction(ctx.feedback?.errors ?? []);
     const res = await this.fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },

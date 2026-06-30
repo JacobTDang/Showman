@@ -29,9 +29,11 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --omit=optional && npm cache clean --force
 
-# Pinned, baked assets (fonts) + compiled engine. assets/ must sit beside dist/
-# so the engine resolves ../../assets at runtime.
+# Pinned, baked assets (fonts) + editable authoring prompts + compiled engine.
+# assets/ and prompts/ must sit beside dist/ so they resolve at ../../ from the build.
+# (Override prompts at runtime with SHOWMAN_PROMPT_DIR; mount a volume to tune without a rebuild.)
 COPY assets ./assets
+COPY prompts ./prompts
 COPY --from=builder /app/dist ./dist
 
 ENV PORT=8080 \
