@@ -9,11 +9,29 @@
  */
 
 import type { SceneSpec } from "../spec/types.js";
-import type { SchemaDescription } from "../spec/describe.js";
+import { describeSceneCompact, type SchemaDescription } from "../spec/describe.js";
 import type { ValidationError } from "../validator/validate.js";
 import type { ShowmanClient } from "../mcp/showmanTools.js";
 import type { RenderOptions } from "../service/renderService.js";
 import { loadPrompts, type AuthorPrompts } from "./prompts.js";
+import { autoRepairSpec } from "./autoRepair.js";
+import { extractJson } from "./jsonRepair.js";
+
+// Re-exported for back-compat: callers and tests import `extractJson` from here.
+export { extractJson } from "./jsonRepair.js";
+
+/** How much schema to put in the prompt: a compact digest (default, token-frugal) or the full JSON. */
+export type SchemaMode = "compact" | "full";
+
+/** Resolve the schema text for a prompt given the mode and the full schema in context. */
+function schemaText(mode: SchemaMode, schema: SchemaDescription): string {
+  return mode === "full" ? JSON.stringify(schema) : describeSceneCompact();
+}
+
+/** Read the default schema mode from the environment (compact unless told otherwise). */
+function defaultSchemaMode(): SchemaMode {
+  return process.env.SHOWMAN_SCHEMA_MODE === "full" ? "full" : "compact";
+}
 
 export interface AuthorContext {
   schema: SchemaDescription;
@@ -31,6 +49,8 @@ export interface AuthoringAttempt {
   valid: boolean;
   errorCount: number;
   previewed?: boolean;
+  /** Mechanical fixes auto-applied this attempt (clamps, key renames) — no LLM round-trip spent. */
+  repaired?: string[];
 }
 
 export interface AuthoringResult {
@@ -70,27 +90,44 @@ export class AuthoringAgent {
     let feedback: AuthorContext["feedback"];
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const spec = await this.author.propose(brief, { schema, attempt, ...(feedback ? { feedback } : {}) });
+      let spec = await this.author.propose(brief, { schema, attempt, ...(feedback ? { feedback } : {}) });
 
-      const validation = await this.client.validate(spec);
+      let validation = await this.client.validate(spec);
+      let repaired: string[] | undefined;
       if (!validation.valid) {
-        history.push({ attempt, valid: false, errorCount: validation.errors.length });
-        feedback = { errors: validation.errors, note: "The spec failed validation. Fix the listed errors." };
-        continue;
+        // Try a cheap, deterministic repair (clamp ranges, fix typo'd keys/easings) before
+        // spending another whole LLM round-trip on errors a machine can fix itself.
+        const fix = autoRepairSpec(spec, validation.errors);
+        if (fix.fixed.length > 0) {
+          const reval = await this.client.validate(fix.spec);
+          if (reval.valid) {
+            spec = fix.spec;
+            validation = reval;
+            repaired = fix.fixed;
+          } else {
+            history.push({ attempt, valid: false, errorCount: reval.errors.length, repaired: fix.fixed });
+            feedback = { errors: reval.errors, note: "The spec failed validation. Fix the listed errors." };
+            continue;
+          }
+        } else {
+          history.push({ attempt, valid: false, errorCount: validation.errors.length });
+          feedback = { errors: validation.errors, note: "The spec failed validation. Fix the listed errors." };
+          continue;
+        }
       }
 
       let previewed = false;
       if (this.options.preview) {
         const pv = await this.client.preview(spec, 0);
         if (!pv.ok) {
-          history.push({ attempt, valid: true, errorCount: pv.errors.length, previewed: false });
+          history.push({ attempt, valid: true, errorCount: pv.errors.length, previewed: false, ...(repaired ? { repaired } : {}) });
           feedback = { errors: pv.errors as ValidationError[], note: "Preview failed." };
           continue;
         }
         previewed = true;
       }
 
-      history.push({ attempt, valid: true, errorCount: 0, previewed });
+      history.push({ attempt, valid: true, errorCount: 0, previewed, ...(repaired ? { repaired } : {}) });
       return { ok: true, spec: spec as SceneSpec, attempts: attempt, history };
     }
     return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid spec" };
@@ -131,6 +168,8 @@ export interface AnthropicAuthorOptions {
   fetchImpl?: typeof fetch;
   /** Prompt pack (externalized templates). Defaults to the bundled/`SHOWMAN_PROMPT_DIR` pack. */
   prompts?: AuthorPrompts;
+  /** Schema verbosity in the prompt: "compact" digest (default) or "full" JSON. */
+  schemaMode?: SchemaMode;
 }
 
 /**
@@ -144,6 +183,7 @@ export class AnthropicSpecAuthor implements SpecAuthor {
   private readonly maxTokens: number;
   private readonly fetchImpl: typeof fetch;
   private readonly prompts: AuthorPrompts;
+  private readonly schemaMode: SchemaMode;
 
   constructor(opts: AnthropicAuthorOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY ?? "";
@@ -151,11 +191,12 @@ export class AnthropicSpecAuthor implements SpecAuthor {
     this.maxTokens = opts.maxTokens ?? 4096;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.prompts = opts.prompts ?? loadPrompts();
+    this.schemaMode = opts.schemaMode ?? defaultSchemaMode();
     if (!this.apiKey) throw new Error("AnthropicSpecAuthor requires an API key (ANTHROPIC_API_KEY).");
   }
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
-    const system = this.prompts.system(JSON.stringify(ctx.schema));
+    const system = this.prompts.system(schemaText(this.schemaMode, ctx.schema));
     const correction = this.prompts.correction(ctx.feedback?.errors ?? []);
     const res = await this.fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -171,27 +212,4 @@ export class AnthropicSpecAuthor implements SpecAuthor {
     const text = data.content?.map((c) => c.text ?? "").join("") ?? "";
     return extractJson(text);
   }
-}
-
-/** Extract the first balanced JSON object from a string (tolerates stray prose). */
-export function extractJson(text: string): unknown {
-  const start = text.indexOf("{");
-  if (start < 0) throw new Error("no JSON object in author response");
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i]!;
-    if (inStr) {
-      if (esc) esc = false;
-      else if (ch === "\\") esc = true;
-      else if (ch === '"') inStr = false;
-    } else if (ch === '"') inStr = true;
-    else if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) return JSON.parse(text.slice(start, i + 1));
-    }
-  }
-  throw new Error("unbalanced JSON in author response");
 }

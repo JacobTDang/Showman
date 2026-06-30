@@ -9,7 +9,8 @@
  * gated behind OPENROUTER_API_KEY.
  */
 
-import { extractJson, type AuthorContext, type SpecAuthor } from "./agent.js";
+import { extractJson, type AuthorContext, type SchemaMode, type SpecAuthor } from "./agent.js";
+import { describeSceneCompact } from "../spec/describe.js";
 import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 
 export interface OpenRouterAuthorOptions {
@@ -22,6 +23,8 @@ export interface OpenRouterAuthorOptions {
   fetchImpl?: typeof fetch;
   /** Prompt pack (externalized templates). Defaults to the bundled/`SHOWMAN_PROMPT_DIR` pack. */
   prompts?: AuthorPrompts;
+  /** Schema verbosity in the prompt: "compact" digest (default, token-frugal) or "full" JSON. */
+  schemaMode?: SchemaMode;
 }
 
 type MessageContent = string | null | Array<{ type?: string; text?: string }>;
@@ -47,6 +50,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly prompts: AuthorPrompts;
+  private readonly schemaMode: SchemaMode;
 
   constructor(opts: OpenRouterAuthorOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
@@ -57,11 +61,12 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
     this.timeoutMs = opts.timeoutMs ?? 90_000;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.prompts = opts.prompts ?? loadPrompts();
+    this.schemaMode = opts.schemaMode ?? (process.env.SHOWMAN_SCHEMA_MODE === "full" ? "full" : "compact");
     if (!this.apiKey) throw new Error("OpenRouterSpecAuthor requires an API key (OPENROUTER_API_KEY).");
   }
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
-    const system = this.prompts.system(JSON.stringify(ctx.schema));
+    const system = this.prompts.system(this.schemaMode === "full" ? JSON.stringify(ctx.schema) : describeSceneCompact());
     const correction = this.prompts.correction(ctx.feedback?.errors ?? []);
 
     let res: Response;
