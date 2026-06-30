@@ -33,6 +33,9 @@ describe("apparatus", () => {
     expect(liq.height).toBeLessThanOrEqual(100);
     expect(validateScene(scene([full]))).toMatchObject({ valid: true });
   });
+  it("a zero-height Erlenmeyer with liquid stays valid (no 0/0 NaN) (review fix)", () => {
+    expect(validateScene(scene([erlenmeyerFlask({ x: 100, y: 200, height: 0, liquid: 0.5 })]))).toMatchObject({ valid: true });
+  });
   it("bunsenBurner toggles its flame", () => {
     expect(kids(bunsenBurner({ id: "bb", x: 100, y: 200 })).some((n) => n.id === "bb-flame-o")).toBe(true);
     expect(kids(bunsenBurner({ id: "bb", x: 100, y: 200, flame: false })).some((n) => /-flame/.test(n.id))).toBe(false);

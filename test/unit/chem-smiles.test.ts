@@ -31,6 +31,16 @@ describe("parseSmiles", () => {
     expect(b.bonds.filter((bd) => bd.ring)).toHaveLength(1); // the closure bond
     expect(b.atoms.every((a) => a.aromatic)).toBe(true);
   });
+  it("breaks bonds across a '.' fragment separator (review fix)", () => {
+    const m = parseSmiles("CCO.O"); // ethanol + a separate water O — NOT one chain
+    expect(m.atoms.map((a) => a.el)).toEqual(["C", "C", "O", "O"]);
+    expect(m.bonds).toHaveLength(2); // C-C, C-O — the last O is disconnected, no spurious O-O
+    expect(m.bonds.some((b) => b.a === 3 || b.b === 3)).toBe(false);
+  });
+  it("never makes a zero-length self-bond when a ring digit repeats on one atom (review fix)", () => {
+    const m = parseSmiles("C11"); // degenerate: digit opened and closed on the same atom
+    expect(m.bonds.every((b) => b.a !== b.b)).toBe(true);
+  });
 });
 
 describe("smilesToMolecule", () => {
@@ -53,6 +63,12 @@ describe("moleculeFromSmiles", () => {
   it("renders a range of molecules validly", () => {
     for (const smiles of ["CCO", "CC(=O)O", "c1ccccc1", "Cc1ccccc1", "CC(C)C", "C#N", "OCC(O)CO"]) {
       const m = moleculeFromSmiles({ id: "m", smiles, ox: 180, oy: 150, scale: 34, shadow: false });
+      expect(validateScene(scene(m))).toMatchObject({ valid: true });
+    }
+  });
+  it("stays valid for small and fused rings (review fix)", () => {
+    for (const smiles of ["C1CC1", "C1C1", "c1ccc2ccccc2c1"]) {
+      const m = moleculeFromSmiles({ id: "m", smiles, ox: 180, oy: 150, scale: 30, shadow: false });
       expect(validateScene(scene(m))).toMatchObject({ valid: true });
     }
   });

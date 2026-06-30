@@ -100,11 +100,12 @@ export function curlyArrow(opts: CurlyArrowOptions): GroupNode {
       },
     ] as Track[];
     head.opacity = 0;
+    const fade = Math.min(0.12, dur); // never let the fade window precede `start` for a short duration
     head.tracks = [
       {
         property: "opacity",
         keyframes: [
-          { t: start + dur - 0.12, value: 0 },
+          { t: start + dur - fade, value: 0 },
           { t: start + dur, value: 1 },
         ],
       },
