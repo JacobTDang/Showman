@@ -30,6 +30,7 @@
     "coordinator": "node dist/distributed/coordinatorMain.js",
     "shard-worker": "node dist/distributed/remoteWorkerMain.js",
     "mcp": "node dist/mcp/main.js",
+    "smoke:container": "bash scripts/smoke-container.sh",
     "interaction-demo": "tsx scripts/interaction-demo.ts",
     "dashboard-demo": "tsx scripts/dashboard-demo.ts"
   },
