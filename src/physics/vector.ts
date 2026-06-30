@@ -7,6 +7,7 @@
 import type { Node, GroupNode, Color, Track } from "../spec/types.js";
 import { connector } from "../diagram/connector.js";
 import { getTheme, swatch } from "../theme/themes.js";
+import { chipRamp, type Depth } from "../theme/depth.js";
 
 export interface Force {
   label?: string;
@@ -35,6 +36,8 @@ export interface ForceDiagramOptions {
   theme?: string;
   /** Grow the arrows on (draw-on). Default false. */
   animate?: boolean;
+  /** Dimensionality of the central body (a spherical highlight). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 const DEG = Math.PI / 180;
@@ -135,7 +138,9 @@ export function forceDiagram(opts: ForceDiagramOptions): GroupNode {
     }
   });
 
-  // Central body on top of the arrow bases.
+  // Central body on top of the arrow bases — a dimensional sphere.
+  const bodyColor = opts.bodyColor ?? "#334155";
+  const bodyGrad = chipRamp(bodyColor, r, opts.depth ?? "soft");
   children.push({
     id: `${id}-body`,
     type: "ellipse",
@@ -143,7 +148,8 @@ export function forceDiagram(opts: ForceDiagramOptions): GroupNode {
     y: oy - r,
     width: r * 2,
     height: r * 2,
-    fill: opts.bodyColor ?? "#334155",
+    fill: bodyColor,
+    ...(bodyGrad ? { gradient: bodyGrad } : {}),
     stroke: "#0f172a",
     strokeWidth: 2,
   });
