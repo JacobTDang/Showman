@@ -32,11 +32,14 @@ describe("ten-frame", () => {
     const tf = buildTenFrame({ id: "tf", x: 0, y: 0, filled: 3, cellSize: cell });
     const spec = scene([tf]);
     expect(validateScene(spec).valid).toBe(true);
+    // depth: each counter is a sphere — a radial chip gradient fading to the exact primary token.
+    const counter = tf.children.find((n) => n.type === "ellipse") as { gradient?: { stops: { color: string }[] } };
+    expect(counter.gradient?.stops.at(-1)?.color).toBe(getTheme().palette.primary);
     const f = renderFrame(spec, 0);
     const primary = hexRgb(getTheme().palette.primary);
 
-    // Cell 0 (filled) — center reads as the primary token color.
-    expect(isColorNear(samplePixel(f, cell / 2, cell / 2), primary)).toBe(true);
+    // Cell 0 (filled) — center reads as a (highlighted) shade of the primary token, clearly not white.
+    expect(isColorNear(samplePixel(f, cell / 2, cell / 2), primary, 45)).toBe(true);
     // Cell 9 (last, empty) — center stays white.
     expect(isColorNear(samplePixel(f, 4 * cell + cell / 2, cell + cell / 2), { r: 255, g: 255, b: 255 })).toBe(true);
   });

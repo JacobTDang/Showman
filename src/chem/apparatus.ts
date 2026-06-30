@@ -6,6 +6,7 @@
  */
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
+import { glowNode, type Depth } from "../theme/depth.js";
 
 export interface GlasswareOptions {
   id?: string;
@@ -347,6 +348,8 @@ export interface BunsenBurnerOptions {
   height?: number;
   /** Show a flame above the barrel. Default true. */
   flame?: boolean;
+  /** Dimensionality of the flame (a warm radial glow halo). Default "soft"; "flat" = no halo. */
+  depth?: Depth;
 }
 
 /** A Bunsen burner: a base, a barrel, and an optional flame. */
@@ -384,6 +387,9 @@ export function bunsenBurner(opts: BunsenBurnerOptions): GroupNode {
   if (opts.flame !== false) {
     const ft = barrelTop;
     const fh = 46;
+    // A warm radial glow behind the flame (golden-safe — a gradient halo, not a blur shadow).
+    const halo = glowNode(`${id}-flame-glow`, cx, ft - fh * 0.45, fh * 0.72, "#fb923c", opts.depth ?? "soft");
+    if (halo) children.push(halo);
     children.push({
       id: `${id}-flame-o`,
       type: "polyline",

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderFrame, validateScene } from "../../src/index.js";
 import type { Node, SceneSpec } from "../../src/index.js";
 import { buildDotPattern } from "../../src/math/dotPattern.js";
-import { samplePixel, isColorNear } from "../helpers.js";
+import { samplePixel } from "../helpers.js";
 
 function scene(nodes: Node[], w = 200, h = 200): SceneSpec {
   return { specVersion: 1, width: w, height: h, fps: 1, duration: 1, background: "#ffffff", nodes };
@@ -26,16 +26,28 @@ describe("dot pattern (subitizing)", () => {
     const g = buildDotPattern({ id: "dp", n: 5, x: 0, y: 0, size, color: "red" });
     const spec = scene([g], size, size);
     expect(validateScene(spec).valid).toBe(true);
+    // depth: each dot is a sphere — a radial chip gradient that fades to the exact base color.
+    const dot = g.children[2] as { gradient?: { stops: { color: string }[] } }; // the dead-center dot (n=5)
+    expect(dot.gradient?.stops.at(-1)?.color).toBe("red");
     const f = renderFrame(spec, 0);
-    // n = 5 has a dot dead-center of the box.
-    expect(isColorNear(samplePixel(f, size / 2, size / 2), { r: 255, g: 0, b: 0 })).toBe(true);
+    // n = 5 has a dot dead-center of the box; the chip lightens the center but the hue stays red.
+    const p = samplePixel(f, size / 2, size / 2);
+    expect(p.r).toBeGreaterThan(150);
+    expect(p.g).toBeLessThan(140); // not white / not another hue
+    expect(p.b).toBeLessThan(140);
   });
 
-  it("defaults dots to theme.palette.primary", () => {
+  it("defaults dots to theme.palette.primary (and adds a depth chip by default)", () => {
     const g = buildDotPattern({ n: 6 });
-    const first = g.children[0]!;
+    const first = g.children[0] as { type: string; fill?: string; gradient?: { stops: { color: string }[] } };
     expect(first.type).toBe("ellipse");
-    expect((first as { fill?: string }).fill).toBe("#ef6c35"); // sunshine primary
+    expect(first.fill).toBe("#ef6c35"); // sunshine primary (the flat fallback color)
+    expect(first.gradient?.stops.at(-1)?.color).toBe("#ef6c35"); // chip fades to that exact primary
+  });
+
+  it("emits flat fills (no gradient) when depth is flat", () => {
+    const g = buildDotPattern({ n: 5, color: "red", depth: "flat" });
+    expect((g.children[0] as { gradient?: unknown }).gradient).toBeUndefined();
   });
 
   it("uses a 2-row grid for 7..10", () => {

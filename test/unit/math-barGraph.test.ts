@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderFrame, validateScene } from "../../src/index.js";
 import type { Node, SceneSpec } from "../../src/index.js";
 import { buildBarGraph } from "../../src/math/barGraph.js";
-import { samplePixel, isColorNear } from "../helpers.js";
+import { samplePixel } from "../helpers.js";
 
 function scene(nodes: Node[], w = 400, h = 260): SceneSpec {
   return { specVersion: 1, width: w, height: h, fps: 1, duration: 1, background: "#ffffff", nodes };
@@ -58,16 +58,26 @@ describe("bar graph", () => {
     const frame = renderFrame(spec, 0);
     const rects = g.children.filter((c): c is Extract<Node, { type: "rect" }> => c.type === "rect");
 
-    const targets = [
-      { r: 255, g: 0, b: 0 },
-      { r: 0, g: 255, b: 0 },
-      { r: 0, g: 0, b: 255 },
-    ];
+    const dominant = ["r", "g", "b"] as const; // bar 0 red, 1 green, 2 blue
     rects.forEach((rect, i) => {
       // sample the bar's interior center (group origin + local bar center)
       const px = Math.round(ox + (rect.x ?? 0) + (rect.width ?? 0) / 2);
       const py = Math.round(oy + (rect.y ?? 0) + (rect.height ?? 0) / 2);
-      expect(isColorNear(samplePixel(frame, px, py), targets[i]!)).toBe(true);
+      const p = samplePixel(frame, px, py);
+      // The depth fill-ramp lightens the bar, but its hue is unmistakable: the 255-channel dominates.
+      const lead = dominant[i]!;
+      expect(p[lead]).toBeGreaterThan(150);
+      (["r", "g", "b"] as const).filter((c) => c !== lead).forEach((c) => expect(p[c]).toBeLessThan(150));
     });
+  });
+
+  it("gives each bar a depth gradient + crisp lift by default, and flat fills when depth:flat", () => {
+    const soft = buildBarGraph({ id: "bg", bars }).children.filter((c) => c.type === "rect");
+    const r0 = soft[0] as { gradient?: { stops: { color: string }[] }; shadow?: { blur?: number } };
+    expect(r0.gradient?.stops.at(-1)?.color).toBe("#ff0000"); // ramp fades to the exact base color
+    expect(r0.shadow?.blur).toBe(0); // a crisp (golden-safe) lift, never a ctx blur
+    const flat = buildBarGraph({ id: "bg", bars, depth: "flat" }).children.filter((c) => c.type === "rect");
+    expect((flat[0] as { gradient?: unknown }).gradient).toBeUndefined();
+    expect((flat[0] as { shadow?: unknown }).shadow).toBeUndefined();
   });
 });
