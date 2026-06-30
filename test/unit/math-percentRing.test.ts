@@ -44,7 +44,11 @@ describe("percent ring", () => {
     // 75% (270deg) clockwise sweep, so it reads as the filled accent color.
     const midR = (radius - thickness + radius) / 2; // (inner + outer) / 2 = 69
     const accent = hexRgb(getTheme().palette.accent);
-    expect(isColorNear(samplePixel(f, cx + midR, cy), accent)).toBe(true);
+    // depth: the filled arc carries a gentle sheen gradient fading to the exact accent token.
+    const fillArc = ring.children.filter((n) => n.type === "arc")[1] as { gradient?: { stops: { color: string }[] } };
+    expect(fillArc.gradient?.stops.at(-1)?.color).toBe(getTheme().palette.accent);
+    // The sheen lightens the band a touch, but it's unmistakably the accent (not the faint track).
+    expect(isColorNear(samplePixel(f, cx + midR, cy), accent, 25)).toBe(true);
   });
 
   it("stays valid for degenerate percents (NaN, out-of-range)", () => {
@@ -94,9 +98,9 @@ describe("percent ring", () => {
 
     const ring75 = scene([buildPercentRing({ id: "pr", x: 20, y: 20, percent: 75, radius, thickness })]);
     const ring100 = scene([buildPercentRing({ id: "pr", x: 20, y: 20, percent: 100, radius, thickness })]);
-    // 75% leaves this wedge on the faint track (NOT the accent fill)…
+    // 75% leaves this wedge on the faint track (NOT the accent fill — strict tolerance)…
     expect(isColorNear(samplePixel(renderFrame(ring75, 0), px, py), accent)).toBe(false);
-    // …while 100% fills it with the accent — so the probe genuinely separates the two.
-    expect(isColorNear(samplePixel(renderFrame(ring100, 0), px, py), accent)).toBe(true);
+    // …while 100% fills it with a (sheen-lightened) accent — so the probe genuinely separates the two.
+    expect(isColorNear(samplePixel(renderFrame(ring100, 0), px, py), accent, 35)).toBe(true);
   });
 });

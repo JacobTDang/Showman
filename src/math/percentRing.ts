@@ -9,6 +9,7 @@
 
 import type { Node, GroupNode, Color } from "../spec/types.js";
 import { getTheme, idGen, clamp, finiteNum, posSize } from "./shared.js";
+import { fillRamp, type Depth } from "../theme/depth.js";
 
 // ───────────────────────── Percent ring ─────────────────────────
 
@@ -26,6 +27,8 @@ export interface PercentRingOptions {
   theme?: string;
   /** Fill color of the filled portion. Defaults to the theme accent. */
   fill?: Color;
+  /** Dimensionality of the filled arc (a gradient sheen). Default "soft"; "flat" = solid. */
+  depth?: Depth;
 }
 
 /** A percent ring: faint full track + clockwise-filled arc + center "N%" counter. */
@@ -59,7 +62,7 @@ export function buildPercentRing(opts: PercentRingOptions): GroupNode {
       fill: theme.palette.muted,
       opacity: 0.3,
     },
-    // Filled portion, clockwise from 12 o'clock.
+    // Filled portion, clockwise from 12 o'clock — a gentle top→bottom sheen across the ring.
     {
       id: nid(),
       type: "arc",
@@ -70,6 +73,7 @@ export function buildPercentRing(opts: PercentRingOptions): GroupNode {
       startAngle: 0,
       endAngle: (sweep / 100) * 360,
       fill,
+      ...(fillRamp(fill, radius * 2, opts.depth ?? "soft") ? { gradient: fillRamp(fill, radius * 2, opts.depth ?? "soft")! } : {}),
     },
     // Center counter: rounded percent with a "%" suffix.
     {
