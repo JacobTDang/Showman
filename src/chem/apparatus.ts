@@ -85,8 +85,9 @@ export function erlenmeyerFlask(opts: GlasswareOptions): GroupNode {
     const bodyH = h - neckH;
     const liqTop = opts.y - lvl * bodyH;
     // Liquid is the trapezoid of the cone below liqTop (width grows toward the base).
+    const span = opts.y - shoulder || 1; // guard a 0-height flask (avoids a 0/0 NaN)
     const wAt = (y: number): number => {
-      const t = (y - shoulder) / (opts.y - shoulder); // 0 at shoulder, 1 at base
+      const t = (y - shoulder) / span; // 0 at shoulder, 1 at base
       return neckW + (w - neckW) * Math.max(0, Math.min(1, t));
     };
     const wt = wAt(liqTop) / 2;

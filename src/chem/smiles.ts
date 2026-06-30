@@ -44,6 +44,10 @@ export function parseSmiles(s: string): { atoms: PAtom[]; bonds: PBond[] } {
     if (c === "(") {
       stack.push(prev);
       i++;
+    } else if (c === ".") {
+      prev = -1; // fragment break: the next atom starts a disconnected piece, not a bond to the last
+      pending = 0;
+      i++;
     } else if (c === ")") {
       prev = stack.length ? stack.pop()! : prev;
       i++;
@@ -62,7 +66,7 @@ export function parseSmiles(s: string): { atoms: PAtom[]; bonds: PBond[] } {
     } else if (c >= "0" && c <= "9") {
       const r = rings.get(c);
       if (r) {
-        if (prev >= 0) bonds.push({ a: r.atom, b: prev, order: r.order || pending || 1, ring: true });
+        if (prev >= 0 && prev !== r.atom) bonds.push({ a: r.atom, b: prev, order: r.order || pending || 1, ring: true });
         rings.delete(c);
       } else if (prev >= 0) {
         rings.set(c, { atom: prev, order: pending });

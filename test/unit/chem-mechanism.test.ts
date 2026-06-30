@@ -45,4 +45,9 @@ describe("curlyArrow", () => {
     const s = scene(a);
     expect(Buffer.from(renderFrame(s, 5).pixels).equals(Buffer.from(renderFrame(s, 5).pixels))).toBe(true);
   });
+  it("stays valid for a very short animation (the head fade can't precede start) (review fix)", () => {
+    for (const duration of [0.05, 0.1, 0.12]) {
+      expect(validateScene(scene(curlyArrow({ from, to, animate: true, start: 0, duration }))).valid).toBe(true);
+    }
+  });
 });
