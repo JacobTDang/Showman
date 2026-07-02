@@ -4,7 +4,8 @@
 # the concat/mux toolchain stays byte-identical across rebuilds.
 FROM golang:1.26-bookworm AS builder
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
+RUN go mod download
 COPY *.go ./
 COPY cmd ./cmd
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/orchestrator ./cmd/orchestrator

@@ -1,0 +1,239 @@
+package orchestrator
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/cloudwego/eino-ext/components/model/openai"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
+)
+
+// The LLM tiers: an Eino ChatModel-backed planner and selector. Both sit behind the
+// same interfaces as the offline tiers, and production wiring wraps them in Fallback*
+// so the design's precedence holds: LLM -> offline -> (selector only) counting lesson.
+// Tests inject a fake model.BaseChatModel; production uses eino-ext's OpenAI-compatible
+// model pointed at OpenRouter/vLLM/Ollama via env.
+
+// NewOpenAIChatModel builds the production chat model from the environment:
+// OPENROUTER_API_KEY (required), OPENROUTER_BASE_URL, OPENROUTER_MODEL.
+// Returns nil when no key is configured (callers then run offline tiers only).
+func NewOpenAIChatModel(ctx context.Context, env func(string) string) (model.BaseChatModel, error) {
+	key := env("OPENROUTER_API_KEY")
+	if key == "" {
+		return nil, nil
+	}
+	base := env("OPENROUTER_BASE_URL")
+	if base == "" {
+		base = "https://openrouter.ai/api/v1"
+	}
+	modelID := env("OPENROUTER_MODEL")
+	if modelID == "" {
+		modelID = "openai/gpt-oss-120b"
+	}
+	temp := float32(0.3)
+	return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+		APIKey:      key,
+		BaseURL:     base,
+		Model:       modelID,
+		Temperature: &temp,
+		Timeout:     90 * time.Second,
+	})
+}
+
+// LLMPlanner plans a lesson with one chat call.
+type LLMPlanner struct {
+	Model model.BaseChatModel
+}
+
+// Plan asks the model for a LessonPlan JSON and normalizes it.
+func (p *LLMPlanner) Plan(ctx context.Context, view PlannerView) (LessonPlan, error) {
+	system := PlannerSystemPrompt(view.DefaultBudget)
+	user := fmt.Sprintf("Topic: %s\nQuery: %s\nAudience: %s", view.Request.Topic, view.Request.Query, view.Request.Options.Audience)
+	out, err := p.Model.Generate(ctx, []*schema.Message{schema.SystemMessage(system), schema.UserMessage(user)})
+	if err != nil {
+		return LessonPlan{}, fmt.Errorf("llm plan: %w", err)
+	}
+	raw, err := extractJSON(out.Content)
+	if err != nil {
+		return LessonPlan{}, fmt.Errorf("llm plan: %w", err)
+	}
+	var plan LessonPlan
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		return LessonPlan{}, fmt.Errorf("llm plan: decode: %w", err)
+	}
+	return normalizePlan(plan, view)
+}
+
+// normalizePlan enforces the invariants the pipeline depends on (mechanical, no LLM):
+// sequential ids/indexes, non-empty scenes/goals, sane durations, a known theme.
+func normalizePlan(plan LessonPlan, view PlannerView) (LessonPlan, error) {
+	if len(plan.Scenes) == 0 {
+		return LessonPlan{}, fmt.Errorf("llm plan: zero scenes")
+	}
+	if len(plan.Scenes) > 8 {
+		plan.Scenes = plan.Scenes[:8]
+	}
+	for i := range plan.Scenes {
+		sc := &plan.Scenes[i]
+		sc.Index = i
+		sc.ID = fmt.Sprintf("beat-%d", i+1)
+		if strings.TrimSpace(sc.Goal) == "" {
+			return LessonPlan{}, fmt.Errorf("llm plan: scene %d has no goal", i)
+		}
+		if sc.DurationBudgetSec <= 0 || sc.DurationBudgetSec > 60 {
+			sc.DurationBudgetSec = clampSec(float64(view.DefaultBudget)/float64(len(plan.Scenes)), 3, 30)
+		}
+	}
+	switch plan.Theme {
+	case "sunshine", "meadow", "ocean", "berry":
+	default:
+		plan.Theme = "sunshine"
+	}
+	if plan.Title == "" {
+		plan.Title = title(view.Request.Topic)
+	}
+	plan.TotalDurationBudgetSec = float64(view.DefaultBudget)
+	plan.ModelID = "llm-planner/v1"
+	return plan, nil
+}
+
+// LLMSelector picks builders for one beat with one chat call, validated against the
+// catalog before anything ships to /assemble.
+type LLMSelector struct {
+	Model  model.BaseChatModel
+	Engine EngineClient
+}
+
+// Select prompts with the beat + compact catalog digest and validates the placements.
+func (s *LLMSelector) Select(ctx context.Context, view SelectorView) ([]BuilderPlacement, error) {
+	system := SelectorSystemPrompt(view.CatalogDigest)
+	beatJSON, _ := json.Marshal(view.Beat)
+	out, err := s.Model.Generate(ctx, []*schema.Message{schema.SystemMessage(system), schema.UserMessage("Scene beat:\n" + string(beatJSON))})
+	if err != nil {
+		return nil, fmt.Errorf("llm select: %w", err)
+	}
+	raw, err := extractJSON(out.Content)
+	if err != nil {
+		return nil, fmt.Errorf("llm select: %w", err)
+	}
+	var placements []BuilderPlacement
+	if err := json.Unmarshal(raw, &placements); err != nil {
+		// Tolerate a single object instead of an array.
+		var one BuilderPlacement
+		if err2 := json.Unmarshal(raw, &one); err2 != nil {
+			return nil, fmt.Errorf("llm select: decode: %w", err)
+		}
+		placements = []BuilderPlacement{one}
+	}
+	if len(placements) == 0 {
+		return nil, fmt.Errorf("llm select: zero placements")
+	}
+	// Validate builder names against the catalog (unknown names fail here, cheaply,
+	// instead of at /assemble).
+	tools, err := s.Engine.Catalog(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	known := map[string]bool{}
+	for _, t := range tools {
+		known[t.Name] = true
+	}
+	for _, p := range placements {
+		if !known[p.Builder] {
+			return nil, fmt.Errorf("llm select: unknown builder %q", p.Builder)
+		}
+	}
+	return placements, nil
+}
+
+// FallbackPlanner tries each planner in order (the design's quality ladder).
+type FallbackPlanner struct{ Tiers []LessonPlanner }
+
+// Plan returns the first tier's successful plan.
+func (f FallbackPlanner) Plan(ctx context.Context, view PlannerView) (LessonPlan, error) {
+	var lastErr error
+	for _, tier := range f.Tiers {
+		plan, err := tier.Plan(ctx, view)
+		if err == nil {
+			return plan, nil
+		}
+		lastErr = err
+	}
+	return LessonPlan{}, fmt.Errorf("all planner tiers failed: %w", lastErr)
+}
+
+// FallbackSelector tries each selector in order.
+type FallbackSelector struct{ Tiers []DomainSelector }
+
+// Select returns the first tier's successful placements.
+func (f FallbackSelector) Select(ctx context.Context, view SelectorView) ([]BuilderPlacement, error) {
+	var lastErr error
+	for _, tier := range f.Tiers {
+		placements, err := tier.Select(ctx, view)
+		if err == nil {
+			return placements, nil
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("all selector tiers failed: %w", lastErr)
+}
+
+// extractJSON slices the first balanced JSON value (object or array) out of possibly
+// chatty / fenced model output — the Go analogue of the engine's tolerant extractor.
+func extractJSON(text string) (json.RawMessage, error) {
+	// Strip a markdown fence if present.
+	if i := strings.Index(text, "```"); i >= 0 {
+		rest := text[i+3:]
+		rest = strings.TrimPrefix(rest, "json")
+		rest = strings.TrimPrefix(rest, "JSON")
+		if j := strings.Index(rest, "```"); j >= 0 {
+			text = rest[:j]
+		}
+	}
+	start := strings.IndexAny(text, "{[")
+	if start < 0 {
+		return nil, fmt.Errorf("no JSON in model output")
+	}
+	open := text[start]
+	var close byte = '}'
+	if open == '[' {
+		close = ']'
+	}
+	depth := 0
+	inStr := false
+	esc := false
+	for i := start; i < len(text); i++ {
+		ch := text[i]
+		if inStr {
+			switch {
+			case esc:
+				esc = false
+			case ch == '\\':
+				esc = true
+			case ch == '"':
+				inStr = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inStr = true
+		case open:
+			depth++
+		case close:
+			depth--
+			if depth == 0 {
+				candidate := text[start : i+1]
+				if !json.Valid([]byte(candidate)) {
+					return nil, fmt.Errorf("model output is not valid JSON")
+				}
+				return json.RawMessage(candidate), nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("unbalanced JSON in model output")
+}
