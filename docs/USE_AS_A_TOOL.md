@@ -3,6 +3,30 @@
 Showman is built so another agent can hand it a plain-English brief and get back a
 finished, narrated MP4 — in **one call**, no orchestration. Three ways in.
 
+## 0. The orchestrator — `{topic, query}` → a planned, multi-scene video (async)
+
+The richest entry point: the Go orchestrator plans a lesson (multiple scenes), picks
+visual builders from the engine's typed catalog per scene, renders each scene on the
+engine, and stitches the clips into one MP4.
+
+```bash
+docker compose up worker orchestrator
+curl -X POST http://localhost:8091/v1/generate \
+  -H 'content-type: application/json' \
+  -d '{ "topic": "fractions", "query": "show the fraction 3/4 as a pie" }'
+# -> 202 { "jobId": "gen_…", "statusUrl": "/v1/jobs/gen_…" }
+curl http://localhost:8091/v1/jobs/gen_…   # poll until "status":"done"
+```
+
+With `OPENROUTER_API_KEY` set, an LLM (default `openai/gpt-oss-120b`) plans the lesson
+and selects builders; without it, deterministic offline tiers (template plan + keyword
+selection) handle everything — the endpoint always works. Planner/selector prompts are
+editable files in `prompts/` (`planner-system.md`, `selector-system.md`), overridable at
+runtime via `SHOWMAN_PROMPT_DIR`.
+
+> The single-scene `/v1/generate` on the **engine** (below) remains the simplest
+> brief→MP4 path; the orchestrator is the multi-scene, planned version of the same idea.
+
 ## 1. HTTP — `POST /v1/generate`
 
 ```bash
