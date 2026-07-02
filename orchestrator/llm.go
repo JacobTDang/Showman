@@ -109,10 +109,17 @@ type LLMSelector struct {
 }
 
 // Select prompts with the beat + compact catalog digest and validates the placements.
+// When the view carries Feedback (a re-correct pass), the previous attempt's errors are
+// included so the model can fix them instead of repeating them.
 func (s *LLMSelector) Select(ctx context.Context, view SelectorView) ([]BuilderPlacement, error) {
 	system := SelectorSystemPrompt(view.CatalogDigest)
 	beatJSON, _ := json.Marshal(view.Beat)
-	out, err := s.Model.Generate(ctx, []*schema.Message{schema.SystemMessage(system), schema.UserMessage("Scene beat:\n" + string(beatJSON))})
+	user := "Scene beat:\n" + string(beatJSON)
+	if len(view.Feedback) > 0 {
+		fb, _ := json.Marshal(view.Feedback)
+		user += "\n\nYour previous placements failed validation. Fix EXACTLY these errors:\n" + string(fb)
+	}
+	out, err := s.Model.Generate(ctx, []*schema.Message{schema.SystemMessage(system), schema.UserMessage(user)})
 	if err != nil {
 		return nil, fmt.Errorf("llm select: %w", err)
 	}

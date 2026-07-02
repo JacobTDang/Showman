@@ -18,12 +18,15 @@ type PlannerView struct {
 }
 
 // SelectorView is what the Domain Selector sees for one beat: the beat, the (compact,
-// domain-filtered) catalog digest, the last few recap lines, and the theme.
+// domain-filtered) catalog digest, the last few recap lines, and the theme. Feedback
+// carries the previous attempt's validation errors on a re-correct pass (empty on the
+// first attempt).
 type SelectorView struct {
-	Beat          SceneBeat    `json:"beat"`
-	CatalogDigest string       `json:"catalogDigest"`
-	RecapTail     []RecapEntry `json:"recapTail"`
-	Theme         string       `json:"theme"`
+	Beat          SceneBeat         `json:"beat"`
+	CatalogDigest string            `json:"catalogDigest"`
+	RecapTail     []RecapEntry      `json:"recapTail"`
+	Theme         string            `json:"theme"`
+	Feedback      []ValidationError `json:"feedback,omitempty"`
 }
 
 // AssemblerInput is the deterministic Scene Assembler's input (no LLM). It is shipped to
