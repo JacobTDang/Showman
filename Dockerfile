@@ -32,6 +32,9 @@ WORKDIR /app
 # http:// (not https) sidesteps a ca-certificates bootstrap — integrity still comes from
 # apt's gpg-signed Release files. check-valid-until=no accepts the (by design) old index.
 # Bump DEBIAN_SNAPSHOT to intentionally move the toolchain forward.
+# If the snapshot mirror is down (it 503s under load a few times a year), fall back to
+# the rolling pool with a LOUD marker: the build succeeds but is explicitly UNPINNED —
+# grep the build log for "UNPINNED" before trusting byte-stability of that image.
 ARG DEBIAN_SNAPSHOT=20250601T000000Z
 RUN set -eux; \
   rm -f /etc/apt/sources.list.d/*; \
@@ -40,8 +43,24 @@ RUN set -eux; \
     echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ bookworm-updates main"; \
     echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/ bookworm-security main"; \
   } > /etc/apt/sources.list; \
-  apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update; \
-  apt-get install -y --no-install-recommends ffmpeg ca-certificates fontconfig libfontconfig1; \
+  ok=1; \
+  timeout 120 apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update || ok=0; \
+  if [ "$ok" = 1 ]; then \
+    timeout 420 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y --no-install-recommends \
+      ffmpeg ca-certificates fontconfig libfontconfig1 \
+      && echo "apt: PINNED to snapshot ${DEBIAN_SNAPSHOT}" || ok=0; \
+  fi; \
+  if [ "$ok" = 0 ]; then \
+    echo "WARNING: snapshot.debian.org unavailable — building UNPINNED from deb.debian.org"; \
+    { \
+      echo "deb http://deb.debian.org/debian bookworm main"; \
+      echo "deb http://deb.debian.org/debian bookworm-updates main"; \
+      echo "deb http://deb.debian.org/debian-security bookworm-security main"; \
+    } > /etc/apt/sources.list; \
+    dpkg --configure -a || true; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends ffmpeg ca-certificates fontconfig libfontconfig1; \
+  fi; \
   ffmpeg -version | head -n1; \
   rm -rf /var/lib/apt/lists/*
 
