@@ -49,8 +49,8 @@ func TestPipelineOfflineEndToEnd(t *testing.T) {
 	if s.Phase != PhaseDone {
 		t.Fatalf("want done, got %q (err=%+v)", s.Phase, s.Error)
 	}
-	if len(s.Scenes) != 3 {
-		t.Fatalf("stub plan should have 3 beats, got %d", len(s.Scenes))
+	if len(s.Scenes) != 4 {
+		t.Fatalf("stub plan+endcard should have 4 scenes, got %d", len(s.Scenes))
 	}
 	// The main beat selected the graphing lesson with extracted slope/intercept.
 	main := s.Scenes[1]
@@ -75,14 +75,14 @@ func TestPipelineOfflineEndToEnd(t *testing.T) {
 	if s.Continuity.Canvas != DefaultCanvas {
 		t.Fatalf("canvas not locked: %+v", s.Continuity.Canvas)
 	}
-	if len(s.Continuity.Recap) != 3 {
+	if len(s.Continuity.Recap) != 4 {
 		t.Fatalf("recap entries: %d", len(s.Continuity.Recap))
 	}
 	// Final assembly summarizes offsets without a stitcher.
-	if s.Final == nil || len(s.Final.SceneOffsets) != 3 || s.Final.DurationSec != 18 {
+	if s.Final == nil || len(s.Final.SceneOffsets) != 4 || s.Final.DurationSec != 24 {
 		t.Fatalf("final: %+v", s.Final)
 	}
-	if s.Final.SceneOffsets[2] != 12 {
+	if s.Final.SceneOffsets[3] != 18 {
 		t.Fatalf("offsets should be cumulative: %+v", s.Final.SceneOffsets)
 	}
 	// The engine received the shared canvas + per-scene seeds.
@@ -93,6 +93,15 @@ func TestPipelineOfflineEndToEnd(t *testing.T) {
 	loaded, err := cp.Load(context.Background(), "job-1")
 	if err != nil || loaded.Phase != PhaseDone {
 		t.Fatalf("checkpoint reload: %v %+v", err, loaded)
+	}
+	// The end-card (P4): the appended last beat is items-hinted and carries the outro
+	// narration; the keyword selector resolves it to the card with the title filled.
+	last := s.Scenes[len(s.Scenes)-1]
+	if last.Beat.DomainHint != DomainItems || len(last.Beat.NarrationBeats) == 0 {
+		t.Fatalf("end-card beat malformed: %+v", last.Beat)
+	}
+	if last.Placements[0].Builder != "items.card" || last.Placements[0].Params["title"] == "" {
+		t.Fatalf("end-card should select items.card with a title: %+v", last.Placements)
 	}
 }
 

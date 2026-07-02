@@ -51,7 +51,25 @@ func (s *KeywordSelector) Select(ctx context.Context, view SelectorView) ([]Buil
 		}
 	}
 
-	return []BuilderPlacement{{Builder: best.Name, Params: extractParams(best.Name, text)}}, nil
+	return []BuilderPlacement{{Builder: best.Name, Params: paramsFor(best.Name, view.Beat, text)}}, nil
+}
+
+// paramsFor fills mechanically-derivable params. items.card takes its content from the
+// beat itself (its Zod schema requires a title); everything else goes through the text
+// extractors.
+func paramsFor(builder string, beat SceneBeat, text string) map[string]any {
+	if builder == "items.card" {
+		title := strings.TrimSpace(beat.Title)
+		if title == "" {
+			title = strings.TrimSpace(beat.Goal)
+		}
+		lines := beat.KeyPoints
+		if len(lines) > 3 {
+			lines = lines[:3]
+		}
+		return map[string]any{"title": title, "lines": lines}
+	}
+	return extractParams(builder, text)
 }
 
 // beatText is the text surface the selector matches against.

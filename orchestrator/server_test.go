@@ -69,15 +69,15 @@ func TestGenerateJobLifecycle(t *testing.T) {
 	if view.Status != PhaseDone {
 		t.Fatalf("want done, got %q (%+v)", view.Status, view.Error)
 	}
-	if len(view.Scenes) != 3 {
-		t.Fatalf("want 3 scenes in the view, got %d", len(view.Scenes))
+	if len(view.Scenes) != 4 {
+		t.Fatalf("want 4 scenes (incl. endcard) in the view, got %d", len(view.Scenes))
 	}
 	for _, sc := range view.Scenes {
 		if sc.Status != string(RenderDone) && sc.Status != string(RenderCached) {
 			t.Fatalf("scene %d not rendered: %+v", sc.Index, sc)
 		}
 	}
-	if view.Result == nil || len(view.Result.SceneOffsets) != 3 || view.Result.DurationSec != 18 {
+	if view.Result == nil || len(view.Result.SceneOffsets) != 4 || view.Result.DurationSec != 24 {
 		t.Fatalf("result missing/wrong: %+v", view.Result)
 	}
 }

@@ -66,6 +66,7 @@ func (p *Pipeline) run(ctx context.Context, s *JobContext) error {
 	if len(plan.Scenes) == 0 {
 		return fmt.Errorf("plan: produced zero scenes")
 	}
+	plan = appendEndCard(plan)
 	if err := p.Director.Apply(ctx, s, PlanProduced{Plan: plan, Canvas: canvas}); err != nil {
 		return err
 	}
@@ -237,6 +238,35 @@ func (p *Pipeline) assemble(ctx context.Context, s *JobContext, i int) (Assemble
 		return AssembleResult{}, fmt.Errorf("assemble: %w", err)
 	}
 	return asm, nil
+}
+
+// appendEndCard closes multi-scene videos with a short branded card beat (the plan's
+// outro as its narration). The items domain hint steers both selector tiers to the
+// card builder; single-scene videos stay single.
+func appendEndCard(plan LessonPlan) LessonPlan {
+	if len(plan.Scenes) < 2 {
+		return plan
+	}
+	outro := strings.TrimSpace(plan.NarrationArc.Outro)
+	if outro == "" {
+		outro = "Great job! See you next time."
+	}
+	index := len(plan.Scenes)
+	goals := plan.Goals
+	if len(goals) > 2 {
+		goals = goals[:2]
+	}
+	plan.Scenes = append(plan.Scenes, SceneBeat{
+		ID:                fmt.Sprintf("beat-%d", index+1),
+		Index:             index,
+		Title:             plan.Title,
+		Goal:              "closing card: " + plan.Throughline,
+		DomainHint:        DomainItems,
+		KeyPoints:         goals,
+		NarrationBeats:    []string{outro},
+		DurationBudgetSec: 4,
+	})
+	return plan
 }
 
 // fallbackCard is the ladder's deterministic net: a text card from the beat, always valid.

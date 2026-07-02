@@ -40,6 +40,7 @@ func realishCatalog() []CatalogEntry {
 		{Name: "math.quadraticLesson", Domain: DomainMath, Level: "scene", Keywords: []string{"quadratic", "parabola", "vertex"}},
 		{Name: "math.countingLesson", Domain: DomainMath, Level: "scene", Keywords: []string{"count", "counting", "how many"}},
 		{Name: "chem.reaction", Domain: DomainChem, Level: "node", Keywords: []string{"reaction", "chemical equation", "combustion"}},
+		{Name: "items.card", Domain: DomainItems, Level: "node", Keywords: []string{"card", "summary", "takeaway"}},
 	}
 }
 
