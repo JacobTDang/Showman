@@ -5,3 +5,5 @@ export { BuilderRegistry, CatalogError } from "./registry.js";
 export type { CatalogErrorCode } from "./registry.js";
 export { describeCatalogCompact } from "./describe.js";
 export { createDefaultRegistry, defaultRegistry } from "./register.js";
+export { assembleScene } from "./assemble.js";
+export type { AssembleRequest, AssembleResult, AssemblePlacement, AssembleBeat } from "./assemble.js";

@@ -22,7 +22,14 @@ import type { ObjectStorage } from "./storage.js";
 import { guessContentType } from "./storage.js";
 import { encodeSceneToStream } from "../encode/encodeVideo.js";
 import type { SceneSpec } from "../spec/types.js";
-import { defaultRegistry, describeCatalogCompact, CatalogError, type CatalogDomain } from "../catalog/index.js";
+import {
+  defaultRegistry,
+  describeCatalogCompact,
+  CatalogError,
+  assembleScene,
+  type AssembleRequest,
+  type CatalogDomain,
+} from "../catalog/index.js";
 
 export interface ServerDeps {
   service: RenderService;
@@ -141,6 +148,21 @@ export function createServer(deps: ServerDeps): http.Server {
         }
         throw err;
       }
+    }
+
+    // Deterministic Scene Assembler: BuilderPlacement[] -> one validated SceneSpec (+hash).
+    // The engine-side half of the orchestrator's per-scene pipeline; pure, no LLM.
+    if (method === "POST" && path === "/assemble") {
+      const body = (await readJson(req, limit)) as AssembleRequest;
+      const result = assembleScene(defaultRegistry(), body);
+      if (!result.ok) return sendJson(res, 422, { ok: false, errors: result.errors });
+      return sendJson(res, 200, {
+        ok: true,
+        spec: result.spec,
+        specHash: result.specHash,
+        durationSec: result.durationSec,
+        ...(result.repaired.length ? { repaired: result.repaired } : {}),
+      });
     }
 
     if (method === "POST" && path === "/validate") {
