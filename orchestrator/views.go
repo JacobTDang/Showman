@@ -1,5 +1,7 @@
 package orchestrator
 
+import "strings"
+
 // Context views: small, strongly-typed projections of the JobContext. Every LLM node
 // receives a view, NEVER the whole store — this is what keeps the model's context tight
 // and the prompts cheap. A view never carries a field its node doesn't use; widening a
@@ -57,6 +59,9 @@ func SelectView(s *JobContext, index int, catalogDigest string) SelectorView {
 }
 
 // AsmInput projects the store for the deterministic Scene Assembler at scene index.
+// It composes the scene's full narration line-up (P2): the plan's intro on scene 0 /
+// the arc's per-beat transition as a lead-in, the beat's own lines, and the outro on
+// the last scene — so the assembler can time animation beats to what is spoken.
 func AsmInput(s *JobContext, index int) AssemblerInput {
 	sc := s.Scenes[index]
 	var prev *RecapEntry
@@ -64,15 +69,58 @@ func AsmInput(s *JobContext, index int) AssemblerInput {
 		p := s.Continuity.Recap[n-1]
 		prev = &p
 	}
+	beat := sc.Beat
+	beat.NarrationBeats = narrationLineup(s, beat, index)
 	return AssemblerInput{
 		Placements: sc.Placements,
-		Beat:       sc.Beat,
+		Beat:       beat,
 		Theme:      s.Continuity.Theme,
 		Palette:    s.Continuity.Palette,
 		Canvas:     s.Continuity.Canvas,
 		PrevRecap:  prev,
 		Seed:       SceneSeed(s.RootSeed, index),
 	}
+}
+
+// narrationLineup assembles the ordered spoken lines for one scene from the plan's
+// narration arc + the beat's own lines. Pure; duplicates are avoided when the planner
+// already used the same line.
+func narrationLineup(s *JobContext, beat SceneBeat, index int) []string {
+	lines := make([]string, 0, len(beat.NarrationBeats)+2)
+	if s.Plan != nil {
+		arc := s.Plan.NarrationArc
+		if lead := pickLead(arc, beat, index); lead != "" && !contains(beat.NarrationBeats, lead) {
+			lines = append(lines, lead)
+		}
+	}
+	lines = append(lines, beat.NarrationBeats...)
+	if s.Plan != nil && index == len(s.Scenes)-1 {
+		if outro := strings.TrimSpace(s.Plan.NarrationArc.Outro); outro != "" && !contains(lines, outro) {
+			lines = append(lines, outro)
+		}
+	}
+	return lines
+}
+
+// pickLead chooses the lead-in line: the arc's per-beat transition, or the intro on
+// the first scene.
+func pickLead(arc NarrationArc, beat SceneBeat, index int) string {
+	if t, ok := arc.Transitions[beat.ID]; ok && strings.TrimSpace(t) != "" {
+		return strings.TrimSpace(t)
+	}
+	if index == 0 {
+		return strings.TrimSpace(arc.Intro)
+	}
+	return ""
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // recapTail returns a copy of the last n recap entries (or fewer).

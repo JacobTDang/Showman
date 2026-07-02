@@ -40,6 +40,44 @@ func TestPlanViewUsesRequestedBudget(t *testing.T) {
 	}
 }
 
+func TestAsmInputComposesNarrationLineup(t *testing.T) {
+	plan := LessonPlan{
+		Scenes: []SceneBeat{{ID: "beat-1"}, {ID: "beat-2"}, {ID: "beat-3"}},
+		NarrationArc: NarrationArc{
+			Intro:       "Welcome to fractions!",
+			Outro:       "Great job today.",
+			Transitions: map[string]string{"beat-2": "Now let's slice the pie."},
+		},
+	}
+	s := &JobContext{
+		Plan: &plan,
+		Scenes: []SceneState{
+			{Index: 0, Beat: SceneBeat{ID: "beat-1", NarrationBeats: []string{"a"}}},
+			{Index: 1, Beat: SceneBeat{ID: "beat-2", NarrationBeats: []string{"b"}}},
+			{Index: 2, Beat: SceneBeat{ID: "beat-3", NarrationBeats: []string{"c"}}},
+		},
+	}
+	// Scene 0: intro lead-in.
+	got0 := AsmInput(s, 0).Beat.NarrationBeats
+	if len(got0) != 2 || got0[0] != "Welcome to fractions!" || got0[1] != "a" {
+		t.Fatalf("scene 0 lineup: %v", got0)
+	}
+	// Scene 1: its transition leads.
+	got1 := AsmInput(s, 1).Beat.NarrationBeats
+	if len(got1) != 2 || got1[0] != "Now let's slice the pie." {
+		t.Fatalf("scene 1 lineup: %v", got1)
+	}
+	// Last scene: outro appended.
+	got2 := AsmInput(s, 2).Beat.NarrationBeats
+	if len(got2) != 2 || got2[1] != "Great job today." {
+		t.Fatalf("scene 2 lineup: %v", got2)
+	}
+	// The store itself is never mutated by the projection.
+	if len(s.Scenes[0].Beat.NarrationBeats) != 1 {
+		t.Fatalf("projection mutated the store: %v", s.Scenes[0].Beat.NarrationBeats)
+	}
+}
+
 func TestAsmInputCarriesSeedAndPrevRecap(t *testing.T) {
 	root := RootSeed("h")
 	s := &JobContext{

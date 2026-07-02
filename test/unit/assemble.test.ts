@@ -35,9 +35,11 @@ describe("assembleScene — node-level placements", () => {
     const title = r.spec.nodes.find((n) => n.id === "scene-title") as TextNode;
     expect(title?.text).toBe("From counting to chemistry");
     expect(r.spec.nodes.filter((n) => n.type === "group")).toHaveLength(2);
-    // narration spread across the duration
+    // narration is timeline-aligned (P2): segment k starts when placement k's slot does
     expect(r.spec.narration?.segments).toHaveLength(2);
-    expect(r.spec.narration!.segments![1]!.t).toBeCloseTo(4, 3);
+    const groups = r.spec.nodes.filter((n) => n.type === "group") as GroupNode[];
+    const secondEntrance = groups[1]!.tracks!.find((t) => t.property === "opacity")!.keyframes[0]!.t;
+    expect(r.spec.narration!.segments![1]!.t).toBeCloseTo(secondEntrance, 3);
   });
 
   it("is deterministic: same request -> same hash; different seed -> different hash", () => {
