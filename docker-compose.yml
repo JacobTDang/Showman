@@ -24,6 +24,23 @@ services:
     volumes:
       - showman-data:/data
 
+  # The director/orchestrator (Go): {topic, query} in -> planned multi-scene MP4 out.
+  # POST http://localhost:8091/v1/generate, poll /v1/jobs/:id. Offline tiers by default
+  # (stub planner + keyword selector); the LLM tiers arrive with the Eino integration.
+  orchestrator:
+    build: ./orchestrator
+    image: showman-orchestrator:dev
+    environment:
+      PORT: "8090"
+      SHOWMAN_ENGINE_URL: http://worker:8080
+      SHOWMAN_OUT_DIR: /data/final
+    ports:
+      - "8091:8090"
+    volumes:
+      - showman-data:/data
+    depends_on:
+      - worker
+
   coordinator:
     image: showman:dev
     command: ["node", "dist/distributed/coordinatorMain.js"]
