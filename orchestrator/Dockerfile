@@ -22,9 +22,9 @@ RUN set -eux; \
     echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/ bookworm-security main"; \
   } > /etc/apt/sources.list; \
   ok=1; \
-  apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update || ok=0; \
+  timeout 120 apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update || ok=0; \
   if [ "$ok" = 1 ]; then \
-    apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y --no-install-recommends \
+    timeout 420 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y --no-install-recommends \
       ffmpeg ca-certificates \
       && echo "apt: PINNED to snapshot ${DEBIAN_SNAPSHOT}" || ok=0; \
   fi; \
@@ -35,6 +35,7 @@ RUN set -eux; \
       echo "deb http://deb.debian.org/debian bookworm-updates main"; \
       echo "deb http://deb.debian.org/debian-security bookworm-security main"; \
     } > /etc/apt/sources.list; \
+    dpkg --configure -a || true; \
     apt-get -o Acquire::Retries=3 update; \
     apt-get install -y --no-install-recommends ffmpeg ca-certificates; \
   fi; \
