@@ -82,7 +82,8 @@ jobs:
       - name: Install deps (incl. the optional kokoro-js + onnxruntime)
         run: npm ci
       - name: Kokoro live test (downloads the ~86MB model on a cache miss, runs on CPU)
-        run: npm run test:kokoro
+        # One retry: the HF model download flakes a few times a month (observed 2026-07-02).
+        run: npm run test:kokoro || (echo 'retrying once after HF flake' && sleep 20 && npm run test:kokoro)
         env:
           RUN_KOKORO_LIVE: "1"
           KOKORO_DEVICE: cpu # CI runners have no GPU/CUDA runtime; go straight to CPU
@@ -128,7 +129,9 @@ jobs:
       - name: gofmt (check)
         run: test -z "$(gofmt -l .)" || (echo 'gofmt found unformatted files:' && gofmt -l . && exit 1)
       - run: go vet ./...
-      - run: go test ./...
+      # -race matters here: the pipeline fans scenes out concurrently and the Director's
+      # single-writer guarantee is mutex-enforced — the detector proves it.
+      - run: go test -race ./...
       - run: go build ./...
 
   images:

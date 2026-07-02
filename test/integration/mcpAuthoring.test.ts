@@ -1,23 +1,12 @@
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { RenderService, LocalObjectStorage, InMemoryJobStore, JobRunner, TemplateAuthor } from "../../src/index.js";
 import { DirectBackend, TOOL_DEFINITIONS, callTool } from "../../src/mcp/showmanTools.js";
 import { AuthoringAgent, ScriptedAuthor, extractJson } from "../../src/authoring/agent.js";
 import type { SceneSpec } from "../../src/index.js";
-
-const execFileAsync = promisify(execFile);
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function validScene(): SceneSpec {
   return {

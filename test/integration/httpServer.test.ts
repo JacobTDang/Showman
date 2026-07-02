@@ -1,6 +1,5 @@
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,21 +7,10 @@ import type { Server } from "node:http";
 import { RenderService, LocalObjectStorage, createServer, listen } from "../../src/index.js";
 import type { SceneSpec } from "../../src/index.js";
 
-const execFileAsync = promisify(execFile);
-
 // Test helper: fetch JSON body as `any` (keeps assertions terse).
 
 async function body(r: Response): Promise<any> {
   return r.json();
-}
-
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function scene(): SceneSpec {

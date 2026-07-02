@@ -37,9 +37,7 @@ func (f *fileFetcher) FetchObject(_ context.Context, key string) ([]byte, error)
 }
 
 func TestFFmpegStitcherConcatenatesClips(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	requireTool(t, "ffmpeg")
 	dir := t.TempDir()
 	makeTestClip(t, dir, "a.mp4", "red", 1)
 	makeTestClip(t, dir, "b.mp4", "blue", 1)
@@ -89,12 +87,8 @@ func makeTestClipWithAudio(t *testing.T, dir, name string, seconds float64) {
 // The P4 risk item, measured: stream-copy concat of audio-bearing clips must keep
 // both streams and must not drift (container duration ≈ sum of clip durations).
 func TestStitchKeepsAVInSyncAcrossConcat(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not available")
-	}
-	if _, err := exec.LookPath("ffprobe"); err != nil {
-		t.Skip("ffprobe not available")
-	}
+	requireTool(t, "ffmpeg")
+	requireTool(t, "ffprobe")
 	dir := t.TempDir()
 	for i := 0; i < 3; i++ {
 		makeTestClipWithAudio(t, dir, fmt.Sprintf("clip-%d.mp4", i), 1.0)
@@ -137,9 +131,7 @@ func TestStitchKeepsAVInSyncAcrossConcat(t *testing.T) {
 }
 
 func TestFFmpegStitcherErrorsOnMissingClip(t *testing.T) {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	requireTool(t, "ffmpeg")
 	s := &JobContext{JobID: "job-x", Scenes: []SceneState{{Index: 0}}}
 	st := &FFmpegStitcher{Fetcher: &fileFetcher{dir: t.TempDir()}, OutDir: t.TempDir()}
 	if _, err := st.Stitch(context.Background(), s); err == nil {

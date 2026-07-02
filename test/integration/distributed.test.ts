@@ -1,3 +1,4 @@
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -8,14 +9,6 @@ import { renderDistributed, LocalObjectStorage, encodeSceneToFile, InMemoryLease
 import type { SceneSpec, ProgressEvent, ShardTask } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function frameCount(file: string): Promise<number> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v",
@@ -208,11 +201,13 @@ describe("distributed rendering (M3)", () => {
   it("dead-letters a shard that always fails (poison-shard safety)", async () => {
     const queue = new InMemoryLeaseQueue<ShardTask>({ maxAttempts: 2, defaultVisibilityMs: 10 });
     await queue.push({ jobId: "j", shardId: 0, frameStart: 0, frameEnd: 1, specRef: "specs/j.json" });
-    // Lease + let it expire twice -> exceeds maxAttempts -> dead-letter.
+    // Lease + let it expire twice -> exceeds maxAttempts -> dead-letter. Sleeps are
+    // 2.5x the visibility window: the old 5ms sleeps only beat the 10ms lease because
+    // setTimeout habitually fires late — timer slop must not be load-bearing.
     await queue.lease(1);
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 25));
     await queue.lease(1); // reaps the first expired lease (attempt 2)
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 25));
     await queue.size(); // triggers reap of the second expired lease
     expect((await queue.deadLetter()).length).toBe(1);
   });

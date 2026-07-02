@@ -31,3 +31,25 @@ export function pixelsEqual(a: Uint8ClampedArray, b: Uint8ClampedArray): boolean
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
 }
+
+// ---- external-tool gates (shared by the integration suites) ----
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
+/** True if an external tool responds to `-version` (ffmpeg, ffprobe, …). */
+export async function hasTool(tool: string): Promise<boolean> {
+  try {
+    await execFileAsync(tool, ["-version"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** True if ffmpeg is on PATH — the encoder dependency every render test gates on. */
+export function hasFfmpeg(): Promise<boolean> {
+  return hasTool("ffmpeg");
+}
