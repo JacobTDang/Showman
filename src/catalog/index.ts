@@ -7,3 +7,5 @@ export { describeCatalogCompact } from "./describe.js";
 export { createDefaultRegistry, defaultRegistry } from "./register.js";
 export { assembleScene } from "./assemble.js";
 export type { AssembleRequest, AssembleResult, AssemblePlacement, AssembleBeat } from "./assemble.js";
+export { planPlacementMotion, titleReveal, tracksEnd, ANIMATE_HINTS } from "./motion.js";
+export type { AnimateHint, PlacementMotion } from "./motion.js";

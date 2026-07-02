@@ -97,7 +97,8 @@ type BuilderPlacement struct {
 	At      *Point         `json:"at,omitempty"`
 	Scale   float64        `json:"scale,omitempty"`
 	Caption string         `json:"caption,omitempty"`
-	Ref     string         `json:"ref,omitempty"` // reserved for entity reuse (v1 unused)
+	Animate string         `json:"animate,omitempty"` // auto|none|fadeIn|popIn|springIn|spinIn
+	Ref     string         `json:"ref,omitempty"`     // reserved for entity reuse (v1 unused)
 }
 
 // Point is a canvas coordinate.
