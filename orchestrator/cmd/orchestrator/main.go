@@ -1,15 +1,21 @@
 // The orchestrator service: {topic, query} in, a finished multi-scene video out.
-// Wires the offline pipeline (stub planner + keyword selector) against a running
-// engine; the LLM planner/selector tiers arrive with the Eino integration.
+// With OPENROUTER_API_KEY set, the LLM planner + selector run first (Eino ChatModel,
+// OpenAI-compatible endpoint); the offline tiers (stub planner + keyword selector)
+// remain the fallback rungs, so the service always works without a key.
 //
 // Env:
 //
 //	PORT                 listen port (default 8090)
 //	SHOWMAN_ENGINE_URL   engine base URL (default http://127.0.0.1:8080)
 //	SHOWMAN_OUT_DIR      final-video output dir (default ./out)
+//	SHOWMAN_PROMPT_DIR   override dir for planner/selector prompts (optional)
+//	OPENROUTER_API_KEY   enables the LLM tiers (optional)
+//	OPENROUTER_BASE_URL  OpenAI-compatible endpoint (default openrouter.ai/api/v1)
+//	OPENROUTER_MODEL     model id (default openai/gpt-oss-120b)
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -24,10 +30,25 @@ func main() {
 
 	engine := orch.NewHTTPEngineClient(engineURL, 5*time.Minute)
 	checkpoint := orch.NewInMemoryCheckpointStore()
+
+	// Tiered planner/selector: LLM first when a key is configured, offline always last.
+	var planner orch.LessonPlanner = orch.StubPlanner{}
+	var selector orch.DomainSelector = orch.NewKeywordSelector(engine)
+	chat, err := orch.NewOpenAIChatModel(context.Background(), os.Getenv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "orchestrator: chat model:", err)
+		os.Exit(1)
+	}
+	llmEnabled := chat != nil
+	if llmEnabled {
+		planner = orch.FallbackPlanner{Tiers: []orch.LessonPlanner{&orch.LLMPlanner{Model: chat}, orch.StubPlanner{}}}
+		selector = orch.FallbackSelector{Tiers: []orch.DomainSelector{&orch.LLMSelector{Model: chat, Engine: engine}, orch.NewKeywordSelector(engine)}}
+	}
+
 	pipeline := &orch.Pipeline{
 		Director: orch.NewDirector(checkpoint, nil),
-		Planner:  orch.StubPlanner{},
-		Selector: orch.NewKeywordSelector(engine),
+		Planner:  planner,
+		Selector: selector,
 		Engine:   engine,
 		Stitcher: &orch.FFmpegStitcher{Fetcher: engine, OutDir: outDir},
 	}
@@ -38,7 +59,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "orchestrator: listen:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("[showman-orchestrator] listening on %s (engine %s)\n", ln.Addr(), engineURL)
+	fmt.Printf("[showman-orchestrator] listening on %s (engine %s, llm=%v)\n", ln.Addr(), engineURL, llmEnabled)
 	select {} // serve forever
 }
 
