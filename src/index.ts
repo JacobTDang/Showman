@@ -74,8 +74,26 @@ export { describeScene, describeSceneCompact, exampleScene } from "./spec/descri
 export type { SchemaDescription } from "./spec/describe.js";
 
 // Builder tool-catalog (orchestrator-facing; the selector chooses tools from this)
-export { BuilderRegistry, CatalogError, describeCatalogCompact, createDefaultRegistry, defaultRegistry } from "./catalog/index.js";
-export type { BuilderTool, BuilderOutput, BBox, CatalogDomain, BuilderLevel, CatalogErrorCode } from "./catalog/index.js";
+export {
+  BuilderRegistry,
+  CatalogError,
+  describeCatalogCompact,
+  createDefaultRegistry,
+  defaultRegistry,
+  assembleScene,
+} from "./catalog/index.js";
+export type {
+  BuilderTool,
+  BuilderOutput,
+  BBox,
+  CatalogDomain,
+  BuilderLevel,
+  CatalogErrorCode,
+  AssembleRequest,
+  AssembleResult,
+  AssemblePlacement,
+  AssembleBeat,
+} from "./catalog/index.js";
 
 // Service layer (M1.3 HTTP capability surface + storage)
 export { RenderService, stableStringify } from "./service/renderService.js";
