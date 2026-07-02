@@ -73,7 +73,7 @@ func TestLadderDegradesToCardInsteadOfFailingJob(t *testing.T) {
 	if main.Render == nil || main.Render.Clip == nil {
 		t.Fatalf("degraded scene must still render: %+v", main.Render)
 	}
-	for _, i := range []int{0, 2} {
+	for _, i := range []int{0, 2, 3} {
 		if s2.Scenes[i].Outcome.Degraded {
 			t.Fatalf("scene %d should have succeeded: %+v", i, s2.Scenes[i].Outcome)
 		}
@@ -118,7 +118,7 @@ func TestFanOutCompletesAllScenes(t *testing.T) {
 	}
 	// Deltas serialized: the checkpoint reloads cleanly with every scene present.
 	loaded, err := cp.Load(context.Background(), "job-fan")
-	if err != nil || len(loaded.Scenes) != 3 {
+	if err != nil || len(loaded.Scenes) != 4 {
 		t.Fatalf("checkpoint after fan-out: %v %+v", err, loaded)
 	}
 }
