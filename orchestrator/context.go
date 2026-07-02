@@ -1,9 +1,6 @@
 package orchestrator
 
-import (
-	"encoding/json"
-	"time"
-)
+import "time"
 
 // JobPhase is the orchestrator's monotonic job state. "stitching" covers concat + mux.
 type JobPhase string
@@ -81,13 +78,13 @@ type SceneState struct {
 	Beat       SceneBeat          `json:"beat"`
 	Placements []BuilderPlacement `json:"placements,omitempty"`
 	SpecHash   string             `json:"specHash,omitempty"`
-	// SpecBlob is the opaque assembled SceneSpec. It is stored out-of-line (json:"-") so
-	// the JobContext checkpoint stays small; the Director persists it separately.
-	SpecBlob  json.RawMessage `json:"-"`
-	Narration SceneNarration  `json:"narration"`
-	Render    *SceneRender    `json:"render,omitempty"`
-	Outcome   SceneOutcome    `json:"outcome"`
-	Attempts  int             `json:"attempts"`
+	// SpecBlob is the opaque assembled SceneSpec JSON, stored inline as a string so
+	// checkpoints (incl. Eino graph interrupts) are self-contained across resume.
+	SpecBlob  string         `json:"specBlob,omitempty"`
+	Narration SceneNarration `json:"narration"`
+	Render    *SceneRender   `json:"render,omitempty"`
+	Outcome   SceneOutcome   `json:"outcome"`
+	Attempts  int            `json:"attempts"`
 }
 
 // SceneRenderStatus is the lifecycle of one scene's clip render.

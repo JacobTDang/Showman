@@ -87,7 +87,7 @@ func (d SceneBuilt) apply(s *JobContext) error {
 	}
 	sc := &s.Scenes[d.Index]
 	sc.SpecHash = d.SpecHash
-	sc.SpecBlob = d.SpecBlob
+	sc.SpecBlob = string(d.SpecBlob)
 	sc.Outcome = d.Outcome
 	s.Continuity.Recap = append(s.Continuity.Recap, d.Recap)
 	return nil
