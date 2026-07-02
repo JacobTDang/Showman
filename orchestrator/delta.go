@@ -16,8 +16,23 @@ type Delta interface {
 	apply(*JobContext) error
 }
 
-// PlanProduced installs the lesson plan and initializes one SceneState per beat.
-type PlanProduced struct{ Plan LessonPlan }
+// PhaseAdvanced moves the job to a new phase (monotonic; the reducer does not police
+// ordering — the Director drives phases in order by construction).
+type PhaseAdvanced struct{ Phase JobPhase }
+
+func (PhaseAdvanced) Kind() string { return "PhaseAdvanced" }
+
+func (d PhaseAdvanced) apply(s *JobContext) error {
+	s.Phase = d.Phase
+	return nil
+}
+
+// PlanProduced installs the lesson plan, locks the shared canvas, and initializes one
+// SceneState per beat.
+type PlanProduced struct {
+	Plan   LessonPlan
+	Canvas Canvas
+}
 
 func (PlanProduced) Kind() string { return "PlanProduced" }
 
@@ -30,6 +45,9 @@ func (d PlanProduced) apply(s *JobContext) error {
 	}
 	if plan.Theme != "" {
 		s.Continuity.Theme = plan.Theme
+	}
+	if d.Canvas != (Canvas{}) {
+		s.Continuity.Canvas = d.Canvas
 	}
 	s.Phase = PhaseSelecting
 	return nil
