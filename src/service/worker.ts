@@ -12,7 +12,7 @@ import { RenderService } from "./renderService.js";
 import { createServer, listen } from "./httpServer.js";
 import { InMemoryJobStore, JobRunner } from "./jobs.js";
 import { defaultConcurrency } from "../render/framePool.js";
-import { SilentTtsProvider } from "../audio/tts.js";
+import { createDefaultTts } from "../audio/ttsFactory.js";
 import { RuleBasedModeration } from "../safety/moderation.js";
 import { DirectBackend } from "../mcp/showmanTools.js";
 import { AuthoringAgent } from "../authoring/agent.js";
@@ -26,8 +26,10 @@ export async function startWorker(): Promise<{ port: number; close: () => Promis
     storage,
     workDir: join(dataDir, "tmp"),
     defaultConcurrency: Number(process.env.SHOWMAN_CONCURRENCY ?? defaultConcurrency()),
-    // Narrated + safety-gated by default for a children's product.
-    tts: new SilentTtsProvider(),
+    // Narrated + safety-gated by default for a children's product. The voice is
+    // env-selected (SHOWMAN_TTS_PROVIDER: kokoro|openai|elevenlabs|tone|silent;
+    // cloud keys auto-detected; offline tone fallback keeps demos audible).
+    tts: createDefaultTts(),
     moderation: new RuleBasedModeration(),
   });
   const jobRunner = new JobRunner(service, new InMemoryJobStore(), {
