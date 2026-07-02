@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,9 @@ func (SystemClock) Now() time.Time { return time.Now() }
 type Director struct {
 	clock      Clock
 	checkpoint CheckpointStore
+	// mu serializes Apply so concurrent per-scene goroutines can't interleave a
+	// reducer with the audit stamp + checkpoint (single-writer, enforced).
+	mu sync.Mutex
 }
 
 // NewDirector builds a Director. A nil clock defaults to the system clock.
@@ -32,8 +36,10 @@ func NewDirector(cp CheckpointStore, clock Clock) *Director {
 
 // Apply is the ONLY writer to the store: fold the delta in, stamp the time, append the
 // audit record, and checkpoint. If the reducer fails, the store is left unstamped and
-// un-checkpointed so a retry sees the same pre-state.
+// un-checkpointed so a retry sees the same pre-state. Safe for concurrent callers.
 func (d *Director) Apply(ctx context.Context, s *JobContext, delta Delta) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if err := delta.apply(s); err != nil {
 		return err
 	}

@@ -2,7 +2,10 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +22,8 @@ type Pipeline struct {
 	Stitcher Stitcher
 	// Canvas defaults every scene's dims. Zero value -> 1280x720@30.
 	Canvas Canvas
+	// Concurrency bounds the per-scene fan-out. Zero -> 3.
+	Concurrency int
 }
 
 // Stitcher turns rendered scene clips into one final video (ffmpeg concat + mux).
@@ -65,12 +70,16 @@ func (p *Pipeline) run(ctx context.Context, s *JobContext) error {
 		return err
 	}
 
-	// 2..4 per scene: select -> assemble -> render. Sequential v1 (bounded fan-out later);
-	// per-scene render caching lives engine-side, so retries and re-runs stay cheap.
-	for i := range s.Scenes {
-		if err := p.runScene(ctx, s, i); err != nil {
-			return fmt.Errorf("scene %d: %w", i, err)
-		}
+	// 2..4 per scene: select -> assemble -> render, with the per-scene failure ladder
+	// (re-correct -> fallback card) and bounded fan-out. Deltas serialize through the
+	// Director's mutex; engine-side render caching keeps retries cheap.
+	if err := p.runScenes(ctx, s); err != nil {
+		return err
+	}
+
+	// The job fails wholesale only when EVERY scene degraded to a fallback card.
+	if len(s.Scenes) > 0 && allDegraded(s.Scenes) {
+		return fmt.Errorf("all %d scenes degraded to fallback cards", len(s.Scenes))
 	}
 
 	// 5. Stitch (when configured).
@@ -89,21 +98,132 @@ func (p *Pipeline) run(ctx context.Context, s *JobContext) error {
 	return p.Director.Apply(ctx, s, JobFinalized{Final: clipsOnlyAssembly(s)})
 }
 
+// runScenes fans the per-scene work out with bounded concurrency and returns the first
+// hard error (ladder-exhausted scenes degrade instead of erroring).
+func (p *Pipeline) runScenes(ctx context.Context, s *JobContext) error {
+	concurrency := p.Concurrency
+	if concurrency <= 0 {
+		concurrency = 3
+	}
+	sem := make(chan struct{}, concurrency)
+	errs := make(chan error, len(s.Scenes))
+	var wg sync.WaitGroup
+	for i := range s.Scenes {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := p.runScene(ctx, s, index); err != nil {
+				errs <- fmt.Errorf("scene %d: %w", index, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	return <-errs // nil when the channel is empty
+}
+
+// runScene climbs the per-scene quality ladder:
+//
+//	(1) select -> policy check (forbid/mustShow) -> assemble
+//	(2) on failure: ONE re-correct pass (errors fed back to the selector)
+//	(3) on failure: the deterministic fallback card (always valid)
+//
+// Render errors retry once, then fall back to the card. Only an unrenderable card —
+// i.e. the engine itself is broken — errors out.
 func (p *Pipeline) runScene(ctx context.Context, s *JobContext, i int) error {
-	// Select builders for the beat.
 	digest, err := p.Engine.CatalogDigest(ctx, s.Scenes[i].Beat.DomainHint)
 	if err != nil {
 		return fmt.Errorf("catalog digest: %w", err)
 	}
-	placements, err := p.Selector.Select(ctx, SelectView(s, i, digest))
-	if err != nil {
-		return fmt.Errorf("select: %w", err)
-	}
-	if err := p.Director.Apply(ctx, s, SceneSelected{Index: i, Placements: placements}); err != nil {
-		return err
+
+	var warnings []string
+	outcome := SceneOutcome{Index: i, Source: SourceBuilder, Status: "ok", Rung: 1, Attempts: 1}
+	view := SelectView(s, i, digest)
+	asm, ok := AssembleResult{}, false
+
+	for attempt := 1; attempt <= 2 && !ok; attempt++ {
+		outcome.Attempts = attempt
+		placements, selErr := p.Selector.Select(ctx, view)
+		if selErr != nil {
+			warnings = append(warnings, fmt.Sprintf("scene %d select attempt %d: %v", i, attempt, selErr))
+			break // selector tiers already exhausted internally -> card
+		}
+		if policyErrs := checkPolicies(s.Scenes[i].Beat, placements); len(policyErrs) > 0 {
+			if attempt == 1 {
+				view.Feedback = policyErrs
+				outcome.Rung = 2
+				continue // one re-correct on policy violations
+			}
+			warnings = append(warnings, fmt.Sprintf("scene %d: policy violations accepted with warning: %s", i, policyErrs[0].Message))
+		}
+		if err := p.Director.Apply(ctx, s, SceneSelected{Index: i, Placements: placements}); err != nil {
+			return err
+		}
+		asm, err = p.assemble(ctx, s, i)
+		if err != nil {
+			return err // transport-level failure: the engine is unreachable
+		}
+		if asm.OK {
+			ok = true
+			break
+		}
+		view.Feedback = asm.Errors
+		outcome.Rung = 2
+		warnings = append(warnings, fmt.Sprintf("scene %d assemble attempt %d: %s", i, attempt, firstMsg(asm.Errors)))
 	}
 
-	// Assemble one validated spec (engine-side, deterministic).
+	if !ok {
+		// Rung 3: the deterministic fallback card. Keeps the slot (same index, sane
+		// duration) so offsets and the narration arc never shift.
+		outcome = SceneOutcome{Index: i, Source: SourceFallback, Status: "fallback", Rung: 8, Attempts: outcome.Attempts, Degraded: true}
+		if err := p.Director.Apply(ctx, s, SceneSelected{Index: i, Placements: fallbackCard(s.Scenes[i].Beat)}); err != nil {
+			return err
+		}
+		asm, err = p.assemble(ctx, s, i)
+		if err != nil {
+			return err
+		}
+		if !asm.OK {
+			return fmt.Errorf("fallback card failed to assemble: %s", firstMsg(asm.Errors))
+		}
+	}
+
+	built := SceneBuilt{
+		Index:    i,
+		SpecHash: asm.SpecHash,
+		SpecBlob: asm.Spec,
+		Recap:    RecapEntry{SceneIndex: i, Takeaway: s.Scenes[i].Beat.Goal},
+		Outcome:  outcome,
+	}
+	if err := p.Director.Apply(ctx, s, built); err != nil {
+		return err
+	}
+	for _, w := range warnings {
+		if err := p.Director.Apply(ctx, s, SceneFellBack{Index: i, Reason: w, Outcome: outcome}); err != nil {
+			return err
+		}
+	}
+
+	// Render, retrying once (transient) before giving up.
+	rr, rerr := p.Engine.Render(ctx, RenderRequest{Spec: asm.Spec})
+	if rerr != nil {
+		rr, rerr = p.Engine.Render(ctx, RenderRequest{Spec: asm.Spec})
+	}
+	if rerr != nil {
+		return fmt.Errorf("render: %w", rerr)
+	}
+	return p.Director.Apply(ctx, s, SceneRendered{
+		Index:       i,
+		Clip:        rr.Video,
+		DurationSec: rr.DurationSec,
+		Cached:      rr.Cached,
+	})
+}
+
+// assemble ships the scene's current placements to the engine's deterministic assembler.
+func (p *Pipeline) assemble(ctx context.Context, s *JobContext, i int) (AssembleResult, error) {
 	in := AsmInput(s, i)
 	asm, err := p.Engine.Assemble(ctx, AssembleRequest{
 		Placements: in.Placements,
@@ -114,33 +234,56 @@ func (p *Pipeline) runScene(ctx context.Context, s *JobContext, i int) error {
 		Seed:       in.Seed,
 	})
 	if err != nil {
-		return fmt.Errorf("assemble: %w", err)
+		return AssembleResult{}, fmt.Errorf("assemble: %w", err)
 	}
-	if !asm.OK {
-		return fmt.Errorf("assemble: %d validation errors (first: %s)", len(asm.Errors), firstMsg(asm.Errors))
-	}
-	built := SceneBuilt{
-		Index:    i,
-		SpecHash: asm.SpecHash,
-		SpecBlob: asm.Spec,
-		Recap:    RecapEntry{SceneIndex: i, Takeaway: s.Scenes[i].Beat.Goal},
-		Outcome:  SceneOutcome{Index: i, Source: SourceBuilder, Status: "ok", Rung: 1, Attempts: 1},
-	}
-	if err := p.Director.Apply(ctx, s, built); err != nil {
-		return err
-	}
+	return asm, nil
+}
 
-	// Render the clip (engine-side cache makes unchanged specs free).
-	rr, err := p.Engine.Render(ctx, RenderRequest{Spec: asm.Spec})
-	if err != nil {
-		return fmt.Errorf("render: %w", err)
+// fallbackCard is the ladder's deterministic net: a text card from the beat, always valid.
+func fallbackCard(beat SceneBeat) []BuilderPlacement {
+	title := strings.TrimSpace(beat.Title)
+	if title == "" {
+		title = "Let's think about it"
 	}
-	return p.Director.Apply(ctx, s, SceneRendered{
-		Index:       i,
-		Clip:        rr.Video,
-		DurationSec: rr.DurationSec,
-		Cached:      rr.Cached,
-	})
+	lines := beat.KeyPoints
+	if len(lines) == 0 {
+		lines = beat.NarrationBeats
+	}
+	if len(lines) > 3 {
+		lines = lines[:3]
+	}
+	return []BuilderPlacement{{
+		Builder: "items.card",
+		Params:  map[string]any{"title": title, "lines": lines},
+		Animate: "fadeIn",
+	}}
+}
+
+// checkPolicies enforces the beat's forbid/mustShow constraints on the selection.
+func checkPolicies(beat SceneBeat, placements []BuilderPlacement) []ValidationError {
+	blob, _ := json.Marshal(placements)
+	text := strings.ToLower(string(blob))
+	var errs []ValidationError
+	for _, f := range beat.Forbid {
+		if f = strings.ToLower(strings.TrimSpace(f)); f != "" && strings.Contains(text, f) {
+			errs = append(errs, ValidationError{Path: "placements", Code: "FORBIDDEN", Message: fmt.Sprintf("placements use forbidden %q", f)})
+		}
+	}
+	for _, m := range beat.MustShow {
+		if m = strings.ToLower(strings.TrimSpace(m)); m != "" && !strings.Contains(text, m) {
+			errs = append(errs, ValidationError{Path: "placements", Code: "MISSING", Message: fmt.Sprintf("placements must show %q", m)})
+		}
+	}
+	return errs
+}
+
+func allDegraded(scenes []SceneState) bool {
+	for _, sc := range scenes {
+		if !sc.Outcome.Degraded {
+			return false
+		}
+	}
+	return true
 }
 
 // clipsOnlyAssembly summarizes the rendered clips when no stitcher is configured: the

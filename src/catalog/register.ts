@@ -7,12 +7,14 @@ import { BuilderRegistry } from "./registry.js";
 import { numberLineTool } from "./math/numberLine.tool.js";
 import { reactionTool } from "./chem/reaction.tool.js";
 import { mathLessonTools } from "./math/lessons.tool.js";
+import { cardTool } from "./items/card.tool.js";
 
 /** Build a fresh registry with all known tools registered. */
 export function createDefaultRegistry(): BuilderRegistry {
   const registry = new BuilderRegistry();
   registry.register(numberLineTool);
   registry.register(reactionTool);
+  registry.register(cardTool);
   for (const tool of mathLessonTools) registry.register(tool);
   return registry;
 }
