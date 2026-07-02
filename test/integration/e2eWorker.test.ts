@@ -13,27 +13,17 @@
  * port binding) actually serves a brief-to-MP4 request end to end. The child env has
  * the LLM keys stripped, so it deterministically uses the offline template author.
  */
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { spawn, execFile, type ChildProcess } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const execFileAsync = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..");
 const workerEntry = join(repoRoot, "src", "service", "worker.ts");
-
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 interface Worker {
   port: number;

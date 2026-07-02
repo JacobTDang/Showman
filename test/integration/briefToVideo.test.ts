@@ -1,6 +1,5 @@
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,18 +18,8 @@ import {
   RuleBasedModeration,
 } from "../../src/index.js";
 
-const execFileAsync = promisify(execFile);
-
 async function body(r: Response): Promise<any> {
   return r.json();
-}
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 let server: Server;

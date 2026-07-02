@@ -1,3 +1,4 @@
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -15,14 +16,6 @@ import {
 import type { SceneSpec } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function audioStreams(file: string): Promise<{ codec: string; duration: number }[]> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v",

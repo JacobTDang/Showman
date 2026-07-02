@@ -5,6 +5,7 @@
  * that frame rendering is unaffected (determinism is covered by the golden suite).
  */
 
+import { hasFfmpeg } from "../helpers.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -21,14 +22,6 @@ import {
 } from "../../src/index.js";
 
 const execFileAsync = promisify(execFile);
-async function hasFfmpeg(): Promise<boolean> {
-  try {
-    await execFileAsync("ffmpeg", ["-version"]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 async function audioCodecs(file: string): Promise<string[]> {
   const { stdout } = await execFileAsync("ffprobe", [
     "-v",
