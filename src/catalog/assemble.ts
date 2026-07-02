@@ -7,7 +7,7 @@
  *   1. invoke each placement via the registry (params validated by the tool's Zod schema)
  *   2. namespace each placement's node ids (idGen prefixes repeat across calls)
  *   3. lay node-level outputs out by slot/at using each output's bbox
- *   4. animate: golden-safe staggered fade/pop-in tracks
+ *   4. animate: kind-aware entrances + content beats (see ./motion.ts), golden-safe
  *   5. frame the envelope (canvas dims, theme background, seed, duration)
  *   6. narrate: spread the beat's narrationBeats across the duration
  *   7. validate + autoRepairSpec, and content-hash the result
@@ -19,11 +19,12 @@
 import { createHash } from "node:crypto";
 import type { BuilderRegistry } from "./registry.js";
 import type { BBox } from "./types.js";
-import type { GroupNode, NarrationSegment, Node, SceneSpec, Track } from "../spec/types.js";
+import type { GroupNode, NarrationSegment, Node, SceneSpec } from "../spec/types.js";
 import { LIMITS, SPEC_VERSION } from "../spec/schema.js";
 import { getTheme } from "../theme/themes.js";
 import { validateScene, type ValidationError } from "../validator/validate.js";
 import { autoRepairSpec } from "../authoring/autoRepair.js";
+import { planPlacementMotion, titleReveal, ANIMATE_HINTS, type AnimateHint } from "./motion.js";
 
 export interface AssemblePlacement {
   builder: string;
@@ -35,6 +36,8 @@ export interface AssemblePlacement {
   scale?: number;
   /** On-canvas label under the placement. */
   caption?: string;
+  /** Entrance motion: "auto" (kind-aware, default), a named preset, or "none". */
+  animate?: AnimateHint;
 }
 
 export interface AssembleBeat {
@@ -57,8 +60,9 @@ export type AssembleResult =
 
 const DEFAULT_CANVAS = { width: 1280, height: 720, fps: 30 };
 const DEFAULT_DURATION = 6;
-const FADE_IN = 0.5;
 const STAGGER = 0.35;
+/** Motion-free tail before the cut, so scenes land before the next one starts. */
+const REST = 0.75;
 const DEFAULT_BBOX: BBox = { w: 240, h: 120 };
 
 /** Assemble one scene from placements. Never throws on bad input — returns errors. */
@@ -71,6 +75,15 @@ export function assembleScene(registry: BuilderRegistry, req: AssembleRequest): 
   if (levels.some((l) => l === undefined)) {
     const bad = req.placements.filter((p) => !registry.get(p.builder)).map((p) => p.builder);
     return { ok: false, errors: bad.map((b) => err("placements", "INVALID_VALUE", `unknown builder "${b}"`)) };
+  }
+  const badHints = req.placements.filter((p) => p.animate !== undefined && !ANIMATE_HINTS.includes(p.animate));
+  if (badHints.length > 0) {
+    return {
+      ok: false,
+      errors: badHints.map((p) =>
+        err("placements", "INVALID_VALUE", `unknown animate hint "${String(p.animate)}" (use ${ANIMATE_HINTS.join("|")})`),
+      ),
+    };
   }
   const sceneLevel = levels.filter((l) => l === "scene").length;
   if (sceneLevel > 0 && (sceneLevel > 1 || req.placements.length > 1)) {
@@ -126,9 +139,11 @@ function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): Sce
       fill: theme.palette.primary,
       align: "center",
       baseline: "middle",
+      tracks: titleReveal(title),
     });
   }
 
+  let animEnd = 0;
   req.placements.forEach((p, i) => {
     const params = { ...(p.params ?? {}), ...(req.theme && !("theme" in (p.params ?? {})) ? { theme: req.theme } : {}) };
     const out = registry.invokeNode(p.builder, params);
@@ -136,7 +151,12 @@ function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): Sce
     const pos = p.at ?? slotCenter(p.slot ?? "center", canvas.width, canvas.height, titleH);
     const scale = p.scale ?? 1;
 
-    const children: Node[] = [namespaceIds(out.node, `s${i}`)];
+    // Kind-aware motion: an entrance on the group + content beats (draw-on, count-up,
+    // arc sweep) inside the subtree, staggered placement by placement.
+    const motion = planPlacementMotion(namespaceIds(out.node, `s${i}`), p.animate, i * STAGGER, scale);
+    animEnd = Math.max(animEnd, motion.end);
+
+    const children: Node[] = [motion.node];
     if (p.caption?.trim()) {
       children.push({
         id: `s${i}-caption`,
@@ -160,15 +180,14 @@ function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): Sce
       x: pos.x - (bbox.w * scale) / 2,
       y: pos.y - (bbox.h * scale) / 2,
       ...(scale !== 1 ? { scale } : {}),
-      tracks: fadeIn(i),
+      ...(motion.entrance.length > 0 ? { tracks: motion.entrance } : {}),
       children,
     };
     nodes.push(group);
   });
 
-  const animEnd = FADE_IN + STAGGER * (req.placements.length - 1);
   const budget = req.beat?.durationBudgetSec ?? 0;
-  const duration = Math.min(LIMITS.maxDuration, Math.max(budget > 0 ? budget : DEFAULT_DURATION, animEnd + 1.5));
+  const duration = Math.min(LIMITS.maxDuration, Math.max(budget > 0 ? budget : DEFAULT_DURATION, animEnd + REST));
 
   const spec: SceneSpec = {
     specVersion: SPEC_VERSION,
@@ -220,21 +239,6 @@ function slotCenter(slot: NonNullable<AssemblePlacement["slot"]>, w: number, h: 
     default:
       return { x: w / 2, y: cy };
   }
-}
-
-/** Golden-safe entrance: staggered opacity fade (no blurs, no large soft gradients). */
-function fadeIn(index: number): Track[] {
-  const start = index * STAGGER;
-  return [
-    {
-      property: "opacity",
-      keyframes: [
-        { t: 0, value: 0 },
-        ...(start > 0 ? [{ t: start, value: 0 }] : []),
-        { t: start + FADE_IN, value: 1, easing: "easeOutQuad" as const },
-      ],
-    },
-  ];
 }
 
 /** Spread narration beats evenly across the scene duration. */
