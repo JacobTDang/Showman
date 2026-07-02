@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -11,11 +12,14 @@ import (
 // assemble hashes deterministically by scene seed; render returns a per-hash clip.
 type pipelineEngine struct {
 	stubEngine
+	mu            sync.Mutex
 	assembleCalls []AssembleRequest
 }
 
 func (e *pipelineEngine) Assemble(_ context.Context, req AssembleRequest) (AssembleResult, error) {
+	e.mu.Lock()
 	e.assembleCalls = append(e.assembleCalls, req)
+	e.mu.Unlock()
 	hash := fmt.Sprintf("hash-%d", req.Seed)
 	return AssembleResult{OK: true, Spec: json.RawMessage(`{"specVersion":1}`), SpecHash: hash, DurationSec: 6}, nil
 }

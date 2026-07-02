@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -13,11 +14,14 @@ import (
 // scenes proceed normally.
 type flakyEngine struct {
 	stubEngine
+	mu               sync.Mutex
 	assembleAttempts int
 }
 
 func (e *flakyEngine) Assemble(_ context.Context, req AssembleRequest) (AssembleResult, error) {
+	e.mu.Lock()
 	e.assembleAttempts++
+	e.mu.Unlock()
 	for _, p := range req.Placements {
 		if p.Builder == "math.graphingLesson" {
 			return AssembleResult{OK: false, Errors: []ValidationError{{Path: "placements", Code: "INVALID_PARAMS", Message: "bad params for " + p.Builder}}}, nil
