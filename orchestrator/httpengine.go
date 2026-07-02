@@ -88,6 +88,24 @@ func (c *HTTPEngineClient) Render(ctx context.Context, req RenderRequest) (Rende
 	return out, nil
 }
 
+// FetchObject streams a stored object's bytes (GET /objects/<key>) — used by the
+// stitcher to pull rendered clips.
+func (c *HTTPEngineClient) FetchObject(ctx context.Context, key string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/objects/"+key, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("engine /objects/%s: %w", key, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("engine /objects/%s: status %d", key, res.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 1<<30))
+}
+
 func (c *HTTPEngineClient) getJSON(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
