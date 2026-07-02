@@ -18,6 +18,7 @@ type JobView struct {
 	Status    JobPhase       `json:"status"`
 	Scenes    []SceneView    `json:"scenes,omitempty"`
 	Result    *FinalAssembly `json:"result,omitempty"`
+	Scorecard *Scorecard     `json:"scorecard,omitempty"`
 	Warnings  []string       `json:"warnings,omitempty"`
 	Error     *JobError      `json:"error,omitempty"`
 	CreatedAt string         `json:"createdAt"`
@@ -45,6 +46,8 @@ func ProjectJob(s *JobContext) JobView {
 	}
 	if s.Phase == PhaseDone {
 		view.Result = s.Final
+		card := ComputeScorecard(s)
+		view.Scorecard = &card
 	}
 	for _, sc := range s.Scenes {
 		sv := SceneView{Index: sc.Index, Title: sc.Beat.Title, Status: "queued"}
