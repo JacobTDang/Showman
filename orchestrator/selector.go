@@ -80,8 +80,11 @@ func beatText(b SceneBeat) string {
 }
 
 // pickTool returns the tool with the highest keyword score. Longer keyword phrases weigh
-// more (they are more specific); name order breaks ties deterministically.
+// more (they are more specific); name order breaks ties deterministically. Sorts a COPY:
+// concurrent scenes may share one catalog slice (a caching client would return the same
+// backing array to every goroutine), so mutating the input is a data race.
 func pickTool(tools []CatalogEntry, text string) (*CatalogEntry, int) {
+	tools = append([]CatalogEntry(nil), tools...)
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	var best *CatalogEntry
 	bestScore := 0
