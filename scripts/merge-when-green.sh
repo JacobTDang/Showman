@@ -17,12 +17,13 @@ if [ -z "$CHECKS" ]; then
   echo "FAIL: no checks reported for PR #$PR (CI not started?)"; exit 1
 fi
 
+# gh pr checks output is TAB-separated: <name>\t<status>\t… (names contain spaces).
 TOTAL=$(printf '%s\n' "$CHECKS" | grep -c . || true)
-PASS=$(printf '%s\n' "$CHECKS" | awk '$2=="pass"' | grep -c . || true)
+PASS=$(printf '%s\n' "$CHECKS" | awk -F'\t' '$2=="pass"' | grep -c . || true)
 
 if [ "$TOTAL" -eq 0 ] || [ "$PASS" -ne "$TOTAL" ]; then
   echo "REFUSING to merge PR #$PR: $PASS/$TOTAL checks passing."
-  printf '%s\n' "$CHECKS" | awk '$2!="pass"'
+  printf '%s\n' "$CHECKS" | awk -F'\t' '$2!="pass"'
   exit 1
 fi
 

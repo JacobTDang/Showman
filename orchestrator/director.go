@@ -21,9 +21,10 @@ func (SystemClock) Now() time.Time { return time.Now() }
 type Director struct {
 	clock      Clock
 	checkpoint CheckpointStore
-	// mu serializes Apply so concurrent per-scene goroutines can't interleave a
-	// reducer with the audit stamp + checkpoint (single-writer, enforced).
-	mu sync.Mutex
+	// mu guards the store during fan-out: Apply holds the write lock (single-writer,
+	// enforced), and every store READ from a concurrent scene goroutine must go
+	// through Read — views touching shared fields (Continuity.Recap) race otherwise.
+	mu sync.RWMutex
 }
 
 // NewDirector builds a Director. A nil clock defaults to the system clock.
@@ -49,4 +50,12 @@ func (d *Director) Apply(ctx context.Context, s *JobContext, delta Delta) error 
 		return d.checkpoint.Save(ctx, s)
 	}
 	return nil
+}
+
+// Read runs fn under the store's read lock. Concurrent scene goroutines must build
+// their views (SelectView/AsmInput — anything reading shared store fields) inside it.
+func (d *Director) Read(fn func()) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	fn()
 }

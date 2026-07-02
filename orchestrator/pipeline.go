@@ -141,7 +141,8 @@ func (p *Pipeline) runScene(ctx context.Context, s *JobContext, i int) error {
 
 	var warnings []string
 	outcome := SceneOutcome{Index: i, Source: SourceBuilder, Status: "ok", Rung: 1, Attempts: 1}
-	view := SelectView(s, i, digest)
+	var view SelectorView
+	p.Director.Read(func() { view = SelectView(s, i, digest) })
 	asm, ok := AssembleResult{}, false
 
 	for attempt := 1; attempt <= 2 && !ok; attempt++ {
@@ -225,7 +226,8 @@ func (p *Pipeline) runScene(ctx context.Context, s *JobContext, i int) error {
 
 // assemble ships the scene's current placements to the engine's deterministic assembler.
 func (p *Pipeline) assemble(ctx context.Context, s *JobContext, i int) (AssembleResult, error) {
-	in := AsmInput(s, i)
+	var in AssemblerInput
+	p.Director.Read(func() { in = AsmInput(s, i) })
 	asm, err := p.Engine.Assemble(ctx, AssembleRequest{
 		Placements: in.Placements,
 		Beat:       in.Beat,
