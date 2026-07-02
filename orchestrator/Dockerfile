@@ -21,9 +21,14 @@ RUN set -eux; \
     echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ bookworm-updates main"; \
     echo "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT}/ bookworm-security main"; \
   } > /etc/apt/sources.list; \
-  if apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update; then \
-    echo "apt: PINNED to snapshot ${DEBIAN_SNAPSHOT}"; \
-  else \
+  ok=1; \
+  apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update || ok=0; \
+  if [ "$ok" = 1 ]; then \
+    apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y --no-install-recommends \
+      ffmpeg ca-certificates \
+      && echo "apt: PINNED to snapshot ${DEBIAN_SNAPSHOT}" || ok=0; \
+  fi; \
+  if [ "$ok" = 0 ]; then \
     echo "WARNING: snapshot.debian.org unavailable — building UNPINNED from deb.debian.org"; \
     { \
       echo "deb http://deb.debian.org/debian bookworm main"; \
@@ -31,8 +36,8 @@ RUN set -eux; \
       echo "deb http://deb.debian.org/debian-security bookworm-security main"; \
     } > /etc/apt/sources.list; \
     apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends ffmpeg ca-certificates; \
   fi; \
-  apt-get install -y --no-install-recommends ffmpeg ca-certificates; \
   ffmpeg -version | head -n1; \
   rm -rf /var/lib/apt/lists/*
 
