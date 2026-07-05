@@ -21,6 +21,7 @@
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:kokoro": "vitest run --config vitest.live.config.ts test/audio/kokoroTts.live.test.ts",
     "test:golden": "vitest run test/golden",
+    "test:golden:x64": "bash scripts/test-golden-x64.sh",
     "golden:update": "tsx scripts/update-golden.ts",
     "demo": "tsx scripts/render-lesson.ts",
     "demo:lesson": "tsx scripts/demo-lesson.ts",
