@@ -233,15 +233,7 @@ func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := stored.Resume.Token
-	go func() {
-		bg := context.Background()
-		if _, err := s.Graph.Resume(bg, id, token); err != nil {
-			if loaded, loadErr := s.Checkpoint.Load(bg, id); loadErr == nil {
-				_ = s.Pipeline.Director.Apply(bg, loaded, JobFailed{Err: JobError{Node: "graph-resume", Message: err.Error()}})
-			}
-		}
-	}()
+	go s.reconcileResume(id, stored.Resume.Token)
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": id, "status": "resuming", "statusUrl": "/v1/jobs/" + id})
 }
