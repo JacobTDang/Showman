@@ -95,7 +95,8 @@ export const vectorFieldTool: BuilderTool<VectorFieldParams> = {
   name: "physics.vectorField",
   domain: "physics",
   level: "node",
-  description: "a grid of arrows sampling a named field shape (uniform/radial source-sink/dipole/vortex) — electric, magnetic, gravity, or flow fields",
+  description:
+    "a grid of arrows sampling a named field shape (uniform/radial source-sink/dipole/vortex) — electric, magnetic, gravity, or flow fields",
   keywords: [
     "vector field",
     "field lines",

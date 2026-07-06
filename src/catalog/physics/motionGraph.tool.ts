@@ -33,7 +33,10 @@ const SeriesParams = z.object({
   /** damped-oscillation: value = amplitude*exp(-decay*t)*cos(omega*t). */
   amplitude: z.number().default(1),
   decay: z.number().min(0).default(0.5),
-  omega: z.number().positive().default(2 * Math.PI),
+  omega: z
+    .number()
+    .positive()
+    .default(2 * Math.PI),
   color: z.string().optional(),
   yMin: z.number().optional(),
   yMax: z.number().optional(),
@@ -72,7 +75,8 @@ export const motionGraphTool: BuilderTool<MotionGraphParams> = {
   name: "physics.motionGraph",
   domain: "physics",
   level: "node",
-  description: "stacked position/velocity/acceleration-vs-time graphs from named kinematics presets, each with a trace dot and a shared time sweep",
+  description:
+    "stacked position/velocity/acceleration-vs-time graphs from named kinematics presets, each with a trace dot and a shared time sweep",
   keywords: [
     "motion graph",
     "position vs time",

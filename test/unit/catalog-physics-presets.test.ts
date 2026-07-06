@@ -138,7 +138,15 @@ describe("physics.vectorField presets", () => {
   });
 
   it("dipole: superposes an outward source and an inward sink at the two poles", () => {
-    const f = fieldFor({ ...FIELD_DEFAULTS, preset: "dipole", centerX: 0.5, centerY: 0.5, separation: 0.2, magnitude: 1, falloff: "inverse-square" });
+    const f = fieldFor({
+      ...FIELD_DEFAULTS,
+      preset: "dipole",
+      centerX: 0.5,
+      centerY: 0.5,
+      separation: 0.2,
+      magnitude: 1,
+      falloff: "inverse-square",
+    });
     // At the exact midpoint, by symmetry the x-components from each pole cancel... actually they
     // ADD (both point away from source, toward sink, along +x) — assert it's non-zero and finite.
     const mid = f(0.5, 0.5);
