@@ -18,12 +18,17 @@ if [ -z "$CHECKS" ]; then
 fi
 
 # gh pr checks output is TAB-separated: <name>\t<status>\t… (names contain spaces).
+# "skipping" counts as OK: a job correctly gated by its OWN `if:` condition (e.g.
+# ci.yml's "Publish images to GHCR", which only runs on a push to main, never a PR)
+# reports as skipped on every PR — that's the job doing exactly what it's supposed
+# to, not a sign anything is broken, and treating it as a blocker would mean NO PR
+# could ever merge again once such a job exists.
 TOTAL=$(printf '%s\n' "$CHECKS" | grep -c . || true)
-PASS=$(printf '%s\n' "$CHECKS" | awk -F'\t' '$2=="pass"' | grep -c . || true)
+OK=$(printf '%s\n' "$CHECKS" | awk -F'\t' '$2=="pass" || $2=="skipping"' | grep -c . || true)
 
-if [ "$TOTAL" -eq 0 ] || [ "$PASS" -ne "$TOTAL" ]; then
-  echo "REFUSING to merge PR #$PR: $PASS/$TOTAL checks passing."
-  printf '%s\n' "$CHECKS" | awk -F'\t' '$2!="pass"'
+if [ "$TOTAL" -eq 0 ] || [ "$OK" -ne "$TOTAL" ]; then
+  echo "REFUSING to merge PR #$PR: $OK/$TOTAL checks passing or correctly skipped."
+  printf '%s\n' "$CHECKS" | awk -F'\t' '$2!="pass" && $2!="skipping"'
   exit 1
 fi
 
