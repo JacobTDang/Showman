@@ -29,8 +29,10 @@ import { planPlacementMotion, titleReveal, ANIMATE_HINTS, type AnimateHint } fro
 export interface AssemblePlacement {
   builder: string;
   params?: Record<string, unknown>;
-  /** Declarative layout region. Default "center". */
-  slot?: "center" | "left" | "right" | "top" | "bottom";
+  /** Declarative layout region. Default "center". "grid" auto-arranges every
+   * grid-slotted placement in the request into a centered grid using their bboxes
+   * (2 -> side-by-side, 3-4 -> 2x2, 5-6 -> 3x2). */
+  slot?: "center" | "left" | "right" | "top" | "bottom" | "grid";
   /** Explicit coordinate override; wins over slot. */
   at?: { x: number; y: number };
   scale?: number;
@@ -96,8 +98,9 @@ export function assembleScene(registry: BuilderRegistry, req: AssembleRequest): 
   }
 
   try {
-    const spec = sceneLevel === 1 ? assembleSceneLevel(registry, req) : assembleNodeLevel(registry, req);
-    return finalize(spec);
+    const { spec, layoutRepairs } =
+      sceneLevel === 1 ? { spec: assembleSceneLevel(registry, req), layoutRepairs: [] } : assembleNodeLevel(registry, req);
+    return finalize(spec, layoutRepairs);
   } catch (e) {
     return { ok: false, errors: [err("placements", "INVALID_VALUE", (e as Error).message)] };
   }
@@ -127,7 +130,7 @@ function assembleSceneLevel(registry: BuilderRegistry, req: AssembleRequest): Sc
  * describes what is moving right now. Without narration, placements enter on a light
  * fixed stagger (the P1 behavior).
  */
-function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): SceneSpec {
+function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): { spec: SceneSpec; layoutRepairs: string[] } {
   const canvas = { ...DEFAULT_CANVAS, ...req.canvas };
   const theme = getTheme(req.theme);
   const nodes: Node[] = [];
@@ -186,11 +189,33 @@ function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): Sce
     timelineEnd = built.reduce((end, b, k) => Math.max(end, starts[k]! + b.motion.end), titleLead);
   }
 
+  // Pass 2.5 — layout (C2): grid-slotted placements get auto-arranged as a group;
+  // everyone else keeps their slot/at center. Then the overlap guard shrinks
+  // whichever of any two overlapping placements is larger, deterministically.
+  const bboxes = built.map(({ out }) => out.bbox ?? DEFAULT_BBOX);
+  const gridIdx = built.map(({ p }, i) => (p.slot === "grid" && !p.at ? i : -1)).filter((i) => i >= 0);
+  const gridPos =
+    gridIdx.length > 0
+      ? gridLayout(
+          gridIdx.map((i) => bboxes[i]!),
+          canvas.width,
+          canvas.height,
+          titleH,
+        )
+      : [];
+  const positions = built.map(({ p }, i) => {
+    if (p.at) return p.at;
+    const gi = gridIdx.indexOf(i);
+    return gi !== -1 ? gridPos[gi]! : slotCenter(p.slot ?? "center", canvas.width, canvas.height, titleH);
+  });
+  const scales = built.map(({ p }) => p.scale ?? 1);
+  const layoutRepairs = applyOverlapGuard(positions, bboxes, scales);
+
   // Pass 3 — emit: shift each placement's motion to its slot and build the groups.
   built.forEach(({ p, i, out, motion }) => {
     const bbox = out.bbox ?? DEFAULT_BBOX;
-    const pos = p.at ?? slotCenter(p.slot ?? "center", canvas.width, canvas.height, titleH);
-    const scale = p.scale ?? 1;
+    const pos = positions[i]!;
+    const scale = scales[i]!;
     const start = starts[i] ?? 0;
 
     const entrance = shiftTracks(motion.entrance, start);
@@ -241,7 +266,7 @@ function assembleNodeLevel(registry: BuilderRegistry, req: AssembleRequest): Sce
   };
 
   if (segments.length > 0) spec.narration = { segments, ...(req.voice ? { voice: req.voice } : {}) };
-  return spec;
+  return { spec, layoutRepairs };
 }
 
 /** Spoken-length estimate: ~2.6 words/sec plus a breath, floored at 1.4s. */
@@ -267,21 +292,106 @@ function shiftSubtreeTracks(node: Node, dt: number): void {
 }
 
 /** Validate, mechanically repair if needed, and content-hash. */
-function finalize(spec: SceneSpec): AssembleResult {
+function finalize(spec: SceneSpec, extraRepairs: string[] = []): AssembleResult {
   let out = spec;
-  let repaired: string[] = [];
+  let repaired: string[] = [...extraRepairs];
   let validation = validateScene(out);
   if (!validation.valid) {
     const fix = autoRepairSpec(out, validation.errors);
     const revalidation = validateScene(fix.spec);
     if (!revalidation.valid) return { ok: false, errors: revalidation.errors };
     out = fix.spec as SceneSpec;
-    repaired = fix.fixed;
+    repaired = [...repaired, ...fix.fixed];
     validation = revalidation;
   }
   const canonical = JSON.stringify(out);
   const specHash = createHash("sha256").update(canonical).digest("hex");
   return { ok: true, spec: out, specHash, durationSec: out.duration, repaired };
+}
+
+/** How many columns a grid of n items uses: 1->1, 2->2, 3-4->2, 5-6->3, beyond ->
+ * ceil(sqrt(n)) (not spec'd, but a reasonable extrapolation). */
+function gridCols(n: number): number {
+  if (n <= 1) return 1;
+  if (n === 2) return 2;
+  if (n <= 4) return 2;
+  if (n <= 6) return 3;
+  return Math.ceil(Math.sqrt(n));
+}
+
+const GRID_GUTTER = 24;
+
+/** Auto-arrange N bboxes into a centered grid (each row individually centered, so a
+ * partial last row doesn't hug the left edge). Returns each item's CENTER point. */
+function gridLayout(boxes: BBox[], w: number, h: number, titleH: number): { x: number; y: number }[] {
+  const n = boxes.length;
+  const cols = gridCols(n);
+  const rows = Math.ceil(n / cols);
+  const cellW = Math.max(...boxes.map((b) => b.w)) + GRID_GUTTER;
+  const cellH = Math.max(...boxes.map((b) => b.h)) + GRID_GUTTER;
+  const gridH = rows * cellH;
+  const top = titleH;
+  const availH = h - top;
+  const originY = top + Math.max(0, (availH - gridH) / 2);
+
+  return boxes.map((_, i) => {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    const itemsInRow = row === rows - 1 ? n - row * cols : cols;
+    const rowW = itemsInRow * cellW;
+    const rowOriginX = (w - rowW) / 2;
+    return { x: rowOriginX + col * cellW + cellW / 2, y: originY + row * cellH + cellH / 2 };
+  });
+}
+
+interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  area: number;
+}
+
+function rectOf(pos: { x: number; y: number }, bbox: BBox, scale: number): Rect {
+  const w = bbox.w * scale;
+  const h = bbox.h * scale;
+  return { x0: pos.x - w / 2, y0: pos.y - h / 2, x1: pos.x + w / 2, y1: pos.y + h / 2, area: w * h };
+}
+
+function intersectArea(a: Rect, b: Rect): number {
+  const ix = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0));
+  const iy = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+  return ix * iy;
+}
+
+const OVERLAP_THRESHOLD = 0.1;
+const MIN_SHRINK_SCALE = 0.5;
+
+/** C2 overlap guard: for every pair of placements whose rendered bboxes intersect by
+ * more than 10% of the smaller one's area, shrink the LARGER one's scale by the
+ * overlap ratio (floored so it never vanishes). Mutates `scales` in place; returns
+ * one repair note per correction (surfaced in AssembleResult.repaired). Deterministic:
+ * pairs are checked in placement order, ties shrink the later index. */
+function applyOverlapGuard(positions: { x: number; y: number }[], bboxes: BBox[], scales: number[]): string[] {
+  const repairs: string[] = [];
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      const ri = rectOf(positions[i]!, bboxes[i]!, scales[i]!);
+      const rj = rectOf(positions[j]!, bboxes[j]!, scales[j]!);
+      const inter = intersectArea(ri, rj);
+      if (inter <= 0) continue;
+      const ratio = inter / Math.min(ri.area, rj.area);
+      if (ratio <= OVERLAP_THRESHOLD) continue;
+      const shrinkIdx = ri.area > rj.area ? i : j;
+      const otherIdx = shrinkIdx === i ? j : i;
+      const factor = Math.max(MIN_SHRINK_SCALE, 1 - ratio);
+      scales[shrinkIdx] = scales[shrinkIdx]! * factor;
+      repairs.push(
+        `shrunk placement ${shrinkIdx} to ${Math.round(scales[shrinkIdx]! * 100)}% to resolve a ${Math.round(ratio * 100)}% overlap with placement ${otherIdx}`,
+      );
+    }
+  }
+  return repairs;
 }
 
 /** The center point of a named layout slot (title band reserved at the top). */

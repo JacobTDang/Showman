@@ -110,4 +110,37 @@ describe("assembler quality bar (offline evals)", () => {
       });
     });
   }
+
+  // Roadmap C2 acceptance: no two placement bboxes in the (grid-layout) suite overlap.
+  // math.numberLine's bbox is exactly {w: params.width ?? 400, h: 56}, so overlap is
+  // checkable directly from each group's emitted x/y/scale without re-deriving bbox
+  // introspection generically for every builder in SUITE above.
+  describe("grid layout (slot: 'grid')", () => {
+    for (const n of [2, 3, 4, 5, 6]) {
+      it(`${n} grid placements never overlap`, () => {
+        const placements = Array.from({ length: n }, (_, k) => ({
+          builder: "math.numberLine" as const,
+          params: { from: 0, to: 5 + k },
+          slot: "grid" as const,
+        }));
+        const result = assembleScene(registry, { placements, canvas: { width: 1280, height: 720 } });
+        if (!result.ok) throw new Error(JSON.stringify(result.errors));
+        const gs = placementGroups(result.spec);
+        const rect = (g: GroupNode) => {
+          const s = g.scale ?? 1;
+          const x = g.x ?? 0;
+          const y = g.y ?? 0;
+          return { x0: x, y0: y, x1: x + 400 * s, y1: y + 56 * s };
+        };
+        for (let i = 0; i < gs.length; i++) {
+          for (let j = i + 1; j < gs.length; j++) {
+            const a = rect(gs[i]!);
+            const b = rect(gs[j]!);
+            const overlaps = a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+            expect(overlaps).toBe(false);
+          }
+        }
+      });
+    }
+  });
 });
