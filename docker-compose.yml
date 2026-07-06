@@ -24,6 +24,27 @@ services:
     volumes:
       - showman-data:/data
 
+  # Roadmap E4: the Kokoro (local, free, GPU-accelerated) TTS variant. Opt-in
+  # (`docker compose --profile kokoro up worker-kokoro`) since the image is
+  # ~+500MB over the default slim worker (kokoro-js + onnxruntime baked in via
+  # --build-arg INCLUDE_KOKORO=1). Uses its own image tag/volume so it never
+  # collides with the default `worker` service.
+  worker-kokoro:
+    build:
+      context: .
+      args:
+        INCLUDE_KOKORO: "1"
+    image: showman:kokoro
+    profiles: ["kokoro"]
+    command: ["node", "dist/service/worker.js"]
+    environment:
+      PORT: "8080"
+      SHOWMAN_DATA_DIR: /data
+      SHOWMAN_PUBLIC_URL: http://localhost:8080
+      SHOWMAN_TTS_PROVIDER: kokoro
+    volumes:
+      - showman-data:/data
+
   # The director/orchestrator (Go): {topic, query} in -> planned multi-scene MP4 out.
   # POST http://localhost:8091/v1/generate, poll /v1/jobs/:id. Offline tiers by default
   # (stub planner + keyword selector); the LLM tiers arrive with the Eino integration.
