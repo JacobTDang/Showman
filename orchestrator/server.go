@@ -9,13 +9,22 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/cloudwego/eino/compose"
 )
+
+// PhaseAwaitingReview is a JobView-only status (not a store JobPhase / Director delta):
+// the job is paused at the HITL preview gate. It is derived from JobContext.Resume,
+// never written by a delta, so it can't drift from the single-writer discipline.
+const PhaseAwaitingReview JobPhase = "awaiting-review"
 
 // JobView is the external projection of a JobContext — what GET /v1/jobs/:id returns.
 // It never exposes internals (placements, spec blobs, history).
 type JobView struct {
 	JobID     string         `json:"jobId"`
 	Status    JobPhase       `json:"status"`
+	ResumeURL string         `json:"resumeUrl,omitempty"` // set iff Status == awaiting-review
 	Scenes    []SceneView    `json:"scenes,omitempty"`
 	Result    *FinalAssembly `json:"result,omitempty"`
 	Scorecard *Scorecard     `json:"scorecard,omitempty"`
@@ -49,6 +58,10 @@ func ProjectJob(s *JobContext) JobView {
 		card := ComputeScorecard(s)
 		view.Scorecard = &card
 	}
+	if s.Resume != nil && s.Resume.ResumedAt == nil {
+		view.Status = PhaseAwaitingReview
+		view.ResumeURL = "/v1/jobs/" + s.JobID + "/resume"
+	}
 	for _, sc := range s.Scenes {
 		sv := SceneView{Index: sc.Index, Title: sc.Beat.Title, Status: "queued"}
 		if len(sc.Placements) > 0 {
@@ -69,14 +82,16 @@ func ProjectJob(s *JobContext) JobView {
 
 // Server exposes the orchestrator's async job API:
 //
-//	POST /v1/generate  { topic, query, options? } -> 202 { jobId, statusUrl }
-//	GET  /v1/jobs/:id  -> JobView
-//	GET  /healthz      -> { ok: true }
+//	POST /v1/generate         { topic, query, options? } -> 202 { jobId, statusUrl }
+//	GET  /v1/jobs/:id         -> JobView (status "awaiting-review" + resumeUrl at the gate)
+//	POST /v1/jobs/:id/resume  -> continue a gated job past its preview checkpoint
+//	GET  /healthz             -> { ok: true }
 //
-// Jobs run in a background goroutine; polls read the last checkpoint, so the reader
-// never races the (single-writer) pipeline.
+// Jobs run in a background goroutine through the Eino graph (B2/B3); polls read the
+// last checkpoint, so the reader never races the (single-writer) pipeline.
 type Server struct {
 	Pipeline   *Pipeline
+	Graph      *GenerateGraph
 	Checkpoint CheckpointStore
 }
 
@@ -88,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /v1/generate", s.handleGenerate)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.handleJob)
+	mux.HandleFunc("POST /v1/jobs/{id}/resume", s.handleResume)
 	return mux
 }
 
@@ -120,15 +136,64 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Detach from the request context: the job outlives the HTTP call.
-	go func() {
-		_, _ = s.Pipeline.Run(context.Background(), jobID, req)
-	}()
+	go s.runViaGraph(jobID, req)
 
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"jobId":     jobID,
 		"status":    string(PhaseQueued),
 		"statusUrl": "/v1/jobs/" + jobID,
 	})
+}
+
+// runViaGraph drives one job through the Eino graph and reconciles the three possible
+// outcomes with the durable checkpoint store (which the graph's own Director.Apply
+// calls already keep current through the end of the scenes node):
+//
+//   - success: the graph's own JobFinalized delta already recorded everything.
+//   - interrupt (HITL gate): stamp a ResumeState onto the last-persisted job so a
+//     poller sees "awaiting-review" and a future POST .../resume can continue it.
+//   - error: the graph doesn't run through Director.Apply on a hard failure (there is
+//     no live *JobContext in scope at the error site), so reconstruct a JobFailed
+//     delta from whatever was last persisted.
+func (s *Server) runViaGraph(jobID string, req ExternalRequest) {
+	ctx := context.Background()
+	_, interrupted, err := s.Graph.Run(ctx, GraphInput{JobID: jobID, Request: req})
+
+	if interrupted != nil {
+		token, ok := rootCauseID(interrupted)
+		if !ok {
+			return // defensive: no root cause found, nothing sane to persist
+		}
+		loaded, loadErr := s.Checkpoint.Load(ctx, jobID)
+		if loadErr != nil {
+			return
+		}
+		loaded.Resume = &ResumeState{Token: token, At: time.Now()}
+		_ = s.Checkpoint.Save(ctx, loaded)
+		return
+	}
+
+	if err != nil {
+		loaded, loadErr := s.Checkpoint.Load(ctx, jobID)
+		if loadErr != nil {
+			return
+		}
+		_ = s.Pipeline.Director.Apply(ctx, loaded, JobFailed{Err: JobError{Node: "graph", Message: err.Error(), Retryable: false}})
+	}
+}
+
+// rootCauseID finds the resumable interrupt's id — the one InterruptCtx flagged as
+// the root cause (falls back to the first entry if none is flagged, defensively).
+func rootCauseID(info *compose.InterruptInfo) (string, bool) {
+	for _, c := range info.InterruptContexts {
+		if c.IsRootCause {
+			return c.ID, true
+		}
+	}
+	if len(info.InterruptContexts) > 0 {
+		return info.InterruptContexts[0].ID, true
+	}
+	return "", false
 }
 
 func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +204,46 @@ func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ProjectJob(stored))
+}
+
+// handleResume continues a job paused at the HITL preview gate. 409 if the job was
+// never gated; idempotent (200, current view, no re-trigger) if already resumed.
+func (s *Server) handleResume(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ctx := r.Context()
+	stored, err := s.Checkpoint.Load(ctx, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "jobId": id})
+		return
+	}
+	if stored.Resume == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "not_awaiting_review", "jobId": id})
+		return
+	}
+	if stored.Resume.ResumedAt != nil {
+		// Idempotent: already triggered, just report current status.
+		writeJSON(w, http.StatusOK, ProjectJob(stored))
+		return
+	}
+
+	now := time.Now()
+	stored.Resume.ResumedAt = &now
+	if err := s.Checkpoint.Save(ctx, stored); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "checkpoint_failed"})
+		return
+	}
+
+	token := stored.Resume.Token
+	go func() {
+		bg := context.Background()
+		if _, err := s.Graph.Resume(bg, id, token); err != nil {
+			if loaded, loadErr := s.Checkpoint.Load(bg, id); loadErr == nil {
+				_ = s.Pipeline.Director.Apply(bg, loaded, JobFailed{Err: JobError{Node: "graph-resume", Message: err.Error()}})
+			}
+		}
+	}()
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": id, "status": "resuming", "statusUrl": "/v1/jobs/" + id})
 }
 
 // Listen starts the server on addr (":8090"); returns the bound address.

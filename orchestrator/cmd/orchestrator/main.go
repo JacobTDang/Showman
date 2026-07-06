@@ -23,6 +23,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cloudwego/eino/compose"
 	orch "showman/orchestrator"
 )
 
@@ -32,11 +33,15 @@ func main() {
 	outDir := envOr("SHOWMAN_OUT_DIR", "out")
 
 	engine := orch.NewHTTPEngineClient(engineURL, 5*time.Minute)
+	dataDir := os.Getenv("SHOWMAN_DATA_DIR")
 	var checkpoint orch.CheckpointStore
-	if dataDir := os.Getenv("SHOWMAN_DATA_DIR"); dataDir != "" {
+	var byteStore compose.CheckPointStore
+	if dataDir != "" {
 		checkpoint = orch.NewFileCheckpointStore(dataDir)
+		byteStore = orch.NewFileByteStore(dataDir)
 	} else {
 		checkpoint = orch.NewInMemoryCheckpointStore()
+		byteStore = orch.NewEinoByteStore()
 	}
 
 	// Tiered planner/selector: LLM first when a key is configured, offline always last.
@@ -60,7 +65,14 @@ func main() {
 		Engine:   engine,
 		Stitcher: &orch.FFmpegStitcher{Fetcher: engine, OutDir: outDir},
 	}
-	server := &orch.Server{Pipeline: pipeline, Checkpoint: checkpoint}
+
+	ctx := context.Background()
+	graph, err := orch.BuildGenerateGraph(ctx, pipeline, byteStore)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "orchestrator: build graph:", err)
+		os.Exit(1)
+	}
+	server := &orch.Server{Pipeline: pipeline, Graph: graph, Checkpoint: checkpoint}
 
 	ln, _, err := server.Listen(":" + port)
 	if err != nil {

@@ -18,7 +18,12 @@ const (
 
 // StoreSchemaVersion is the JobContext schema version (NOT the engine specVersion). It
 // gates checkpoint migration when the store shape changes.
-const StoreSchemaVersion = 1
+//
+// v1 -> v2 (B2): added the Resume field for the HITL preview-gate. This is a pure
+// additive change — encoding/json leaves a missing field at its zero value (nil), so
+// a v1 checkpoint decodes into the current struct with Resume == nil (never
+// "awaiting review") with no migration code required. See TestV1CheckpointDecodesForward.
+const StoreSchemaVersion = 2
 
 // JobContext is the single, durable, strongly-typed state store for one generate job. It
 // is also the value used as the Eino graph's local state. Every field is typed; the only
@@ -42,6 +47,19 @@ type JobContext struct {
 	History  []NodeRunRecord `json:"history"` // append-only audit
 	Warnings []string        `json:"warnings,omitempty"`
 	Error    *JobError       `json:"error,omitempty"`
+
+	// Resume is set while the job sits at the HITL preview gate (B2/B3). Non-nil +
+	// ResumedAt == nil means "awaiting review, resume not yet triggered." Once
+	// POST /v1/jobs/:id/resume fires, ResumedAt is stamped (not cleared) so a second
+	// POST is a no-op read of current status rather than a double-trigger or a 409.
+	Resume *ResumeState `json:"resume,omitempty"`
+}
+
+// ResumeState records the HITL preview-gate token for one interrupted run.
+type ResumeState struct {
+	Token     string     `json:"token"` // Eino interrupt id, passed to GenerateGraph.Resume
+	At        time.Time  `json:"at"`    // when the gate was reached
+	ResumedAt *time.Time `json:"resumedAt,omitempty"`
 }
 
 // NewJobContext seeds a fresh job: identity, request hash, and determinism root.
