@@ -8,6 +8,9 @@
 //	PORT                 listen port (default 8090)
 //	SHOWMAN_ENGINE_URL   engine base URL (default http://127.0.0.1:8080)
 //	SHOWMAN_OUT_DIR      final-video output dir (default ./out)
+//	SHOWMAN_DATA_DIR     when set, job checkpoints persist to {dir}/contexts/*.json
+//	                     (survives a restart); unset -> in-memory (test/dev default,
+//	                     lost on exit)
 //	SHOWMAN_PROMPT_DIR   override dir for planner/selector prompts (optional)
 //	OPENROUTER_API_KEY   enables the LLM tiers (optional)
 //	OPENROUTER_BASE_URL  OpenAI-compatible endpoint (default openrouter.ai/api/v1)
@@ -29,7 +32,12 @@ func main() {
 	outDir := envOr("SHOWMAN_OUT_DIR", "out")
 
 	engine := orch.NewHTTPEngineClient(engineURL, 5*time.Minute)
-	checkpoint := orch.NewInMemoryCheckpointStore()
+	var checkpoint orch.CheckpointStore
+	if dataDir := os.Getenv("SHOWMAN_DATA_DIR"); dataDir != "" {
+		checkpoint = orch.NewFileCheckpointStore(dataDir)
+	} else {
+		checkpoint = orch.NewInMemoryCheckpointStore()
+	}
 
 	// Tiered planner/selector: LLM first when a key is configured, offline always last.
 	var planner orch.LessonPlanner = orch.StubPlanner{}
