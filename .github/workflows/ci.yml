@@ -173,11 +173,36 @@ jobs:
         run: docker build -t showman-gateway:ci ./control-plane
       - name: Build orchestrator image
         run: docker build -t showman-orchestrator:ci ./orchestrator
+      - name: Build Kokoro worker image variant (Roadmap E4)
+        run: docker build --build-arg INCLUDE_KOKORO=1 -t showman:ci-kokoro .
+      # Smoke test: actually BOOT the worker image and render a frame through it.
+      # `docker build` succeeding only proves npm/apt didn't error — it does NOT
+      # prove @napi-rs/canvas's native binary is actually present and loadable.
+      # A prior version of this Dockerfile used `--omit=optional`, which silently
+      # stripped canvas's native binary (canvas ships one per platform as ITS OWN
+      # optionalDependency) alongside kokoro-js — the image built "successfully"
+      # on every run while being completely unable to render anything. This step
+      # would have caught that on the very first PR.
+      - name: Smoke test worker image (canvas must actually render)
+        run: |
+          docker run -d --name smoke-worker -p 18080:8080 showman:ci
+          for i in $(seq 1 15); do curl -sf http://localhost:18080/healthz && break; sleep 1; done
+          curl -sf http://localhost:18080/healthz || (docker logs smoke-worker; exit 1)
+          curl -sf -X POST http://localhost:18080/preview -H 'content-type: application/json' \
+            -d '{"spec":{"specVersion":1,"width":64,"height":64,"fps":10,"duration":1,"seed":1,"background":"#ffffff","nodes":[{"id":"t","type":"text","x":10,"y":10,"text":"ok","fontSize":16,"fill":"#000000"}]},"frame":0}' \
+            -o /tmp/smoke-preview.png || (docker logs smoke-worker; exit 1)
+          test -s /tmp/smoke-preview.png || (echo "preview response was empty"; docker logs smoke-worker; exit 1)
+          head -c4 /tmp/smoke-preview.png | grep -aq PNG || (echo "response is not a PNG"; docker logs smoke-worker; exit 1)
+          docker rm -f smoke-worker
 
   # Roadmap E3: on a push to main (never on a PR — images only publish once code has
   # actually landed), build + push each image to GHCR under both its commit sha and
   # `:latest`. GITHUB_TOKEN already has registry access; packages: write is scoped to
   # just this job (least privilege), not the whole workflow.
+  #
+  # Multi-platform (linux/amd64 + linux/arm64, so it runs natively on Apple Silicon
+  # too): buildx + QEMU emulation build both, pushed as one manifest list per tag —
+  # `docker pull` on either architecture resolves to the matching image automatically.
   publish:
     name: Publish images to GHCR
     runs-on: ubuntu-latest
@@ -188,6 +213,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -197,6 +224,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/jacobtdang/showman:${{ github.sha }}
@@ -205,6 +233,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./control-plane
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/jacobtdang/showman-gateway:${{ github.sha }}
@@ -213,6 +242,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./orchestrator
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/jacobtdang/showman-orchestrator:${{ github.sha }}

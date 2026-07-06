@@ -7,15 +7,16 @@
 # ---- builder ---------------------------------------------------------------
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
-# Roadmap E4: the default slim image omits optional deps (kokoro-js / onnxruntime,
-# ~+500MB) — local Kokoro TTS isn't bundled. Build with --build-arg
-# INCLUDE_KOKORO=1 (see docker-compose.yml's worker-kokoro service, or scripts/*
-# for a plain `docker build` invocation) to get a variant that has it, then run
-# that image with SHOWMAN_TTS_PROVIDER=kokoro to actually use it (ttsFactory.ts
-# already supports the "kokoro" provider — it was only ever missing from the image).
-ARG INCLUDE_KOKORO=0
+# Plain `npm ci` — no --omit=optional here. @napi-rs/canvas ships ONE native binary
+# per platform (linux-x64-gnu, linux-arm64-gnu, ...), each listed as canvas's own
+# optionalDependency so npm can auto-select the one matching the build platform;
+# `--omit=optional` strips ALL of those indiscriminately, not just kokoro-js, which
+# breaks canvas (hence rendering) entirely — see the runtime stage below for how
+# kokoro-js is excluded from the default image WITHOUT that collateral damage.
+# The builder's own node_modules is never shipped (only dist/ is copied out), so
+# there's no size cost to always installing everything here.
 COPY package.json package-lock.json ./
-RUN if [ "$INCLUDE_KOKORO" = "1" ]; then npm ci; else npm ci --omit=optional; fi
+RUN npm ci
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
@@ -73,7 +74,25 @@ RUN set -eux; \
 
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-RUN if [ "$INCLUDE_KOKORO" = "1" ]; then npm ci --omit=dev; else npm ci --omit=dev --omit=optional; fi \
+# Roadmap E4: the default slim image excludes kokoro-js/onnxruntime (~+1.2GB
+# measured, not the roadmap's rough "~500MB" estimate — onnxruntime-node's native
+# binaries are the bulk of it). Critically, this is done by removing the specific
+# packages AFTER a plain `npm ci` (which correctly resolves @napi-rs/canvas's
+# per-platform native binary for whatever --platform this build targets), NOT via
+# `--omit=optional` — that flag strips every optional dep tree-wide, including
+# canvas's own required native binary (also marked optional, per npm's standard
+# convention for platform-specific packages), which would silently break rendering
+# on EVERY platform. kokoro-js's dynamic `await import("kokoro-js")` in
+# kokoroTts.ts is already error-handled (falls back to the tone/offline provider),
+# so physically removing its directory degrades exactly as gracefully as an
+# absent optional dep would, without touching canvas.
+# Build with --build-arg INCLUDE_KOKORO=1 (see docker-compose.yml's worker-kokoro
+# service) to keep kokoro-js + onnxruntime and run with SHOWMAN_TTS_PROVIDER=kokoro.
+ARG INCLUDE_KOKORO=0
+RUN npm ci --omit=dev \
+  && if [ "$INCLUDE_KOKORO" != "1" ]; then \
+    rm -rf node_modules/kokoro-js node_modules/onnxruntime-node node_modules/onnxruntime-common node_modules/onnxruntime-web; \
+  fi \
   && npm cache clean --force
 
 # Pinned, baked assets (fonts) + editable authoring prompts + compiled engine.
