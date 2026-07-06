@@ -143,6 +143,34 @@ func (d SceneFellBack) apply(s *JobContext) error {
 	return nil
 }
 
+// BeatRevised replaces a degraded scene's beat with the planner's revised version
+// (Roadmap C3: the one bounded re-plan rung) and resets everything downstream of the
+// beat — placements, spec, render, outcome, attempts — back to zero so runScene
+// genuinely starts over: select -> assemble -> render against the NEW beat, not a
+// stale mix of old placements and new goals.
+type BeatRevised struct {
+	Index int
+	Beat  SceneBeat
+}
+
+func (BeatRevised) Kind() string { return "BeatRevised" }
+
+func (d BeatRevised) apply(s *JobContext) error {
+	if err := checkIndex(s, d.Index); err != nil {
+		return err
+	}
+	sc := &s.Scenes[d.Index]
+	sc.Beat = d.Beat
+	sc.Placements = nil
+	sc.SpecHash = ""
+	sc.SpecBlob = ""
+	sc.Narration = SceneNarration{}
+	sc.Render = nil
+	sc.Outcome = SceneOutcome{}
+	sc.Attempts = 0
+	return nil
+}
+
 // JobFinalized installs the stitched final video and completes the job.
 type JobFinalized struct{ Final FinalAssembly }
 

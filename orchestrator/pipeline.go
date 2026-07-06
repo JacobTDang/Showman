@@ -83,6 +83,16 @@ func (p *Pipeline) run(ctx context.Context, s *JobContext) error {
 		return fmt.Errorf("all %d scenes degraded to fallback cards", len(s.Scenes))
 	}
 
+	// C3: one bounded re-plan rung. Only when the LLM actually produced this plan
+	// (ModelID carries the tier that won) — offline tiers never revise, since
+	// there's no model call to make a better second attempt with. Best-effort: a
+	// failed revision just leaves the fallback cards already in place (any store
+	// mutation still goes through Director.Apply, never a direct field write, so
+	// there's nothing unsafe to roll back).
+	if s.Plan != nil && strings.HasPrefix(s.Plan.ModelID, "llm-") {
+		_ = p.reviseDegraded(ctx, s)
+	}
+
 	// 5. Stitch (when configured).
 	if p.Stitcher != nil {
 		if err := p.Director.Apply(ctx, s, PhaseAdvanced{Phase: PhaseStitching}); err != nil {
@@ -123,6 +133,93 @@ func (p *Pipeline) runScenes(ctx context.Context, s *JobContext) error {
 	wg.Wait()
 	close(errs)
 	return <-errs // nil when the channel is empty
+}
+
+// reviseDegraded is Roadmap C3's bounded re-plan rung: if any scene degraded to a
+// fallback card, ask the planner (via the Reviser interface) to replace JUST those
+// beats once, then re-run select -> assemble -> render for exactly those scenes.
+// Bounded to a single revision per job — a prior BeatRevised in the history means
+// this job already had its one shot, win or lose.
+func (p *Pipeline) reviseDegraded(ctx context.Context, s *JobContext) error {
+	reviser, ok := p.Planner.(Reviser)
+	if !ok {
+		return nil // this planner (e.g. StubPlanner alone) never revises
+	}
+	for _, h := range s.History {
+		if h.Kind == "BeatRevised" {
+			return nil // already used this job's one revision round
+		}
+	}
+
+	var failed []FailedBeat
+	var indexes []int
+	for i, sc := range s.Scenes {
+		if sc.Outcome.Degraded {
+			failed = append(failed, FailedBeat{Beat: sc.Beat, Error: warningsForScene(s.Warnings, i)})
+			indexes = append(indexes, i)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+
+	revised, err := reviser.Revise(ctx, ReviseView{Request: s.Request, Failed: failed})
+	if err != nil {
+		return fmt.Errorf("revise: %w", err)
+	}
+	if len(revised) != len(indexes) {
+		return fmt.Errorf("revise: got %d beats, want %d", len(revised), len(indexes))
+	}
+
+	for k, i := range indexes {
+		if err := p.Director.Apply(ctx, s, BeatRevised{Index: i, Beat: revised[k]}); err != nil {
+			return err
+		}
+	}
+	return p.rerunScenes(ctx, s, indexes)
+}
+
+// warningsForScene returns every warning recorded for scene i, joined, as short
+// context for the reviser on why that beat failed. Warnings are formatted "scene %d
+// ..." or "scene %d: ..."; matching on those exact prefixes (not a bare substring)
+// avoids "scene 1" spuriously matching a warning about scene 10.
+func warningsForScene(warnings []string, i int) string {
+	prefix := fmt.Sprintf("scene %d ", i)
+	prefixColon := fmt.Sprintf("scene %d:", i)
+	var out []string
+	for _, w := range warnings {
+		if strings.HasPrefix(w, prefix) || strings.HasPrefix(w, prefixColon) {
+			out = append(out, w)
+		}
+	}
+	return strings.Join(out, "; ")
+}
+
+// rerunScenes re-drives select -> assemble -> render for exactly the given scene
+// indexes (used after a C3 revision) — the same bounded fan-out as runScenes, just
+// scoped to a subset instead of every scene.
+func (p *Pipeline) rerunScenes(ctx context.Context, s *JobContext, indexes []int) error {
+	concurrency := p.Concurrency
+	if concurrency <= 0 {
+		concurrency = 3
+	}
+	sem := make(chan struct{}, concurrency)
+	errs := make(chan error, len(indexes))
+	var wg sync.WaitGroup
+	for _, i := range indexes {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := p.runScene(ctx, s, index); err != nil {
+				errs <- fmt.Errorf("scene %d: %w", index, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	return <-errs
 }
 
 // runScene climbs the per-scene quality ladder:

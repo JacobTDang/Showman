@@ -14,7 +14,7 @@ import (
 const builtinPlannerSystem = `You are a lesson planner for short narrated educational videos for children.
 Given a topic and a query, output ONLY a single JSON object (no prose, no markdown fences):
 {"title":string,"theme":string,"throughline":string,"goals":[string],
- "scenes":[{"id":"beat-1","index":0,"title":string,"goal":string,"domainHint":"math|chem|physics|diagram|items (optional)",
+ "scenes":[{"id":"beat-1","index":0,"title":string,"goal":string,"domainHint":"math|chem|physics|diagram|chart|items (optional)",
             "keyPoints":[string],"narrationBeats":[string],"durationBudgetSec":number}],
  "narrationArc":{"intro":string,"outro":string}}
 Rules: 2-5 scenes; indexes 0-based and sequential; each scene's goal is one concrete, visualizable idea;
@@ -26,10 +26,22 @@ Available builders (pick by exact name and fill params from its schema):
 {{catalog}}
 
 Given the scene beat, output ONLY a JSON array (no prose, no fences) of 1-3 placements:
-[{"builder":"<exact catalog name>","params":{...},"slot":"center|left|right|top|bottom (optional)","caption":"short label (optional)","animate":"auto|popIn|springIn|fadeIn|spinIn|none (optional, default auto)"}]
+[{"builder":"<exact catalog name>","params":{...},"slot":"center|left|right|top|bottom|grid (optional)","caption":"short label (optional)","animate":"auto|popIn|springIn|fadeIn|spinIn|none (optional, default auto)"}]
 Rules: a scene-level builder [scene] must be used ALONE; node-level builders [node] may be combined.
 Prefer one well-parameterized builder over many. Params must match the builder's schema types.
-"animate" is the entrance style; "auto" also draws lines on, counts counters up, and sweeps arcs in.`
+"animate" is the entrance style; "auto" also draws lines on, counts counters up, and sweeps arcs in.
+"slot":"grid" auto-arranges every grid-slotted placement into a centered grid — use it for 2+ node
+placements that are peers (e.g. comparing several shapes) rather than a primary + supporting item.`
+
+const builtinReviserSystem = `You are revising specific beats of a lesson plan for a short narrated educational video for children.
+Each beat you are given already failed once (it degraded to a plain text card) and why.
+Given the topic, query, and the failed beats (with their errors), output ONLY a JSON array (no prose, no
+markdown fences) of replacement beats, ONE PER INPUT BEAT, IN THE SAME ORDER:
+[{"id":string,"index":number,"title":string,"goal":string,"domainHint":"math|chem|physics|diagram|chart|items (optional)",
+  "keyPoints":[string],"narrationBeats":[string],"durationBudgetSec":number}]
+Rules: keep each replacement's id/index the same as the beat it replaces; make the goal simpler and more
+concrete than the original — prefer a well-known builder over a novel one; do not repeat the same mistake
+described in its error.`
 
 // promptDir resolves the override directory (empty = use builtins only).
 func promptDir() string {
@@ -56,6 +68,11 @@ func PlannerSystemPrompt(budgetSec int) string {
 func SelectorSystemPrompt(catalogDigest string) string {
 	t := loadPrompt("selector-system.md", builtinSelectorSystem)
 	return strings.ReplaceAll(t, "{{catalog}}", catalogDigest)
+}
+
+// ReviserSystemPrompt returns the reviser system prompt (Roadmap C3).
+func ReviserSystemPrompt() string {
+	return loadPrompt("reviser-system.md", builtinReviserSystem)
 }
 
 func itoa(n int) string {
