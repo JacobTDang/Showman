@@ -14,7 +14,7 @@
 import type { ZodType, ZodTypeDef } from "zod";
 import type { Node, SceneSpec } from "../spec/types.js";
 
-export type CatalogDomain = "math" | "chem" | "physics" | "diagram" | "items";
+export type CatalogDomain = "math" | "chem" | "physics" | "diagram" | "chart" | "items";
 export type BuilderLevel = "scene" | "node";
 
 /** Local extents of a built node, used by the deterministic layout step. */
