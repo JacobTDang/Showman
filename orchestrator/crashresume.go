@@ -17,7 +17,9 @@ type JobLister interface {
 // re-drives every job that was neither finished nor legitimately paused when the
 // process last exited:
 //
-//   - Done / Error: terminal, left alone.
+//   - Done / Error with Options.Webhook set and not yet delivered: the process died
+//     between finalizing and delivering (E1) — retry the webhook only, once.
+//   - Done / Error otherwise: terminal, left alone.
 //   - Awaiting review (Resume set, ResumedAt nil): a human hasn't approved yet —
 //     left alone; still reachable via the normal POST .../resume endpoint.
 //   - Resume triggered but not finished (Resume set, ResumedAt set, not Done): the
@@ -47,6 +49,10 @@ func (s *Server) ResumeIncompleteJobs(ctx context.Context) (int, error) {
 			continue // corrupt/unreadable checkpoint: skip rather than fail the whole boot
 		}
 		if stored.Phase == PhaseDone || stored.Phase == PhaseError {
+			if stored.Request.Options.Webhook != "" && stored.WebhookDeliveredAt == nil {
+				resumed++
+				go s.Pipeline.deliverWebhook(ctx, stored)
+			}
 			continue
 		}
 		if stored.Resume != nil && stored.Resume.ResumedAt == nil {
@@ -72,6 +78,7 @@ func (s *Server) reconcileResume(jobID, token string) {
 	if _, err := s.Graph.Resume(bg, jobID, token); err != nil {
 		if loaded, loadErr := s.Checkpoint.Load(bg, jobID); loadErr == nil {
 			_ = s.Pipeline.Director.Apply(bg, loaded, JobFailed{Err: JobError{Node: "graph-resume", Message: err.Error()}})
+			s.Pipeline.deliverWebhook(bg, loaded)
 		}
 	}
 }

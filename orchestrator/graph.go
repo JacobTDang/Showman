@@ -144,11 +144,13 @@ func BuildGenerateGraph(ctx context.Context, p *Pipeline, store compose.CheckPoi
 			if err := p.Director.Apply(ctx, s, JobFinalized{Final: final}); err != nil {
 				return nil, err
 			}
+			p.deliverWebhook(ctx, s)
 			return s, nil
 		}
 		if err := p.Director.Apply(ctx, s, JobFinalized{Final: clipsOnlyAssembly(s)}); err != nil {
 			return nil, err
 		}
+		p.deliverWebhook(ctx, s)
 		return s, nil
 	})
 

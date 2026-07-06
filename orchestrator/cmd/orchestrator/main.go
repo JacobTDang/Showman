@@ -15,12 +15,18 @@
 //	OPENROUTER_API_KEY   enables the LLM tiers (optional)
 //	OPENROUTER_BASE_URL  OpenAI-compatible endpoint (default openrouter.ai/api/v1)
 //	OPENROUTER_MODEL     model id (default openai/gpt-oss-120b)
+//	SHOWMAN_WEBHOOK_SECRET     HMAC-signs webhook deliveries when set (optional;
+//	                           delivery still works unsigned without it)
+//	SHOWMAN_WEBHOOK_ALLOWLIST  comma-separated hostnames exempt from the SSRF guard's
+//	                           private/loopback-address check (optional, e.g. for
+//	                           local dev against "localhost")
 package main
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/compose"
@@ -58,12 +64,22 @@ func main() {
 		selector = orch.FallbackSelector{Tiers: []orch.DomainSelector{&orch.LLMSelector{Model: chat, Engine: engine}, orch.NewKeywordSelector(engine)}}
 	}
 
+	var allowlist []string
+	if raw := os.Getenv("SHOWMAN_WEBHOOK_ALLOWLIST"); raw != "" {
+		for _, h := range strings.Split(raw, ",") {
+			if h = strings.TrimSpace(h); h != "" {
+				allowlist = append(allowlist, h)
+			}
+		}
+	}
+
 	pipeline := &orch.Pipeline{
 		Director: orch.NewDirector(checkpoint, nil),
 		Planner:  planner,
 		Selector: selector,
 		Engine:   engine,
 		Stitcher: &orch.FFmpegStitcher{Fetcher: engine, OutDir: outDir},
+		Webhook:  &orch.WebhookSender{Secret: os.Getenv("SHOWMAN_WEBHOOK_SECRET"), Allowlist: allowlist},
 	}
 
 	ctx := context.Background()

@@ -159,7 +159,7 @@ func assertFtyp(path string) error {
 	if err != nil {
 		return fmt.Errorf("open video %q: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	head := make([]byte, 12)
 	if _, err := f.Read(head); err != nil {
 		return fmt.Errorf("read video %q: %w", path, err)
