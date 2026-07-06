@@ -61,6 +61,31 @@ func TestLLMPlannerParsesAndNormalizes(t *testing.T) {
 	}
 }
 
+func TestSmoothDurationsEvensRaggedBudgets(t *testing.T) {
+	// The observed live raggedness: 20 / 4.8 / 30 against a 60s budget.
+	scenes := []SceneBeat{{DurationBudgetSec: 20}, {DurationBudgetSec: 4.8}, {DurationBudgetSec: 30}}
+	smoothDurations(scenes, 60)
+	minD, maxD, sum := scenes[0].DurationBudgetSec, scenes[0].DurationBudgetSec, 0.0
+	for _, sc := range scenes {
+		if sc.DurationBudgetSec < minD {
+			minD = sc.DurationBudgetSec
+		}
+		if sc.DurationBudgetSec > maxD {
+			maxD = sc.DurationBudgetSec
+		}
+		sum += sc.DurationBudgetSec
+	}
+	if maxD/minD > 3.0 {
+		t.Fatalf("still ragged after smoothing: min=%.1f max=%.1f", minD, maxD)
+	}
+	if sum < 45 || sum > 75 {
+		t.Fatalf("total drifted from the 60s budget: %.1f", sum)
+	}
+	// Degenerate inputs are safe no-ops.
+	smoothDurations(nil, 60)
+	smoothDurations([]SceneBeat{{DurationBudgetSec: 10}}, 0)
+}
+
 func TestLLMPlannerRejectsGarbage(t *testing.T) {
 	p := &LLMPlanner{Model: &fakeChat{responses: []string{"I cannot help with that."}}}
 	if _, err := p.Plan(context.Background(), PlannerView{DefaultBudget: 60}); err == nil {
