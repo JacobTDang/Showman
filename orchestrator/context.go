@@ -23,7 +23,9 @@ const (
 // additive change — encoding/json leaves a missing field at its zero value (nil), so
 // a v1 checkpoint decodes into the current struct with Resume == nil (never
 // "awaiting review") with no migration code required. See TestV1CheckpointDecodesForward.
-const StoreSchemaVersion = 2
+//
+// v2 -> v3 (E1): added WebhookDeliveredAt. Also purely additive/nil-safe.
+const StoreSchemaVersion = 3
 
 // JobContext is the single, durable, strongly-typed state store for one generate job. It
 // is also the value used as the Eino graph's local state. Every field is typed; the only
@@ -53,6 +55,12 @@ type JobContext struct {
 	// POST /v1/jobs/:id/resume fires, ResumedAt is stamped (not cleared) so a second
 	// POST is a no-op read of current status rather than a double-trigger or a 409.
 	Resume *ResumeState `json:"resume,omitempty"`
+
+	// WebhookDeliveredAt is set once Options.Webhook has been successfully POSTed
+	// (E1). Nil means "not yet delivered" — checked before every delivery attempt
+	// (deliverWebhook, and B4's boot scan for a terminal job that never got to
+	// deliver before a restart) so the webhook fires exactly once.
+	WebhookDeliveredAt *time.Time `json:"webhookDeliveredAt,omitempty"`
 }
 
 // ResumeState records the HITL preview-gate token for one interrupted run.

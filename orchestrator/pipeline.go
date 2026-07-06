@@ -24,6 +24,10 @@ type Pipeline struct {
 	Canvas Canvas
 	// Concurrency bounds the per-scene fan-out. Zero -> 3.
 	Concurrency int
+	// Webhook, when set, delivers the terminal JobView to a job's requested
+	// Options.Webhook URL (Roadmap E1). Nil disables webhook delivery entirely,
+	// regardless of what a request asks for.
+	Webhook *WebhookSender
 }
 
 // Stitcher turns rendered scene clips into one final video (ffmpeg concat + mux).
@@ -44,8 +48,10 @@ func (p *Pipeline) Run(ctx context.Context, jobID string, req ExternalRequest) (
 	if err := p.run(ctx, s); err != nil {
 		// Terminal failure: record it in the store too, so poll/resume sees it.
 		_ = p.Director.Apply(ctx, s, JobFailed{Err: JobError{Node: "pipeline", Message: err.Error(), Retryable: false}})
+		p.deliverWebhook(ctx, s) // terminal JobView fires on failure too
 		return s, err
 	}
+	p.deliverWebhook(ctx, s)
 	return s, nil
 }
 

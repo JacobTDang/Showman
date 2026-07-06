@@ -179,6 +179,7 @@ func (s *Server) runViaGraph(jobID string, req ExternalRequest) {
 			return
 		}
 		_ = s.Pipeline.Director.Apply(ctx, loaded, JobFailed{Err: JobError{Node: "graph", Message: err.Error(), Retryable: false}})
+		s.Pipeline.deliverWebhook(ctx, loaded)
 	}
 }
 

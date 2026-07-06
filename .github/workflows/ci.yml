@@ -129,6 +129,14 @@ jobs:
       - name: gofmt (check)
         run: test -z "$(gofmt -l .)" || (echo 'gofmt found unformatted files:' && gofmt -l . && exit 1)
       - run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1
+          working-directory: orchestrator
+          # Also lints the D1/D2 eval test files (tag-gated, so plain `go vet`/`test`
+          # above skip them) — they're real code and shouldn't get a lint pass.
+          args: --build-tags=e2e,e2e_live
       # -race matters here: the pipeline fans scenes out concurrently and the Director's
       # single-writer guarantee is mutex-enforced — the detector proves it.
       - run: go test -race ./...

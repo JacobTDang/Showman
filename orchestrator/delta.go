@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Delta is a typed, serializable mutation intent. Nodes never mutate the store directly;
@@ -192,6 +193,18 @@ func (d JobFailed) apply(s *JobContext) error {
 	err := d.Err
 	s.Error = &err
 	s.Phase = PhaseError
+	return nil
+}
+
+// WebhookDelivered marks Options.Webhook as successfully delivered (Roadmap E1) —
+// checked before every delivery attempt so a job's webhook fires exactly once.
+type WebhookDelivered struct{ At time.Time }
+
+func (WebhookDelivered) Kind() string { return "WebhookDelivered" }
+
+func (d WebhookDelivered) apply(s *JobContext) error {
+	at := d.At
+	s.WebhookDeliveredAt = &at
 	return nil
 }
 
