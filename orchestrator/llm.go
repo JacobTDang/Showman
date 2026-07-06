@@ -140,6 +140,11 @@ func (s *LLMSelector) Select(ctx context.Context, view SelectorView) ([]BuilderP
 	system := SelectorSystemPrompt(view.CatalogDigest)
 	beatJSON, _ := json.Marshal(view.Beat)
 	user := "Scene beat:\n" + string(beatJSON)
+	if len(view.AvailableRefs) > 0 {
+		refsJSON, _ := json.Marshal(view.AvailableRefs)
+		user += "\n\nEntities already placed in an earlier scene, available to reuse via {\"ref\":\"key\"}\n" +
+			"(re-places the EXACT same visual; omit builder/params when using ref):\n" + string(refsJSON)
+	}
 	if len(view.Feedback) > 0 {
 		fb, _ := json.Marshal(view.Feedback)
 		user += "\n\nYour previous placements failed validation. Fix EXACTLY these errors:\n" + string(fb)

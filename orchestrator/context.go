@@ -25,7 +25,11 @@ const (
 // "awaiting review") with no migration code required. See TestV1CheckpointDecodesForward.
 //
 // v2 -> v3 (E1): added WebhookDeliveredAt. Also purely additive/nil-safe.
-const StoreSchemaVersion = 3
+//
+// v3 -> v4 (C4): added ContinuityState.Entities. Also purely additive/nil-safe (a
+// nil map reads as "no entities registered," which is exactly correct for a v3
+// checkpoint that predates the entity-reuse feature).
+const StoreSchemaVersion = 4
 
 // JobContext is the single, durable, strongly-typed state store for one generate job. It
 // is also the value used as the Eino graph's local state. Every field is typed; the only
@@ -96,6 +100,20 @@ type ContinuityState struct {
 	Palette Palette      `json:"palette"`
 	Canvas  Canvas       `json:"canvas"`
 	Recap   []RecapEntry `json:"recap"`
+	// Entities is Roadmap C4's entity-reuse registry: every successfully-built
+	// placement that carried a Ref gets registered here under that key (see
+	// SceneBuilt.apply). A later beat's selector may emit a placement with the
+	// SAME ref (and no builder/params of its own) to re-place the identical
+	// visual — SceneSelected.apply resolves it to the registered builder+params,
+	// so the same builder+params -> the same pixels via the engine's determinism.
+	Entities map[string]Entity `json:"entities,omitempty"`
+}
+
+// Entity is one registered reusable placement: exactly what it takes to rebuild the
+// identical visual (builder name + its exact params).
+type Entity struct {
+	Builder string         `json:"builder"`
+	Params  map[string]any `json:"params"`
 }
 
 // SceneState is the per-scene slice of the store.
