@@ -173,3 +173,47 @@ jobs:
         run: docker build -t showman-gateway:ci ./control-plane
       - name: Build orchestrator image
         run: docker build -t showman-orchestrator:ci ./orchestrator
+
+  # Roadmap E3: on a push to main (never on a PR — images only publish once code has
+  # actually landed), build + push each image to GHCR under both its commit sha and
+  # `:latest`. GITHUB_TOKEN already has registry access; packages: write is scoped to
+  # just this job (least privilege), not the whole workflow.
+  publish:
+    name: Publish images to GHCR
+    runs-on: ubuntu-latest
+    needs: images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build + push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/jacobtdang/showman:${{ github.sha }}
+            ghcr.io/jacobtdang/showman:latest
+      - name: Build + push gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./control-plane
+          push: true
+          tags: |
+            ghcr.io/jacobtdang/showman-gateway:${{ github.sha }}
+            ghcr.io/jacobtdang/showman-gateway:latest
+      - name: Build + push orchestrator image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./orchestrator
+          push: true
+          tags: |
+            ghcr.io/jacobtdang/showman-orchestrator:${{ github.sha }}
+            ghcr.io/jacobtdang/showman-orchestrator:latest

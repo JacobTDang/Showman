@@ -7,9 +7,15 @@
 # ---- builder ---------------------------------------------------------------
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
+# Roadmap E4: the default slim image omits optional deps (kokoro-js / onnxruntime,
+# ~+500MB) — local Kokoro TTS isn't bundled. Build with --build-arg
+# INCLUDE_KOKORO=1 (see docker-compose.yml's worker-kokoro service, or scripts/*
+# for a plain `docker build` invocation) to get a variant that has it, then run
+# that image with SHOWMAN_TTS_PROVIDER=kokoro to actually use it (ttsFactory.ts
+# already supports the "kokoro" provider — it was only ever missing from the image).
+ARG INCLUDE_KOKORO=0
 COPY package.json package-lock.json ./
-# Omit optional deps (kokoro-js / onnxruntime) — local Kokoro TTS isn't bundled in the slim image.
-RUN npm ci --omit=optional
+RUN if [ "$INCLUDE_KOKORO" = "1" ]; then npm ci; else npm ci --omit=optional; fi
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
@@ -17,6 +23,7 @@ RUN npm run build
 # ---- runtime ---------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
+ARG INCLUDE_KOKORO=0
 
 # FFmpeg is the encoder; fontconfig/libfontconfig1 = Skia (@napi-rs/canvas) text rendering on slim Debian.
 #
@@ -66,7 +73,8 @@ RUN set -eux; \
 
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --omit=optional && npm cache clean --force
+RUN if [ "$INCLUDE_KOKORO" = "1" ]; then npm ci --omit=dev; else npm ci --omit=dev --omit=optional; fi \
+  && npm cache clean --force
 
 # Pinned, baked assets (fonts) + editable authoring prompts + compiled engine.
 # assets/ and prompts/ must sit beside dist/ so they resolve at ../../ from the build.
