@@ -173,11 +173,92 @@ jobs:
         run: docker build -t showman-gateway:ci ./control-plane
       - name: Build orchestrator image
         run: docker build -t showman-orchestrator:ci ./orchestrator
+      - name: Build Kokoro worker image variant (Roadmap E4)
+        run: docker build --build-arg INCLUDE_KOKORO=1 -t showman:ci-kokoro .
+
+      # `docker build` succeeding only proves npm/apt didn't error — it does NOT
+      # prove native deps are actually present and loadable. A prior version of
+      # this Dockerfile used `--omit=optional`, which silently stripped canvas's
+      # native binary (canvas ships one per platform as ITS OWN optionalDependency,
+      # same convention as kokoro-js/onnxruntime) — the image built "successfully"
+      # on every run while being completely unable to render anything, and nothing
+      # in CI caught it. These checks run first: they fail in seconds with an exact
+      # "which module, which image" message, before the slower boot+HTTP tests below.
+      - name: Verify worker image native deps (canvas + ffmpeg)
+        run: |
+          docker run --rm showman:ci node -e "require('@napi-rs/canvas'); console.log('canvas: OK')"
+          docker run --rm showman:ci ffmpeg -version | head -n1
+      - name: Verify Kokoro variant has canvas AND kokoro-js/onnxruntime
+        run: |
+          docker run --rm showman:ci-kokoro node -e "require('@napi-rs/canvas'); console.log('canvas: OK')"
+          docker run --rm showman:ci-kokoro node -e "require.resolve('kokoro-js'); console.log('kokoro-js: OK')"
+          docker run --rm showman:ci-kokoro node -e "require.resolve('onnxruntime-node'); console.log('onnxruntime-node: OK')"
+      - name: Verify the default image stays slim (no kokoro-js/onnxruntime leak)
+        run: |
+          docker run --rm showman:ci sh -c '[ ! -d node_modules/kokoro-js ] && [ ! -d node_modules/onnxruntime-node ]' \
+            || (echo "kokoro-js/onnxruntime leaked into the default (non-Kokoro) image"; exit 1)
+
+      # Full end-to-end smoke test: boot the real worker image and drive it exactly
+      # like an external caller would — /healthz, /catalog, a /preview frame, and a
+      # complete brief -> MP4 job through /v1/generate (the offline template author,
+      # no API key needed) — then fetch the resulting object and verify it's a real,
+      # playable MP4. This is the level of proof "docker build succeeded" can't give.
+      - name: Smoke test worker image end to end
+        run: |
+          docker run -d --name smoke-worker -p 18080:8080 showman:ci
+          trap 'docker logs smoke-worker; docker rm -f smoke-worker' EXIT
+
+          for i in $(seq 1 15); do curl -sf http://localhost:18080/healthz && break; sleep 1; done
+          curl -sf http://localhost:18080/healthz
+
+          curl -sf http://localhost:18080/catalog -o /tmp/smoke-catalog.json
+          test -s /tmp/smoke-catalog.json
+
+          curl -sf -X POST http://localhost:18080/preview -H 'content-type: application/json' \
+            -d '{"spec":{"specVersion":1,"width":64,"height":64,"fps":10,"duration":1,"seed":1,"background":"#ffffff","nodes":[{"id":"t","type":"text","x":10,"y":10,"text":"ok","fontSize":16,"fill":"#000000"}]},"frame":0}' \
+            -o /tmp/smoke-preview.png
+          test -s /tmp/smoke-preview.png
+          head -c4 /tmp/smoke-preview.png | grep -aq PNG
+
+          # Full round trip: a brief becomes a real MP4, no key needed (offline
+          # template author). --max-time is generous — this actually renders frames
+          # and runs ffmpeg, unlike everything else in this step.
+          curl -sf -X POST http://localhost:18080/v1/generate -H 'content-type: application/json' \
+            -d '{"brief":"count to three with stars"}' -o /tmp/smoke-generate.json --max-time 180
+          VIDEO_KEY=$(jq -r '.video.key' /tmp/smoke-generate.json)
+          DURATION=$(jq -r '.durationSec' /tmp/smoke-generate.json)
+          HAS_AUDIO=$(jq -r '.hasAudio' /tmp/smoke-generate.json)
+          test -n "$VIDEO_KEY" && [ "$VIDEO_KEY" != "null" ] || (echo "no video.key in /v1/generate response"; cat /tmp/smoke-generate.json; exit 1)
+          echo "generated $VIDEO_KEY (${DURATION}s, hasAudio=${HAS_AUDIO})"
+
+          curl -sf "http://localhost:18080/objects/${VIDEO_KEY}" -o /tmp/smoke-video.mp4
+          test -s /tmp/smoke-video.mp4
+          head -c8 /tmp/smoke-video.mp4 | tail -c4 | grep -aq ftyp || (echo "fetched object is not a valid MP4 (missing ftyp box)"; exit 1)
+
+      # The gateway and orchestrator images were never actually BOOTED in CI before
+      # today — only `docker build` was checked. A binary that builds but panics on
+      # startup (bad ENTRYPOINT, missing env handling, etc.) would have passed CI.
+      - name: Smoke test gateway image
+        run: |
+          docker run -d --name smoke-gateway -p 18082:8080 showman-gateway:ci
+          trap 'docker logs smoke-gateway; docker rm -f smoke-gateway' EXIT
+          for i in $(seq 1 10); do curl -sf http://localhost:18082/healthz && break; sleep 1; done
+          curl -sf http://localhost:18082/healthz
+      - name: Smoke test orchestrator image
+        run: |
+          docker run -d --name smoke-orchestrator -p 18091:8090 showman-orchestrator:ci
+          trap 'docker logs smoke-orchestrator; docker rm -f smoke-orchestrator' EXIT
+          for i in $(seq 1 10); do curl -sf http://localhost:18091/healthz && break; sleep 1; done
+          curl -sf http://localhost:18091/healthz
 
   # Roadmap E3: on a push to main (never on a PR — images only publish once code has
   # actually landed), build + push each image to GHCR under both its commit sha and
   # `:latest`. GITHUB_TOKEN already has registry access; packages: write is scoped to
   # just this job (least privilege), not the whole workflow.
+  #
+  # Multi-platform (linux/amd64 + linux/arm64, so it runs natively on Apple Silicon
+  # too): buildx + QEMU emulation build both, pushed as one manifest list per tag —
+  # `docker pull` on either architecture resolves to the matching image automatically.
   publish:
     name: Publish images to GHCR
     runs-on: ubuntu-latest
@@ -188,6 +269,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -197,6 +280,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/jacobtdang/showman:${{ github.sha }}
@@ -205,6 +289,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./control-plane
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/jacobtdang/showman-gateway:${{ github.sha }}
@@ -213,6 +298,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./orchestrator
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ghcr.io/jacobtdang/showman-orchestrator:${{ github.sha }}
