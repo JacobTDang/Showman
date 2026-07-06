@@ -28,6 +28,8 @@ import { pendulumTool, massSpringTool } from "./physics/oscillators.tool.js";
 import { rayDiagramTool, bohrAtomTool, energyLevelsTool, emSpectrumTool } from "./physics/optics.tool.js";
 import { projectileTool } from "./physics/projectile.tool.js";
 import { circuitTool } from "./physics/circuit.tool.js";
+import { motionGraphTool } from "./physics/motionGraph.tool.js";
+import { vectorFieldTool } from "./physics/vectorField.tool.js";
 import { moleculeTool } from "./chem/molecule.tool.js";
 import {
   lewisStructureTool,
@@ -75,6 +77,8 @@ const PHYSICS_NODE_TOOLS: BuilderTool[] = [
   emSpectrumTool,
   projectileTool,
   circuitTool,
+  motionGraphTool,
+  vectorFieldTool,
 ];
 
 /** Chem node-level tools beyond reaction (Roadmap A3: the chem wave). */

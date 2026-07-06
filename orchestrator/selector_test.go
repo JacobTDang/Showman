@@ -70,6 +70,12 @@ func expandedCatalog() []CatalogEntry {
 		{Name: "physics.circuit", Domain: DomainPhysics, Level: "node", Keywords: []string{
 			"circuit", "series circuit", "resistor", "battery", "switch", "capacitor", "diode", "wire", "electricity", "voltage", "current",
 		}},
+		{Name: "physics.motionGraph", Domain: DomainPhysics, Level: "node", Keywords: []string{
+			"motion graph", "position vs time", "velocity vs time", "acceleration vs time", "position time graph", "velocity time graph", "kinematics", "moving man", "x-t graph", "v-t graph",
+		}},
+		{Name: "physics.vectorField", Domain: DomainPhysics, Level: "node", Keywords: []string{
+			"vector field", "field lines", "electric field", "magnetic field", "gravitational field", "flow field", "field arrows", "vortex", "dipole field",
+		}},
 		{Name: "chem.energyDiagram", Domain: DomainChem, Level: "node", Keywords: []string{
 			"energy diagram", "activation energy", "reaction coordinate", "transition state", "catalyst", "exothermic", "endothermic",
 		}},
@@ -123,6 +129,8 @@ func TestKeywordSelectorScalesAcrossExpandedCatalog(t *testing.T) {
 		{"draw the molecule structure for water using smiles", "chem.molecule"},
 		{"wire a series circuit with a battery and a resistor", "physics.circuit"},
 		{"show the energy bars for kinetic and potential energy conservation", "physics.energyBars"},
+		{"show the position vs time and velocity vs time motion graph for kinematics", "physics.motionGraph"},
+		{"draw the electric field lines around a point charge as a vector field", "physics.vectorField"},
 	}
 	for _, c := range cases {
 		got, err := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: c.goal}})
