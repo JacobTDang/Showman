@@ -1,0 +1,63 @@
+name: Live evals (LLM tiers)
+
+# Roadmap D2: the same shape as the offline eval (ci.yml's "Offline e2e eval" step),
+# but through the LLM tiers instead of StubPlanner/KeywordSelector — real planner
+# coherence + selector-correctness scoring against a rotating key.
+#
+# Pre-wired but DORMANT: the check-key job below inspects secrets.OPENROUTER_API_KEY
+# and every other job is gated on it via `needs` + `if`. Without a key configured,
+# this workflow always reports as skipped (neutral), never red — the day a key is
+# added under that name, nightly runs (and manual dispatches) just start working.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 7 * * *" # nightly, off the hour to avoid the shared GH Actions rush
+
+jobs:
+  check-key:
+    name: Check for OPENROUTER_API_KEY
+    runs-on: ubuntu-latest
+    outputs:
+      has_key: ${{ steps.check.outputs.has_key }}
+    steps:
+      - name: Check secret presence
+        id: check
+        run: |
+          echo "has_key=${{ secrets.OPENROUTER_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ secrets.OPENROUTER_API_KEY != '' }}" = "true" ]; then
+            echo "OPENROUTER_API_KEY is set — live eval will run."
+          else
+            echo "OPENROUTER_API_KEY is not set — live eval stays dormant (expected until a key is rotated in)."
+          fi
+
+  live-eval:
+    name: Live e2e eval (Go orchestrator, LLM tiers)
+    needs: check-key
+    if: needs.check-key.outputs.has_key == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: orchestrator/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install ffmpeg (stitcher dependency)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install TS deps (for the real engine the eval boots)
+        run: npm ci
+      - name: Live e2e eval (D2)
+        working-directory: orchestrator
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
+          OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+        run: go test -tags e2e_live -run TestLiveE2EEval -v -timeout 900s ./...
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orchestrator-live-eval-scorecards
+          path: orchestrator/eval-live-scorecards.json
+          if-no-files-found: warn
