@@ -88,6 +88,7 @@ func normalizePlan(plan LessonPlan, view PlannerView) (LessonPlan, error) {
 			sc.DurationBudgetSec = clampSec(float64(view.DefaultBudget)/float64(len(plan.Scenes)), 3, 30)
 		}
 	}
+	smoothDurations(plan.Scenes, float64(view.DefaultBudget))
 	switch plan.Theme {
 	case "sunshine", "meadow", "ocean", "berry":
 	default:
@@ -99,6 +100,30 @@ func normalizePlan(plan LessonPlan, view PlannerView) (LessonPlan, error) {
 	plan.TotalDurationBudgetSec = float64(view.DefaultBudget)
 	plan.ModelID = "llm-planner/v1"
 	return plan, nil
+}
+
+// durationRatioFactor bounds each scene to [avg/f, avg*f]. Since max/min <= f*f for any
+// two values drawn from that band, f = sqrt(3) keeps the worst-case ratio at 3 by
+// construction — not by hoping a scale-then-clamp pass doesn't let an extreme escape.
+const durationRatioFactor = 1.7 // sqrt(3) ~= 1.732; 1.7 leaves a small safety margin
+
+// smoothDurations evens out ragged LLM scene budgets (C1: a live run produced
+// 20s/4.8s/30s against a 60s total). Every scene is clamped into a band around the
+// per-scene average (totalBudget/n), so the resulting max/min ratio is bounded
+// regardless of how ragged the model's raw numbers were. The assembler still
+// stretches any scene whose narration genuinely needs more time — this smooths
+// targets, it does not cut speech.
+func smoothDurations(scenes []SceneBeat, totalBudget float64) {
+	n := len(scenes)
+	if n == 0 || totalBudget <= 0 {
+		return
+	}
+	avg := totalBudget / float64(n)
+	lo, hi := avg/durationRatioFactor, avg*durationRatioFactor
+	for i := range scenes {
+		v := clampSec(scenes[i].DurationBudgetSec, lo, hi)
+		scenes[i].DurationBudgetSec = clampSec(v, 3, 30) // absolute floor/ceiling
+	}
 }
 
 // LLMSelector picks builders for one beat with one chat call, validated against the
