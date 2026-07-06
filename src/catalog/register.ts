@@ -28,6 +28,17 @@ import { pendulumTool, massSpringTool } from "./physics/oscillators.tool.js";
 import { rayDiagramTool, bohrAtomTool, energyLevelsTool, emSpectrumTool } from "./physics/optics.tool.js";
 import { projectileTool } from "./physics/projectile.tool.js";
 import { circuitTool } from "./physics/circuit.tool.js";
+import { moleculeTool } from "./chem/molecule.tool.js";
+import {
+  lewisStructureTool,
+  phScaleTool,
+  energyDiagramTool,
+  periodicTableTool,
+  vseprShapeTool,
+  electronConfigTool,
+} from "./chem/diagrams.tool.js";
+import { titrationCurveTool, heatingCurveTool, phaseDiagramTool } from "./chem/curves.tool.js";
+import { apparatusTool } from "./chem/apparatus.tool.js";
 
 /** Node-level tools beyond the original numberLine (Roadmap A1: the math wave). */
 const MATH_NODE_TOOLS: BuilderTool[] = [
@@ -64,6 +75,21 @@ const PHYSICS_NODE_TOOLS: BuilderTool[] = [
   circuitTool,
 ];
 
+/** Chem node-level tools beyond reaction (Roadmap A3: the chem wave). */
+const CHEM_NODE_TOOLS: BuilderTool[] = [
+  moleculeTool,
+  lewisStructureTool,
+  phScaleTool,
+  energyDiagramTool,
+  periodicTableTool,
+  vseprShapeTool,
+  electronConfigTool,
+  titrationCurveTool,
+  heatingCurveTool,
+  phaseDiagramTool,
+  apparatusTool,
+];
+
 /** Build a fresh registry with all known tools registered. */
 export function createDefaultRegistry(): BuilderRegistry {
   const registry = new BuilderRegistry();
@@ -73,6 +99,7 @@ export function createDefaultRegistry(): BuilderRegistry {
   for (const tool of mathLessonTools) registry.register(tool);
   for (const tool of MATH_NODE_TOOLS) registry.register(tool);
   for (const tool of PHYSICS_NODE_TOOLS) registry.register(tool);
+  for (const tool of CHEM_NODE_TOOLS) registry.register(tool);
   return registry;
 }
 
