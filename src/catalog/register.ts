@@ -39,6 +39,8 @@ import {
 } from "./chem/diagrams.tool.js";
 import { titrationCurveTool, heatingCurveTool, phaseDiagramTool } from "./chem/curves.tool.js";
 import { apparatusTool } from "./chem/apparatus.tool.js";
+import { boxTool, tableTool, connectorTool, flowchartTool } from "./diagram/shapes.tool.js";
+import { barChartTool, lineChartTool, areaChartTool, scatterChartTool } from "./chart/charts.tool.js";
 
 /** Node-level tools beyond the original numberLine (Roadmap A1: the math wave). */
 const MATH_NODE_TOOLS: BuilderTool[] = [
@@ -90,6 +92,12 @@ const CHEM_NODE_TOOLS: BuilderTool[] = [
   apparatusTool,
 ];
 
+/** Diagram node-level tools (Roadmap A4: the diagram/chart wave). */
+const DIAGRAM_NODE_TOOLS: BuilderTool[] = [boxTool, tableTool, connectorTool, flowchartTool];
+
+/** Chart node-level tools (Roadmap A4: the diagram/chart wave). */
+const CHART_NODE_TOOLS: BuilderTool[] = [barChartTool, lineChartTool, areaChartTool, scatterChartTool];
+
 /** Build a fresh registry with all known tools registered. */
 export function createDefaultRegistry(): BuilderRegistry {
   const registry = new BuilderRegistry();
@@ -100,6 +108,8 @@ export function createDefaultRegistry(): BuilderRegistry {
   for (const tool of MATH_NODE_TOOLS) registry.register(tool);
   for (const tool of PHYSICS_NODE_TOOLS) registry.register(tool);
   for (const tool of CHEM_NODE_TOOLS) registry.register(tool);
+  for (const tool of DIAGRAM_NODE_TOOLS) registry.register(tool);
+  for (const tool of CHART_NODE_TOOLS) registry.register(tool);
   return registry;
 }
 

@@ -9,12 +9,13 @@ const (
 	DomainChem    Domain = "chem"
 	DomainPhysics Domain = "physics"
 	DomainDiagram Domain = "diagram"
+	DomainChart   Domain = "chart"
 	DomainItems   Domain = "items"
 )
 
 // AllDomains returns every domain in stable order.
 func AllDomains() []Domain {
-	return []Domain{DomainMath, DomainChem, DomainPhysics, DomainDiagram, DomainItems}
+	return []Domain{DomainMath, DomainChem, DomainPhysics, DomainDiagram, DomainChart, DomainItems}
 }
 
 // Audience tunes pedagogy and the content-safety profile.

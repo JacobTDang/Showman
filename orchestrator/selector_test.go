@@ -46,6 +46,95 @@ func realishCatalog() []CatalogEntry {
 
 func sel() *KeywordSelector { return NewKeywordSelector(&stubEngine{tools: realishCatalog()}) }
 
+// expandedCatalog mirrors the REAL keyword sets (copied verbatim from the TS tool
+// files) for a representative slice of every domain the catalog grew into across
+// Roadmap A1-A4 (~90 tools total by A4; this is the subset most likely to collide on
+// shared words like "graph"/"table"/"energy"/"line"). Roadmap A5: the offline
+// selector must still discriminate correctly at this scale, not just against the
+// original 7-tool fixture.
+func expandedCatalog() []CatalogEntry {
+	return []CatalogEntry{
+		{Name: "math.functionGraph", Domain: DomainMath, Level: "node", Keywords: []string{
+			"graph", "plot", "coordinate plane", "y = mx + b", "line", "slope", "parabola", "quadratic", "y = ax^2", "function", "curve", "points", "scatter",
+		}},
+		{Name: "math.numberLine", Domain: DomainMath, Level: "node", Keywords: []string{"number line", "interval"}},
+		{Name: "math.balanceScale", Domain: DomainMath, Level: "node", Keywords: []string{
+			"balance", "scale", "equation", "solve", "unknown", "variable", "equal", "compare", "weigh",
+		}},
+		{Name: "physics.rayDiagram", Domain: DomainPhysics, Level: "node", Keywords: []string{
+			"lens", "ray diagram", "optics", "focal length", "image formation", "converging", "diverging", "refraction",
+		}},
+		{Name: "physics.energyBars", Domain: DomainPhysics, Level: "node", Keywords: []string{
+			"energy", "kinetic", "potential", "conservation", "bar chart", "KE", "PE", "thermal",
+		}},
+		{Name: "physics.circuit", Domain: DomainPhysics, Level: "node", Keywords: []string{
+			"circuit", "series circuit", "resistor", "battery", "switch", "capacitor", "diode", "wire", "electricity", "voltage", "current",
+		}},
+		{Name: "chem.energyDiagram", Domain: DomainChem, Level: "node", Keywords: []string{
+			"energy diagram", "activation energy", "reaction coordinate", "transition state", "catalyst", "exothermic", "endothermic",
+		}},
+		{Name: "chem.periodicTable", Domain: DomainChem, Level: "node", Keywords: []string{
+			"periodic table", "element", "atomic number", "group", "period", "metals", "nonmetals",
+		}},
+		{Name: "chem.molecule", Domain: DomainChem, Level: "node", Keywords: []string{
+			"molecule", "structure", "compound", "smiles", "atoms", "bonds", "chemical structure",
+		}},
+		{Name: "diagram.table", Domain: DomainDiagram, Level: "node", Keywords: []string{
+			"table", "grid", "rows", "columns", "data table", "spreadsheet",
+		}},
+		{Name: "diagram.flowchart", Domain: DomainDiagram, Level: "node", Keywords: []string{
+			"flowchart", "flow chart", "process diagram", "steps", "boxes and arrows", "workflow",
+		}},
+		{Name: "chart.bar", Domain: DomainChart, Level: "node", Keywords: []string{
+			"bar chart", "bars", "categories", "compare", "stacked bar", "data",
+		}},
+		{Name: "chart.line", Domain: DomainChart, Level: "node", Keywords: []string{
+			"line chart", "trend", "time series", "plot", "series", "data over time",
+		}},
+		{Name: "chart.scatter", Domain: DomainChart, Level: "node", Keywords: []string{
+			"scatter plot", "scatter chart", "correlation", "points", "distribution", "clusters",
+		}},
+		{Name: "items.card", Domain: DomainItems, Level: "node", Keywords: []string{"card", "summary", "takeaway"}},
+	}
+}
+
+func expandedSel() *KeywordSelector { return NewKeywordSelector(&stubEngine{tools: expandedCatalog()}) }
+
+// TestKeywordSelectorScalesAcrossExpandedCatalog proves keyword scoring (sum of
+// matched-keyword lengths, longest/most-specific phrase wins) still discriminates
+// correctly once the catalog holds many domains with overlapping vocabulary — e.g.
+// "periodic table" (chem.periodicTable, 14 chars) must beat "table" (diagram.table,
+// 5 chars) even though both match text containing "periodic table".
+func TestKeywordSelectorScalesAcrossExpandedCatalog(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		goal string
+		want string
+	}{
+		{"show the periodic table of elements and highlight sodium", "chem.periodicTable"},
+		{"plot the line y = 2x + 1 on a coordinate plane", "math.functionGraph"},
+		{"draw a ray diagram for a converging lens with focal length 10", "physics.rayDiagram"},
+		{"show the reaction energy diagram with the activation energy peak", "chem.energyDiagram"},
+		{"chart the quarterly revenue as a bar chart across categories", "chart.bar"},
+		{"plot temperature as a line chart trend over time", "chart.line"},
+		{"draw a scatter plot showing the correlation between two variables", "chart.scatter"},
+		{"draw a flowchart of the steps in the process", "diagram.flowchart"},
+		{"put the results in a data table with rows and columns", "diagram.table"},
+		{"draw the molecule structure for water using smiles", "chem.molecule"},
+		{"wire a series circuit with a battery and a resistor", "physics.circuit"},
+		{"show the energy bars for kinetic and potential energy conservation", "physics.energyBars"},
+	}
+	for _, c := range cases {
+		got, err := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: c.goal}})
+		if err != nil {
+			t.Fatalf("%q: %v", c.goal, err)
+		}
+		if got[0].Builder != c.want {
+			t.Errorf("%q: want %s, got %s", c.goal, c.want, got[0].Builder)
+		}
+	}
+}
+
 func TestKeywordSelectorPicksByKeywordsAndExtractsParams(t *testing.T) {
 	ctx := context.Background()
 

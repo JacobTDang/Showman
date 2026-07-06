@@ -35,8 +35,8 @@ func TestPlanViewUsesRequestedBudget(t *testing.T) {
 	if got := PlanView(empty).DefaultBudget; got != defaultBudgetSec {
 		t.Fatalf("want default budget %d, got %d", defaultBudgetSec, got)
 	}
-	if len(PlanView(empty).Domains) != 5 {
-		t.Fatalf("expected all 5 domains")
+	if len(PlanView(empty).Domains) != len(AllDomains()) {
+		t.Fatalf("expected all %d domains", len(AllDomains()))
 	}
 }
 
