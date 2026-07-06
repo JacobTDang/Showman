@@ -74,6 +74,12 @@ func main() {
 	}
 	server := &orch.Server{Pipeline: pipeline, Graph: graph, Checkpoint: checkpoint}
 
+	if resumed, err := server.ResumeIncompleteJobs(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "orchestrator: crash-resume scan:", err)
+	} else if resumed > 0 {
+		fmt.Printf("[showman-orchestrator] crash-resume: re-driving %d incomplete job(s)\n", resumed)
+	}
+
 	ln, _, err := server.Listen(":" + port)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "orchestrator: listen:", err)

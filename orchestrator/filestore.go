@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Persistent stores (Roadmap B1): a job restart must not lose in-flight work. Both
@@ -46,7 +47,27 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.Chmod(tmpPath, perm); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	return renameRetrying(tmpPath, path)
+}
+
+// renameRetrying wraps os.Rename with a short retry: on Windows, replacing a file
+// that another goroutine currently has open for reading (a poller's Load racing this
+// write) can fail transiently with "Access is denied" — POSIX allows renaming over an
+// open file, NTFS does not always. The reader's handle is only ever open for the
+// instant of one os.ReadFile call, so a few-millisecond retry window rides out the
+// conflict without weakening atomicity (each attempt is still a single os.Rename).
+func renameRetrying(oldpath, newpath string) error {
+	var err error
+	for i := 0; i < 20; i++ {
+		if err = os.Rename(oldpath, newpath); err == nil {
+			return nil
+		}
+		if !os.IsPermission(err) {
+			return err
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	return err
 }
 
 // FileCheckpointStore persists JobContext as one JSON file per job under
