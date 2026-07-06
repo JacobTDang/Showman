@@ -133,6 +133,25 @@ jobs:
       # single-writer guarantee is mutex-enforced — the detector proves it.
       - run: go test -race ./...
       - run: go build ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install TS deps (for the real engine the eval boots)
+        working-directory: .
+        run: npm ci
+      # Roadmap D1: boots the real engine (node --import tsx/esm worker.ts, the
+      # production entrypoint) + drives the orchestrator's own HTTP surface with
+      # offline tiers over a 6-topic suite — the smoke-eval of the whole binary
+      # surface, without Docker. Gated behind the "e2e" build tag so it doesn't run
+      # as part of the regular `go test ./...` above.
+      - name: Offline e2e eval (D1)
+        run: go test -tags e2e -run TestOfflineE2EEval -v -timeout 300s ./...
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orchestrator-eval-scorecards
+          path: orchestrator/eval-scorecards.json
+          if-no-files-found: warn
 
   images:
     name: Build container images

@@ -18,3 +18,6 @@ db_cache/
 
 # Golden test scratch output (regenerated, never committed except the blessed goldens)
 test/golden/__received__/
+
+# D1 offline e2e eval artifact (regenerated every run; uploaded as a CI artifact, not committed)
+orchestrator/eval-scorecards.json

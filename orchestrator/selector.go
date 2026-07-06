@@ -126,6 +126,25 @@ func extractParams(builder, text string) map[string]any {
 				params["denominator"] = d
 			}
 		}
+	// The A1 math wave added node-level fraction tools (fractionCircle/fractionBar/
+	// numberLineFraction) with keywords overlapping fractionLesson's ("fraction",
+	// "pie") — the offline selector can legitimately pick any of them for a beat
+	// whose text carries no actual fraction (a generic intro/recap beat matched on
+	// "fraction" alone). Unlike fractionLesson, these three REQUIRE the pair with
+	// no schema default, so a miss here is a guaranteed validation failure, not a
+	// cosmetic gap — fall back to a generic 1/2 so the offline tier never picks a
+	// tool it then can't build.
+	case "math.fractionCircle", "math.fractionBar", "math.numberLineFraction":
+		params["numerator"] = 1
+		params["denominator"] = 2
+		if m := fractionRe.FindStringSubmatch(text); m != nil {
+			if n, err := strconv.Atoi(m[1]); err == nil {
+				params["numerator"] = n
+			}
+			if d, err := strconv.Atoi(m[2]); err == nil && d > 0 {
+				params["denominator"] = d
+			}
+		}
 	case "math.quadraticLesson":
 		if m := quadraticRe.FindStringSubmatch(text); m != nil {
 			if a, err := strconv.ParseFloat(m[1], 64); err == nil {
