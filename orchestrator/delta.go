@@ -66,7 +66,24 @@ func (d SceneSelected) apply(s *JobContext) error {
 	if err := checkIndex(s, d.Index); err != nil {
 		return err
 	}
-	s.Scenes[d.Index].Placements = d.Placements
+	// C4 entity reuse: a placement with a Ref but no Builder of its own is a
+	// reuse reference — resolve it against a previously registered entity so it
+	// re-places the IDENTICAL visual (same builder+params -> same pixels via the
+	// engine's determinism). An unresolvable ref (never registered, or a typo)
+	// is left as an empty builder name, which /assemble rejects as a structured
+	// validation error — the normal failure ladder (re-correct -> fallback card)
+	// already handles that, so no special-casing is needed here.
+	placements := make([]BuilderPlacement, len(d.Placements))
+	for i, p := range d.Placements {
+		if p.Ref != "" && p.Builder == "" {
+			if ent, ok := s.Continuity.Entities[p.Ref]; ok {
+				p.Builder = ent.Builder
+				p.Params = ent.Params
+			}
+		}
+		placements[i] = p
+	}
+	s.Scenes[d.Index].Placements = placements
 	return nil
 }
 
@@ -91,6 +108,20 @@ func (d SceneBuilt) apply(s *JobContext) error {
 	sc.SpecBlob = string(d.SpecBlob)
 	sc.Outcome = d.Outcome
 	s.Continuity.Recap = append(s.Continuity.Recap, d.Recap)
+	// C4 entity reuse: register every successfully-built placement that carried a
+	// Ref, so a LATER beat can re-place the identical visual. Only reached once
+	// assemble has actually succeeded (this delta fires after a valid spec comes
+	// back), so a degraded/fallback-card scene never registers or overwrites an
+	// entity under its original ref.
+	for _, p := range sc.Placements {
+		if p.Ref == "" || p.Builder == "" {
+			continue
+		}
+		if s.Continuity.Entities == nil {
+			s.Continuity.Entities = map[string]Entity{}
+		}
+		s.Continuity.Entities[p.Ref] = Entity{Builder: p.Builder, Params: p.Params}
+	}
 	return nil
 }
 

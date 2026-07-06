@@ -115,13 +115,23 @@ func (p *Pipeline) run(ctx context.Context, s *JobContext) error {
 	return p.Director.Apply(ctx, s, JobFinalized{Final: clipsOnlyAssembly(s)})
 }
 
-// runScenes fans the per-scene work out with bounded concurrency and returns the first
-// hard error (ladder-exhausted scenes degrade instead of erroring).
+// runScenes fans the per-scene work out with bounded concurrency and returns the
+// first hard error (ladder-exhausted scenes degrade instead of erroring). Scenes
+// whose beat declares DependsOn (by beat ID, only ever backward — see
+// dependencyIndex) wait for those specific scenes to finish before starting, so a
+// beat that reuses an earlier beat's registered entity (C4) is guaranteed to see
+// that registration; everything else still fans out fully concurrently.
 func (p *Pipeline) runScenes(ctx context.Context, s *JobContext) error {
 	concurrency := p.Concurrency
 	if concurrency <= 0 {
 		concurrency = 3
 	}
+	depIndex := dependencyIndex(s.Scenes)
+	done := make([]chan struct{}, len(s.Scenes))
+	for i := range done {
+		done[i] = make(chan struct{})
+	}
+
 	sem := make(chan struct{}, concurrency)
 	errs := make(chan error, len(s.Scenes))
 	var wg sync.WaitGroup
@@ -131,6 +141,14 @@ func (p *Pipeline) runScenes(ctx context.Context, s *JobContext) error {
 		go func(index int) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer close(done[index])
+			for _, depIdx := range depIndex[index] {
+				select {
+				case <-done[depIdx]:
+				case <-ctx.Done():
+					return
+				}
+			}
 			if err := p.runScene(ctx, s, index); err != nil {
 				errs <- fmt.Errorf("scene %d: %w", index, err)
 			}
@@ -410,6 +428,30 @@ func checkPolicies(beat SceneBeat, placements []BuilderPlacement) []ValidationEr
 		}
 	}
 	return errs
+}
+
+// dependencyIndex resolves each scene's Beat.DependsOn (beat IDs) to scene indexes,
+// for runScenes' fan-out to wait on. Only BACKWARD references (an earlier scene
+// index) count — a forward or self reference is dropped rather than honored, which
+// is what makes waiting on these indexes deadlock-safe: every dependency a scene
+// waits on was already launched (in index order) before that scene's own goroutine
+// started waiting.
+func dependencyIndex(scenes []SceneState) [][]int {
+	idToIndex := make(map[string]int, len(scenes))
+	for i, sc := range scenes {
+		if sc.Beat.ID != "" {
+			idToIndex[sc.Beat.ID] = i
+		}
+	}
+	deps := make([][]int, len(scenes))
+	for i, sc := range scenes {
+		for _, id := range sc.Beat.DependsOn {
+			if depIdx, ok := idToIndex[id]; ok && depIdx < i {
+				deps[i] = append(deps[i], depIdx)
+			}
+		}
+	}
+	return deps
 }
 
 func allDegraded(scenes []SceneState) bool {

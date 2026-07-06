@@ -20,13 +20,17 @@ type PlannerView struct {
 // SelectorView is what the Domain Selector sees for one beat: the beat, the (compact,
 // domain-filtered) catalog digest, the last few recap lines, and the theme. Feedback
 // carries the previous attempt's validation errors on a re-correct pass (empty on the
-// first attempt).
+// first attempt). AvailableRefs is Roadmap C4's entity-reuse registry (ref key ->
+// the builder it was registered under) — the offline KeywordSelector ignores it
+// entirely; the LLM selector's prompt documents the {"ref":"key"} syntax so the
+// model can re-place one of these entities' exact visual instead of building anew.
 type SelectorView struct {
 	Beat          SceneBeat         `json:"beat"`
 	CatalogDigest string            `json:"catalogDigest"`
 	RecapTail     []RecapEntry      `json:"recapTail"`
 	Theme         string            `json:"theme"`
 	Feedback      []ValidationError `json:"feedback,omitempty"`
+	AvailableRefs map[string]string `json:"availableRefs,omitempty"`
 }
 
 // AssemblerInput is the deterministic Scene Assembler's input (no LLM). It is shipped to
@@ -53,11 +57,19 @@ func PlanView(s *JobContext) PlannerView {
 // SelectView projects the store for the Domain Selector at scene index. The caller supplies
 // the (engine-fetched) catalog digest so the projection stays pure.
 func SelectView(s *JobContext, index int, catalogDigest string) SelectorView {
+	var refs map[string]string
+	if len(s.Continuity.Entities) > 0 {
+		refs = make(map[string]string, len(s.Continuity.Entities))
+		for key, ent := range s.Continuity.Entities {
+			refs[key] = ent.Builder
+		}
+	}
 	return SelectorView{
 		Beat:          s.Scenes[index].Beat,
 		CatalogDigest: catalogDigest,
 		RecapTail:     recapTail(s.Continuity.Recap, 2),
 		Theme:         s.Continuity.Theme,
+		AvailableRefs: refs,
 	}
 }
 
