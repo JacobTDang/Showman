@@ -182,6 +182,64 @@ func (s *LLMSelector) Select(ctx context.Context, view SelectorView) ([]BuilderP
 	return placements, nil
 }
 
+// Reviser lets a planner replace specific degraded beats after the first fan-out
+// pass (Roadmap C3: the one bounded re-plan rung). Only the LLM tier implements
+// it — offline tiers (StubPlanner, and FallbackPlanner when every LLM tier is
+// exhausted) never revise, since there's no model call to make a better second
+// attempt with.
+type Reviser interface {
+	Revise(ctx context.Context, view ReviseView) ([]SceneBeat, error)
+}
+
+// FailedBeat is one degraded scene handed back to the reviser: its original beat
+// plus a short reason it failed the first time.
+type FailedBeat struct {
+	Beat  SceneBeat
+	Error string
+}
+
+// ReviseView is what a Reviser sees: the request for context, plus every beat that
+// degraded to a fallback card and why.
+type ReviseView struct {
+	Request ExternalRequest
+	Failed  []FailedBeat
+}
+
+// Revise asks the model to replace just the failed beats, in the same order. Returns
+// exactly len(view.Failed) beats or an error; the pipeline treats a short/garbled
+// reply as a failed revision (best-effort — the fallback cards already in place
+// stand).
+func (p *LLMPlanner) Revise(ctx context.Context, view ReviseView) ([]SceneBeat, error) {
+	system := ReviserSystemPrompt()
+	failedJSON, _ := json.Marshal(view.Failed)
+	user := fmt.Sprintf("Topic: %s\nQuery: %s\n\nThese beats failed and fell back to a plain card. Replace EACH ONE with a\nbetter beat (same order, one replacement per input):\n%s",
+		view.Request.Topic, view.Request.Query, string(failedJSON))
+	out, err := p.Model.Generate(ctx, []*schema.Message{schema.SystemMessage(system), schema.UserMessage(user)})
+	if err != nil {
+		return nil, fmt.Errorf("llm revise: %w", err)
+	}
+	raw, err := extractJSON(out.Content)
+	if err != nil {
+		return nil, fmt.Errorf("llm revise: %w", err)
+	}
+	var beats []SceneBeat
+	if err := json.Unmarshal(raw, &beats); err != nil {
+		return nil, fmt.Errorf("llm revise: decode: %w", err)
+	}
+	if len(beats) != len(view.Failed) {
+		return nil, fmt.Errorf("llm revise: got %d beats, want %d", len(beats), len(view.Failed))
+	}
+	for i := range beats {
+		if strings.TrimSpace(beats[i].Goal) == "" {
+			return nil, fmt.Errorf("llm revise: beat %d has no goal", i)
+		}
+		if beats[i].DurationBudgetSec <= 0 || beats[i].DurationBudgetSec > 60 {
+			beats[i].DurationBudgetSec = view.Failed[i].Beat.DurationBudgetSec
+		}
+	}
+	return beats, nil
+}
+
 // FallbackPlanner tries each planner in order (the design's quality ladder).
 type FallbackPlanner struct{ Tiers []LessonPlanner }
 
@@ -196,6 +254,18 @@ func (f FallbackPlanner) Plan(ctx context.Context, view PlannerView) (LessonPlan
 		lastErr = err
 	}
 	return LessonPlan{}, fmt.Errorf("all planner tiers failed: %w", lastErr)
+}
+
+// Revise delegates to the first tier that implements Reviser (the LLM tier, when
+// present) — so production's FallbackPlanner{LLMPlanner, StubPlanner} supports
+// revision without the pipeline needing to know about the concrete tier types.
+func (f FallbackPlanner) Revise(ctx context.Context, view ReviseView) ([]SceneBeat, error) {
+	for _, tier := range f.Tiers {
+		if r, ok := tier.(Reviser); ok {
+			return r.Revise(ctx, view)
+		}
+	}
+	return nil, fmt.Errorf("no planner tier supports revision")
 }
 
 // FallbackSelector tries each selector in order.
