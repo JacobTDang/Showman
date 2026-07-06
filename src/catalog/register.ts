@@ -23,6 +23,11 @@ import {
   numberLineFractionTool,
 } from "./math/counting.tool.js";
 import { balanceScaleTool, mathExprTool } from "./math/algebra.tool.js";
+import { forceDiagramTool, inclinedPlaneTool, energyBarsTool } from "./physics/mechanics.tool.js";
+import { pendulumTool, massSpringTool } from "./physics/oscillators.tool.js";
+import { rayDiagramTool, bohrAtomTool, energyLevelsTool, emSpectrumTool } from "./physics/optics.tool.js";
+import { projectileTool } from "./physics/projectile.tool.js";
+import { circuitTool } from "./physics/circuit.tool.js";
 
 /** Node-level tools beyond the original numberLine (Roadmap A1: the math wave). */
 const MATH_NODE_TOOLS: BuilderTool[] = [
@@ -44,6 +49,21 @@ const MATH_NODE_TOOLS: BuilderTool[] = [
   mathExprTool,
 ];
 
+/** Physics node-level tools (Roadmap A2: the physics wave). */
+const PHYSICS_NODE_TOOLS: BuilderTool[] = [
+  forceDiagramTool,
+  inclinedPlaneTool,
+  energyBarsTool,
+  pendulumTool,
+  massSpringTool,
+  rayDiagramTool,
+  bohrAtomTool,
+  energyLevelsTool,
+  emSpectrumTool,
+  projectileTool,
+  circuitTool,
+];
+
 /** Build a fresh registry with all known tools registered. */
 export function createDefaultRegistry(): BuilderRegistry {
   const registry = new BuilderRegistry();
@@ -52,6 +72,7 @@ export function createDefaultRegistry(): BuilderRegistry {
   registry.register(cardTool);
   for (const tool of mathLessonTools) registry.register(tool);
   for (const tool of MATH_NODE_TOOLS) registry.register(tool);
+  for (const tool of PHYSICS_NODE_TOOLS) registry.register(tool);
   return registry;
 }
 
