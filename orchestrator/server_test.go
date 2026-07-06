@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +19,11 @@ func newTestServer() (*Server, *httptest.Server) {
 		Engine:   engine,
 		// No stitcher: the job completes at rendered clips (no ffmpeg needed in this test).
 	}
-	s := &Server{Pipeline: p, Checkpoint: cp}
+	graph, err := BuildGenerateGraph(context.Background(), p, NewEinoByteStore())
+	if err != nil {
+		panic(err)
+	}
+	s := &Server{Pipeline: p, Graph: graph, Checkpoint: cp}
 	return s, httptest.NewServer(s.Handler())
 }
 

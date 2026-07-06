@@ -115,7 +115,17 @@ func BuildGenerateGraph(ctx context.Context, p *Pipeline, store compose.CheckPoi
 		wasInterrupted, hasState, saved := compose.GetInterruptState[*JobContext](ctx)
 		if wasInterrupted {
 			if hasState && saved != nil {
+				// Reload from the durable checkpoint store rather than trusting
+				// Eino's own serialized snapshot: the HTTP layer stamps
+				// Resume.ResumedAt onto that SAME store between the interrupt
+				// firing and the resume being triggered, and this node's finalize
+				// write must not clobber that with a stale copy.
 				s = saved
+				if p.Director.checkpoint != nil {
+					if fresh, err := p.Director.checkpoint.Load(ctx, saved.JobID); err == nil && fresh != nil {
+						s = fresh
+					}
+				}
 			}
 		} else if s != nil && s.Request.Options.PreviewGate {
 			return nil, compose.StatefulInterrupt(ctx, ProjectJob(s), s)
