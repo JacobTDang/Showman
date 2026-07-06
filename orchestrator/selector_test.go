@@ -39,7 +39,12 @@ func realishCatalog() []CatalogEntry {
 		{Name: "math.graphingLesson", Domain: DomainMath, Level: "scene", Keywords: []string{"graph", "line", "slope", "y = mx + b", "coordinate plane", "plot"}},
 		{Name: "math.quadraticLesson", Domain: DomainMath, Level: "scene", Keywords: []string{"quadratic", "parabola", "vertex"}},
 		{Name: "math.countingLesson", Domain: DomainMath, Level: "scene", Keywords: []string{"count", "counting", "how many"}},
+		// chem.reaction is genuinely offline-excluded (see offlineExcluded's doc comment:
+		// reactants/products need a real balanced equation, not a generic default) — kept
+		// here to prove the exclusion holds even when it's the ONLY keyword match in its
+		// domain (TestKeywordSelectorExcludesUnfillableToolsEvenAsOnlyDomainMatch).
 		{Name: "chem.reaction", Domain: DomainChem, Level: "node", Keywords: []string{"reaction", "chemical equation", "combustion"}},
+		{Name: "chem.molecule", Domain: DomainChem, Level: "node", Keywords: []string{"molecule", "structure", "compound", "smiles", "atoms", "bonds", "chemical structure"}},
 		{Name: "items.card", Domain: DomainItems, Level: "node", Keywords: []string{"card", "summary", "takeaway"}},
 	}
 }
@@ -121,14 +126,20 @@ func TestKeywordSelectorScalesAcrossExpandedCatalog(t *testing.T) {
 		{"plot the line y = 2x + 1 on a coordinate plane", "math.functionGraph"},
 		{"draw a ray diagram for a converging lens with focal length 10", "physics.rayDiagram"},
 		{"show the reaction energy diagram with the activation energy peak", "chem.energyDiagram"},
-		{"chart the quarterly revenue as a bar chart across categories", "chart.bar"},
-		{"plot temperature as a line chart trend over time", "chart.line"},
-		{"draw a scatter plot showing the correlation between two variables", "chart.scatter"},
+		// chart.bar/line/scatter and physics.energyBars are offlineExcluded (real chart/
+		// accounting data no default can synthesize) — these beats fall through to
+		// whatever else scores (math.functionGraph shares "plot"/"scatter" vocabulary) or
+		// the global math.countingLesson fallback. See TestKeywordSelectorExcludes* below
+		// for the exclusion itself; this just proves it doesn't break discrimination among
+		// everything that's still eligible.
+		{"chart the quarterly revenue as a bar chart across categories", "math.countingLesson"},
+		{"plot temperature as a line chart trend over time", "math.functionGraph"},
+		{"draw a scatter plot showing the correlation between two variables", "math.functionGraph"},
 		{"draw a flowchart of the steps in the process", "diagram.flowchart"},
 		{"put the results in a data table with rows and columns", "diagram.table"},
 		{"draw the molecule structure for water using smiles", "chem.molecule"},
 		{"wire a series circuit with a battery and a resistor", "physics.circuit"},
-		{"show the energy bars for kinetic and potential energy conservation", "physics.energyBars"},
+		{"show the energy bars for kinetic and potential energy conservation", "math.countingLesson"},
 		{"show the position vs time and velocity vs time motion graph for kinematics", "physics.motionGraph"},
 		{"draw the electric field lines around a point charge as a vector field", "physics.vectorField"},
 	}
@@ -140,6 +151,60 @@ func TestKeywordSelectorScalesAcrossExpandedCatalog(t *testing.T) {
 		if got[0].Builder != c.want {
 			t.Errorf("%q: want %s, got %s", c.goal, c.want, got[0].Builder)
 		}
+	}
+}
+
+// TestKeywordSelectorExtractsCircuitElements proves extractCircuitElements finds known
+// element vocabulary in text order and falls back to a generic, always-valid loop when
+// the beat mentions "circuit" generically but names nothing specific.
+func TestKeywordSelectorExtractsCircuitElements(t *testing.T) {
+	ctx := context.Background()
+
+	got, err := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "wire a series circuit with a battery, a resistor, and a switch"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Builder != "physics.circuit" {
+		t.Fatalf("want physics.circuit, got %s", got[0].Builder)
+	}
+	elements, ok := got[0].Params["elements"].([]map[string]any)
+	if !ok || len(elements) != 3 {
+		t.Fatalf("expected 3 elements in text order, got %+v", got[0].Params["elements"])
+	}
+	wantKinds := []string{"battery", "resistor", "switch"}
+	for i, want := range wantKinds {
+		if elements[i]["kind"] != want {
+			t.Errorf("element %d: want %s, got %+v", i, want, elements[i])
+		}
+	}
+
+	generic, _ := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "wire a circuit"}})
+	genElements, ok := generic[0].Params["elements"].([]map[string]any)
+	if !ok || len(genElements) != 2 {
+		t.Fatalf("expected a generic 2-element fallback loop, got %+v", generic[0].Params["elements"])
+	}
+}
+
+// TestKeywordSelectorExtractsMoleculeName proves extractMoleculeName matches a known
+// library name in beat text (including the methane/ethane substring-containment case)
+// and falls back to "water" when nothing in the library is named.
+func TestKeywordSelectorExtractsMoleculeName(t *testing.T) {
+	ctx := context.Background()
+
+	got, _ := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "draw the molecule structure for benzene"}})
+	if got[0].Builder != "chem.molecule" || got[0].Params["name"] != "benzene" {
+		t.Fatalf("want chem.molecule/benzene, got %+v", got[0])
+	}
+
+	// "methane" contains "ethane" as a substring (m-ETHANE) — must not misfire on it.
+	methane, _ := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "show the molecule structure of methane"}})
+	if methane[0].Params["name"] != "methane" {
+		t.Fatalf("methane/ethane substring collision: got %+v", methane[0].Params)
+	}
+
+	fallback, _ := expandedSel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "draw a molecule structure"}})
+	if fallback[0].Params["name"] != "water" {
+		t.Fatalf("expected water fallback, got %+v", fallback[0].Params)
 	}
 }
 
@@ -171,8 +236,8 @@ func TestKeywordSelectorPicksByKeywordsAndExtractsParams(t *testing.T) {
 func TestKeywordSelectorHonorsDomainHintAndWidens(t *testing.T) {
 	ctx := context.Background()
 
-	chem, _ := sel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "show the combustion reaction", DomainHint: DomainChem}})
-	if chem[0].Builder != "chem.reaction" {
+	chem, _ := sel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "draw the water molecule structure", DomainHint: DomainChem}})
+	if chem[0].Builder != "chem.molecule" {
 		t.Fatalf("domain hint not honored: %+v", chem[0])
 	}
 
@@ -180,6 +245,22 @@ func TestKeywordSelectorHonorsDomainHintAndWidens(t *testing.T) {
 	widened, _ := sel().Select(ctx, SelectorView{Beat: SceneBeat{Goal: "plot a parabola", DomainHint: DomainChem}})
 	if widened[0].Builder != "math.quadraticLesson" {
 		t.Fatalf("expected widening to find quadraticLesson, got %+v", widened[0])
+	}
+}
+
+// TestKeywordSelectorExcludesUnfillableToolsEvenAsOnlyDomainMatch proves offlineExcluded
+// is checked BEFORE domain-widening kicks in: a chem-hinted beat that textually matches
+// ONLY chem.reaction (excluded — needs a real reactants/products list no default can
+// synthesize) must not select it just because nothing else in-domain scored. It should
+// behave exactly as if chem.reaction didn't exist: widen, find nothing elsewhere either,
+// and land on the global counting-lesson fallback.
+func TestKeywordSelectorExcludesUnfillableToolsEvenAsOnlyDomainMatch(t *testing.T) {
+	got, err := sel().Select(context.Background(), SelectorView{Beat: SceneBeat{Goal: "show the combustion reaction", DomainHint: DomainChem}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Builder != "math.countingLesson" {
+		t.Fatalf("expected offlineExcluded chem.reaction to be skipped entirely, got %+v", got[0])
 	}
 }
 

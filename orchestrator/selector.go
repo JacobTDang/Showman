@@ -79,16 +79,41 @@ func beatText(b SceneBeat) string {
 	return strings.ToLower(strings.Join(parts, " "))
 }
 
+// offlineExcluded lists tools whose required params represent real, specific content
+// (chart data series, an actual free-body force list, a specific chemical reaction, a
+// literal math expression to typeset...) that no generic default or beat-text regex can
+// honestly synthesize. Selecting one of these offline would just trade a keyword miss
+// for a guaranteed Zod validation failure at build time. These need the LLM tier, which
+// can actually invent plausible content; the offline tier skips them entirely and falls
+// through to the next-best candidate (or the global math.countingLesson fallback).
+var offlineExcluded = map[string]bool{
+	"chart.bar":            true,
+	"chart.line":           true,
+	"chart.area":           true,
+	"chart.scatter":        true,
+	"math.barGraph":        true,
+	"math.pictograph":      true,
+	"math.mathExpr":        true,
+	"physics.energyBars":   true,
+	"physics.forceDiagram": true,
+	"chem.reaction":        true,
+	"chem.lewisStructure":  true,
+}
+
 // pickTool returns the tool with the highest keyword score. Longer keyword phrases weigh
 // more (they are more specific); name order breaks ties deterministically. Sorts a COPY:
 // concurrent scenes may share one catalog slice (a caching client would return the same
-// backing array to every goroutine), so mutating the input is a data race.
+// backing array to every goroutine), so mutating the input is a data race. Tools in
+// offlineExcluded are skipped entirely, never scored — see its doc comment.
 func pickTool(tools []CatalogEntry, text string) (*CatalogEntry, int) {
 	tools = append([]CatalogEntry(nil), tools...)
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	var best *CatalogEntry
 	bestScore := 0
 	for i := range tools {
+		if offlineExcluded[tools[i].Name] {
+			continue
+		}
 		score := 0
 		for _, kw := range tools[i].Keywords {
 			k := strings.ToLower(strings.TrimSpace(kw))
@@ -178,8 +203,90 @@ func extractParams(builder, text string) map[string]any {
 				params["count"] = n
 			}
 		}
+	case "physics.circuit":
+		params["elements"] = extractCircuitElements(text)
+	case "chem.molecule":
+		params["name"] = extractMoleculeName(text)
 	}
 	return params
+}
+
+// circuitKindPhrases maps each circuit.tool.ts element kind to the phrase(s) that signal
+// it in beat text. "meter" checks its more specific synonyms first so e.g. "voltmeter"
+// isn't missed by a caller who never wrote the bare word "meter".
+var circuitKindPhrases = []struct {
+	kind    string
+	phrases []string
+}{
+	{"battery", []string{"battery"}},
+	{"resistor", []string{"resistor"}},
+	{"capacitor", []string{"capacitor"}},
+	{"lamp", []string{"lamp", "bulb"}},
+	{"switch", []string{"switch"}},
+	{"inductor", []string{"inductor", "coil"}},
+	{"acSource", []string{"ac source", "alternator"}},
+	{"diode", []string{"diode"}},
+	{"meter", []string{"voltmeter", "ammeter", "meter"}},
+}
+
+// extractCircuitElements scans beat text for known circuit-element vocabulary and
+// returns them in the order they appear (matching how circuit.tool.ts wires elements
+// left-to-right into a series loop). Falls back to a generic, always-valid two-element
+// loop when the beat mentions "circuit"/"wire" generically but names nothing specific —
+// physics.circuit's `elements` param has no schema default and requires min 1, so a miss
+// here would otherwise be a guaranteed build-time validation failure.
+func extractCircuitElements(text string) []map[string]any {
+	type match struct {
+		pos  int
+		kind string
+	}
+	var found []match
+	for _, k := range circuitKindPhrases {
+		best := -1
+		for _, phrase := range k.phrases {
+			if idx := strings.Index(text, phrase); idx >= 0 && (best == -1 || idx < best) {
+				best = idx
+			}
+		}
+		if best >= 0 {
+			found = append(found, match{pos: best, kind: k.kind})
+		}
+	}
+	if len(found) == 0 {
+		return []map[string]any{{"kind": "battery"}, {"kind": "resistor"}}
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].pos < found[j].pos })
+	if len(found) > 6 { // circuit.tool.ts's elements array caps at 6
+		found = found[:6]
+	}
+	elements := make([]map[string]any, len(found))
+	for i, m := range found {
+		elements[i] = map[string]any{"kind": m.kind}
+	}
+	return elements
+}
+
+// moleculeNames mirrors MOLECULE_LIBRARY's keys in moleculeLibrary.ts verbatim. Sorted
+// longest-first so a genuine "methane" match is tried before "ethane" — "methane" itself
+// contains "ethane" as a substring (m-ETHANE), so shortest-first would misfire on it.
+var moleculeNames = []string{
+	"hydrogen", "nitrogen", "methanol", // 8
+	"methane", "ammonia", "ethanol", "benzene", // 7
+	"ethyne", "ethane", "ethene", "oxygen", // 6
+	"ozone", "water", // 5
+}
+
+// extractMoleculeName scans beat text for a known library molecule name. chem.molecule's
+// `name` is a Zod enum with no default (a `smiles` alternative exists but isn't
+// mechanically derivable from prose), so a miss here would be a guaranteed validation
+// failure; "water" is a safe, always-valid fallback.
+func extractMoleculeName(text string) string {
+	for _, name := range moleculeNames {
+		if strings.Contains(text, name) {
+			return name
+		}
+	}
+	return "water"
 }
 
 // compactSign turns "+ 3" / "- 3" into "+3" / "-3" so ParseFloat accepts it.

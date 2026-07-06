@@ -48,11 +48,16 @@ func TestOfflineE2EEval(t *testing.T) {
 	// Topics are chosen so every scene beat's winning tool has no required-and-
 	// undefaulted param the offline (regex-based) extractor can't fill — the same
 	// bar the LIVE eval (D2) holds LLM-selected params to, just proven without a
-	// key. Topics whose likely winner needs structured params no regex can build
-	// (e.g. physics.circuit's element list, chem.molecule's name enum, chart.bar's
-	// series arrays) are deliberately NOT smoke-tested here; that's a selector
-	// capability gap (see PR description), not something this eval should paper
-	// over by picking easy words.
+	// key. circuits/molecules were originally excluded here (physics.circuit's
+	// element list, chem.molecule's name enum needed real structured params no
+	// regex could build) — selector.go's extractCircuitElements/extractMoleculeName
+	// closed that gap (keyword-extract known vocabulary, generic/library-safe
+	// fallback otherwise), so they're back in this suite as the real closure
+	// signal: the exact eval that found the gap now passes with it fixed. chart.*
+	// topics stay out permanently, not temporarily — chart.bar/line/scatter need
+	// real category/value data no regex or generic default can honestly invent
+	// (see selector.go's offlineExcluded), so the offline tier never selects them
+	// at all; there is no gap left to close there, by design.
 	topics := []struct {
 		topic string
 		query string
@@ -62,6 +67,8 @@ func TestOfflineE2EEval(t *testing.T) {
 		{"graphing", "graph the line y = 2x + 1 on a coordinate plane"},
 		{"decimals", "introduce decimals with tenths"},
 		{"pendulum", "a pendulum swinging back and forth"},
+		{"circuits", "wire a series circuit with a battery and a resistor"},
+		{"molecules", "draw the molecule structure for water"},
 		{"energy levels", "an atom's energy levels with a photon transition"},
 	}
 
