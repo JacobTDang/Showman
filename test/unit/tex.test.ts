@@ -58,4 +58,17 @@ describe("LaTeX typesetting (buildMath)", () => {
     const node = buildMath({ id: "ovl", latex: "\\overline{ABCD}", size: 100 });
     expect(node.children.length).toBeGreaterThanOrEqual(5); // 4 letters + bar
   });
+
+  it("renders the RC equation and common STEM symbols as vector glyphs", () => {
+    const node = buildMath({
+      id: "stem",
+      latex: "\\tau,\\mu,\\Omega,\\pi,\\Delta\\quad v_C(t)=V_s(1-e^{-t/(RC)})",
+      x: 8,
+      y: 20,
+      size: 30,
+    });
+    expect(node.children.length).toBeGreaterThan(20);
+    expect(node.children.every((child) => child.type === "path")).toBe(true);
+    expect(inkPixels(scene(node, 640, 120))).toBeGreaterThan(200);
+  });
 });

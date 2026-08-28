@@ -28,6 +28,7 @@ import { pendulumTool, massSpringTool } from "./physics/oscillators.tool.js";
 import { rayDiagramTool, bohrAtomTool, energyLevelsTool, emSpectrumTool } from "./physics/optics.tool.js";
 import { projectileTool } from "./physics/projectile.tool.js";
 import { circuitTool } from "./physics/circuit.tool.js";
+import { rcChargingTool } from "./physics/rcCharging.tool.js";
 import { motionGraphTool } from "./physics/motionGraph.tool.js";
 import { vectorFieldTool } from "./physics/vectorField.tool.js";
 import { moleculeTool } from "./chem/molecule.tool.js";
@@ -77,6 +78,7 @@ const PHYSICS_NODE_TOOLS: BuilderTool[] = [
   emSpectrumTool,
   projectileTool,
   circuitTool,
+  rcChargingTool,
   motionGraphTool,
   vectorFieldTool,
 ];

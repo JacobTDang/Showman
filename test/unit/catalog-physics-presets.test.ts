@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { curveFor } from "../../src/catalog/physics/motionGraph.tool.js";
 import { fieldFor } from "../../src/catalog/physics/vectorField.tool.js";
+import { rcValues } from "../../src/catalog/physics/rcCharging.tool.js";
+import { defaultRegistry, validateScene } from "../../src/index.js";
 
 // motionGraph.tool.ts and vectorField.tool.ts wrap raw-closure composers (motion.ts's
 // motionGraph, fields.ts's vectorField) behind a named-preset layer, since neither a Zod
@@ -70,6 +72,31 @@ describe("physics.motionGraph presets", () => {
     expect(fn(5)).toBeCloseTo(2, 6); // no decay, omega=0 -> constant
     const decaying = curveFor({ ...SERIES_DEFAULTS, preset: "damped-oscillation", amplitude: 1, decay: 1, omega: 0 });
     expect(decaying(1)).toBeCloseTo(Math.exp(-1), 6);
+  });
+});
+
+describe("physics.rcCharging", () => {
+  it("pins the exponential values at one time constant", () => {
+    const p = { resistanceOhms: 1000, capacitanceFarads: 0.001, sourceVolts: 5 };
+    const atTau = rcValues(p, 1);
+    expect(atTau.tau).toBe(1);
+    expect(atTau.voltage / p.sourceVolts).toBeCloseTo(0.6321205588, 8);
+    expect(atTau.current / (p.sourceVolts / p.resistanceOhms)).toBeCloseTo(Math.exp(-1), 8);
+  });
+
+  it("builds the complete synchronized teaching primitive", () => {
+    const out = defaultRegistry().invokeNode("physics.rcCharging", {
+      resistanceOhms: 1000,
+      capacitanceFarads: 0.001,
+      sourceVolts: 5,
+      switchTimeSec: 1,
+      animationDurationSec: 6,
+    });
+    const corpus = JSON.stringify(out.node);
+    for (const anchor of ["rc-switch", "current i(t)", "capacitor voltage", "rc-curve", "63.2%", "rc-eq", "τ = RC"]) {
+      expect(corpus).toContain(anchor);
+    }
+    expect(validateScene({ specVersion: 1, width: 900, height: 500, fps: 30, duration: 8, nodes: [out.node] }).valid).toBe(true);
   });
 });
 
