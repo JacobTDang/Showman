@@ -136,6 +136,13 @@ export class RenderService {
     return describeScene();
   }
 
+  /** Persist an authored spec under its content hash for exact provenance retrieval. */
+  async storeSpec(spec: SceneSpec): Promise<{ key: string; hash: string; url: string }> {
+    const hash = createHash("sha256").update(stableStringify(spec)).digest("hex");
+    const stored = await this.storage.put(`specs/${hash}.json`, Buffer.from(stableStringify(spec)), "application/json");
+    return { key: stored.key, hash, url: stored.url };
+  }
+
   /** Structured validation. Never throws. */
   validate(spec: unknown) {
     return validateScene(spec);

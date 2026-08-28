@@ -13,6 +13,7 @@ import type { RenderService, RenderOptions } from "../service/renderService.js";
 import type { JobRunner, JobView } from "../service/jobs.js";
 import { AuthoringAgent } from "../authoring/agent.js";
 import { createDefaultAuthor } from "../authoring/templateAuthor.js";
+import type { PedagogyRequest } from "../authoring/semantic.js";
 
 /** Result of the atomic "brief → MP4" tool: a finished video reference, or a failure. */
 export type GenerateResult =
@@ -25,6 +26,9 @@ export type GenerateResult =
       height: number;
       fps: number;
       attempts: number;
+      spec?: unknown;
+      provenance: { author: string; model?: string; provider?: string; specHash: string; specKey: string };
+      warnings?: Array<{ code: string; requestedDurationSec: number; actualDurationSec: number }>;
     }
   | { ok: false; error: string; attempts?: number };
 
@@ -47,7 +51,7 @@ export interface ShowmanClient {
   submit(spec: unknown, options: RenderOptions): Promise<{ ok: true; jobId: string } | CapabilityErr>;
   status(jobId: string): Promise<JobView | null>;
   /** The atomic path: a plain-English brief in, a finished MP4 reference out, in one call. */
-  generate(brief: string, options?: RenderOptions): Promise<GenerateResult>;
+  generate(request: string | PedagogyRequest, options?: RenderOptions): Promise<GenerateResult>;
 }
 
 /** In-process backend backed by the RenderService + JobRunner. */
@@ -84,11 +88,24 @@ export class DirectBackend implements ShowmanClient {
   async status(jobId: string): Promise<JobView | null> {
     return this.jobRunner.status(jobId);
   }
-  async generate(brief: string, options?: RenderOptions): Promise<GenerateResult> {
-    const authored = await this.authoring().authorSpec(brief);
+  async generate(input: string | PedagogyRequest, options?: RenderOptions): Promise<GenerateResult> {
+    const request = typeof input === "string" ? { brief: input } : input;
+    const authored = await this.authoring().authorSpec(request);
     if (!authored.ok || !authored.spec) return { ok: false, error: authored.error ?? "authoring failed", attempts: authored.attempts };
+    const budget = request.durationBudgetSec;
+    if (budget !== undefined && request.durationMode === "hard" && authored.spec.duration > budget + 0.1) {
+      return { ok: false, error: "duration_budget_exceeded", attempts: authored.attempts };
+    }
     const r = await this.service.render(authored.spec, options ?? {});
     if (!r.ok) return { ok: false, error: "blocked" in r ? "content_safety" : "invalid_spec", attempts: authored.attempts };
+    if (budget !== undefined && request.durationMode === "hard" && r.durationSec > budget + 0.1) {
+      return { ok: false, error: "duration_budget_exceeded", attempts: authored.attempts };
+    }
+    const storedSpec = await this.service.storeSpec(authored.spec);
+    const warning =
+      budget !== undefined && r.durationSec > budget + 0.1
+        ? { code: "duration_budget_expanded", requestedDurationSec: budget, actualDurationSec: r.durationSec }
+        : undefined;
     return {
       ok: true,
       videoUrl: r.video.url,
@@ -98,6 +115,9 @@ export class DirectBackend implements ShowmanClient {
       height: r.height,
       fps: r.fps,
       attempts: authored.attempts,
+      spec: authored.spec,
+      provenance: { ...this.authoring().provenance(), specHash: storedSpec.hash, specKey: storedSpec.key },
+      ...(warning ? { warnings: [warning] } : {}),
     };
   }
 }
@@ -137,8 +157,9 @@ export class HttpBackend implements ShowmanClient {
     if (r.status === 404) return null;
     return r.json() as Promise<JobView>;
   }
-  async generate(brief: string, options?: RenderOptions): Promise<GenerateResult> {
-    const r = await this.fetchImpl(this.url("/v1/generate"), { method: "POST", body: JSON.stringify({ brief, options }) });
+  async generate(input: string | PedagogyRequest, options?: RenderOptions): Promise<GenerateResult> {
+    const request = typeof input === "string" ? { brief: input } : input;
+    const r = await this.fetchImpl(this.url("/v1/generate"), { method: "POST", body: JSON.stringify({ ...request, options }) });
     const j = (await r.json()) as Record<string, unknown>;
     if (!r.ok) return { ok: false, error: typeof j.error === "string" ? j.error : `http_${r.status}` };
     return {
@@ -150,6 +171,11 @@ export class HttpBackend implements ShowmanClient {
       height: j.height as number,
       fps: j.fps as number,
       attempts: (j.attempts as number) ?? 1,
+      ...(j.spec ? { spec: j.spec } : {}),
+      provenance: j.provenance as { author: string; model?: string; provider?: string; specHash: string; specKey: string },
+      ...(Array.isArray(j.warnings)
+        ? { warnings: j.warnings as Array<{ code: string; requestedDurationSec: number; actualDurationSec: number }> }
+        : {}),
     };
   }
 }
@@ -173,6 +199,15 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       type: "object",
       properties: {
         brief: { type: "string", description: "What to make a video of, in plain English." },
+        audience: { type: "string", description: "Learner level or audience." },
+        objectives: { type: "array", items: { type: "string" } },
+        prerequisites: { type: "array", items: { type: "string" } },
+        depth: { type: "string", enum: ["quick", "standard", "deep"] },
+        mustShow: { type: "array", items: { type: "string" } },
+        misconceptions: { type: "array", items: { type: "string" } },
+        forbid: { type: "array", items: { type: "string" } },
+        durationBudgetSec: { type: "number", exclusiveMinimum: 0 },
+        durationMode: { type: "string", enum: ["hard", "soft"] },
         options: { type: "object", description: "Optional render options (deterministic, crf, preset)." },
       },
       required: ["brief"],
@@ -219,7 +254,21 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 export async function callTool(client: ShowmanClient, name: string, args: Record<string, unknown>): Promise<unknown> {
   switch (name) {
     case "showman_generate_video":
-      return client.generate(String(args.brief ?? ""), (args.options as RenderOptions) ?? {});
+      return client.generate(
+        {
+          brief: String(args.brief ?? ""),
+          ...(typeof args.audience === "string" ? { audience: args.audience } : {}),
+          ...(Array.isArray(args.objectives) ? { objectives: args.objectives.map(String) } : {}),
+          ...(Array.isArray(args.prerequisites) ? { prerequisites: args.prerequisites.map(String) } : {}),
+          ...(args.depth === "quick" || args.depth === "standard" || args.depth === "deep" ? { depth: args.depth } : {}),
+          ...(Array.isArray(args.mustShow) ? { mustShow: args.mustShow.map(String) } : {}),
+          ...(Array.isArray(args.misconceptions) ? { misconceptions: args.misconceptions.map(String) } : {}),
+          ...(Array.isArray(args.forbid) ? { forbid: args.forbid.map(String) } : {}),
+          ...(typeof args.durationBudgetSec === "number" ? { durationBudgetSec: args.durationBudgetSec } : {}),
+          ...(args.durationMode === "hard" || args.durationMode === "soft" ? { durationMode: args.durationMode } : {}),
+        },
+        (args.options as RenderOptions) ?? {},
+      );
     case "showman_get_schema":
       return client.getSchema();
     case "showman_validate_scene":

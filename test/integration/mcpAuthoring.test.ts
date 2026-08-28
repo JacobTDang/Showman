@@ -58,11 +58,33 @@ describe("MCP tools (M4.1/M4.2)", () => {
       videoUrl?: string;
       durationSec?: number;
       attempts?: number;
+      provenance?: { specHash: string; specKey: string; provider: string };
     };
     expect(res.ok).toBe(true);
     expect(res.videoUrl).toBeTruthy();
     expect(res.durationSec!).toBeGreaterThan(0);
     expect(res.attempts!).toBeGreaterThanOrEqual(1);
+    expect(res.provenance).toMatchObject({ provider: "offline" });
+    expect(res.provenance!.specHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("showman_generate_video enforces structured hard duration budgets before rendering", async () => {
+    const storage = new LocalObjectStorage(join(dataDir, "budget-objects"));
+    const service = new RenderService({ storage, workDir: join(dataDir, "budget-tmp") });
+    const jobRunner = new JobRunner(service, new InMemoryJobStore(), { maxConcurrent: 1 });
+    const agent = new AuthoringAgent(new DirectBackend(service, jobRunner), new TemplateAuthor({ width: 320, height: 180, fps: 8 }), {
+      maxAttempts: 2,
+    });
+    const result = (await callTool(new DirectBackend(service, jobRunner, agent), "showman_generate_video", {
+      brief: "teach counting to three with stars",
+      audience: "elementary",
+      objectives: ["count three objects"],
+      depth: "quick",
+      mustShow: ["3"],
+      durationBudgetSec: 0.5,
+      durationMode: "hard",
+    })) as { ok: boolean; error?: string };
+    expect(result).toEqual(expect.objectContaining({ ok: false, error: "duration_budget_exceeded" }));
   });
 
   it("get_schema returns the self-describing contract", async () => {
