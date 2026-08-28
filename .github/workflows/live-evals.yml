@@ -55,9 +55,17 @@ jobs:
           OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
           OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
         run: go test -tags e2e_live -run TestLiveE2EEval -v -timeout 900s ./...
+      - name: Live semantic eval
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
+          OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
+        run: npx vitest run --config vitest.live.config.ts test/integration/semanticAuthor.live.test.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: orchestrator-live-eval-scorecards
-          path: orchestrator/eval-live-scorecards.json
+          path: |
+            orchestrator/eval-live-scorecards.json
+            semantic-live-scorecard.json
           if-no-files-found: warn

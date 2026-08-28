@@ -45,22 +45,28 @@ underspecified ones ("explain photosynthesis to a 5-year-old").
 | **mechanical-repair rate** | `AuthoringAttempt.repaired` | how much Increment 2 saves |
 | render success | `RenderService.render` returns a real ftyp MP4 | end-to-end |
 | non-blank output | sample a mid frame, assert not all-background | catches "valid but empty" |
+| topic + required-anchor coverage | `evaluateGeneration()` semantic score | rejects unrelated but valid lessons |
+| equation / numeric-anchor accuracy | explicit objective and `mustShow` values | catches changed constants and answers |
+| pedagogical progression | objective coverage + visible/narrated beat count | distinguishes a lesson from one labeled diagram |
+| sampled-frame relevance | three non-blank samples gated by semantic relevance | prevents visually successful topic misses |
+| resolved model/provider | bounded author provenance | attributes changing free-router behavior |
 | latency / tokens | wall-clock + provider usage | cost on the 120B model |
 
 **Aggregate gates** (the eval *passes* if): validity ≥ N%, render success ≥ N%, p50
 latency under budget. Emit a JSON/markdown scorecard artifact per run so regressions are
 visible over time.
 
-**Qualitative (later, optional):** a vision-model or human spot-check on a sampled frame
-("does this look like a clear, child-friendly <topic>?"). Out of scope for v1; the
-structural metrics above already catch most regressions.
+The deterministic scorecard reports structural, semantic, pedagogical, and visual
+scores separately. A vision-model or human spot-check remains an optional additional
+signal; it does not replace the deterministic relevance gate.
 
 Two tiers so the loop is fast:
 
 - **Offline eval** (no key, runs in normal CI): `TemplateAuthor` over the brief suite →
   pure structural assertions. Guards the *pipeline* (parse→build→validate→render) for free.
 - **Live eval** (needs the key, gated): the real `OpenRouterSpecAuthor` → the full
-  scorecard. This is what the GH secret unlocks.
+  scorecard, including resolved model/provider provenance. The frozen RC reproduction
+  is required to fail when a percentage scene is returned. This is what the GH secret unlocks.
 
 ## 3. Container CI — build is covered, *running* it is not
 
