@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,25 +23,45 @@ const PhaseAwaitingReview JobPhase = "awaiting-review"
 // JobView is the external projection of a JobContext — what GET /v1/jobs/:id returns.
 // It never exposes internals (placements, spec blobs, history).
 type JobView struct {
-	JobID     string         `json:"jobId"`
-	Status    JobPhase       `json:"status"`
-	ResumeURL string         `json:"resumeUrl,omitempty"` // set iff Status == awaiting-review
-	Scenes    []SceneView    `json:"scenes,omitempty"`
-	Result    *FinalAssembly `json:"result,omitempty"`
-	Scorecard *Scorecard     `json:"scorecard,omitempty"`
-	Warnings  []string       `json:"warnings,omitempty"`
-	Error     *JobError      `json:"error,omitempty"`
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt string         `json:"updatedAt"`
+	JobID     string          `json:"jobId"`
+	Status    JobPhase        `json:"status"`
+	ResumeURL string          `json:"resumeUrl,omitempty"` // set iff Status == awaiting-review
+	Scenes    []SceneView     `json:"scenes,omitempty"`
+	Result    *FinalAssembly  `json:"result,omitempty"`
+	Scorecard *Scorecard      `json:"scorecard,omitempty"`
+	Warnings  []string        `json:"warnings,omitempty"`
+	Error     *JobError       `json:"error,omitempty"`
+	CreatedAt string          `json:"createdAt"`
+	UpdatedAt string          `json:"updatedAt"`
+	Manifest  *LessonManifest `json:"manifest,omitempty"`
+}
+
+type LessonManifest struct {
+	Title       string      `json:"title"`
+	Audience    Audience    `json:"audience"`
+	Goals       []string    `json:"goals,omitempty"`
+	Throughline string      `json:"throughline,omitempty"`
+	Chapters    []SceneView `json:"chapters"`
 }
 
 // SceneView is the per-scene slice of the projection.
 type SceneView struct {
-	Index       int     `json:"index"`
-	Title       string  `json:"title,omitempty"`
-	Status      string  `json:"status"`
-	DurationSec float64 `json:"durationSec,omitempty"`
-	Cached      bool    `json:"cached,omitempty"`
+	ID            string          `json:"id"`
+	Index         int             `json:"index"`
+	Title         string          `json:"title,omitempty"`
+	Brief         string          `json:"brief,omitempty"`
+	LearningGoal  string          `json:"learningObjective,omitempty"`
+	Status        string          `json:"status"`
+	SpecKey       string          `json:"specKey,omitempty"`
+	SpecHash      string          `json:"specHash,omitempty"`
+	Spec          json.RawMessage `json:"spec,omitempty"`
+	Video         *ObjectRef      `json:"video,omitempty"`
+	DurationSec   float64         `json:"durationSec,omitempty"`
+	Cached        bool            `json:"cached,omitempty"`
+	Source        SceneSource     `json:"source,omitempty"`
+	Attempts      int             `json:"attempts,omitempty"`
+	Warnings      []string        `json:"warnings,omitempty"`
+	RegenerateURL string          `json:"regenerateUrl,omitempty"`
 }
 
 // ProjectJob builds the external view from the store.
@@ -63,19 +84,30 @@ func ProjectJob(s *JobContext) JobView {
 		view.ResumeURL = "/v1/jobs/" + s.JobID + "/resume"
 	}
 	for _, sc := range s.Scenes {
-		sv := SceneView{Index: sc.Index, Title: sc.Beat.Title, Status: "queued"}
+		sv := SceneView{
+			ID: sc.Beat.ID, Index: sc.Index, Title: sc.Beat.Title, Brief: sc.Beat.Goal,
+			LearningGoal: sc.Beat.Goal, Status: "queued", SpecHash: sc.SpecHash,
+			Source: sc.Outcome.Source, Attempts: sc.Attempts, Warnings: sc.Outcome.Warnings,
+			RegenerateURL: fmt.Sprintf("/v1/jobs/%s/chapters/%d/regenerate", s.JobID, sc.Index),
+		}
 		if len(sc.Placements) > 0 {
 			sv.Status = "selected"
 		}
 		if sc.SpecHash != "" {
 			sv.Status = "assembled"
+			sv.SpecKey = fmt.Sprintf("specs/%s.json", sc.SpecHash)
+			sv.Spec = json.RawMessage(sc.SpecBlob)
 		}
 		if sc.Render != nil {
 			sv.Status = string(sc.Render.Status)
 			sv.DurationSec = sc.Render.DurationSec
 			sv.Cached = sc.Render.Cached
+			sv.Video = sc.Render.Clip
 		}
 		view.Scenes = append(view.Scenes, sv)
+	}
+	if s.Plan != nil {
+		view.Manifest = &LessonManifest{Title: s.Plan.Title, Audience: s.Plan.Audience, Goals: s.Plan.Goals, Throughline: s.Plan.Throughline, Chapters: view.Scenes}
 	}
 	return view
 }
@@ -104,7 +136,31 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/generate", s.handleGenerate)
 	mux.HandleFunc("GET /v1/jobs/{id}", s.handleJob)
 	mux.HandleFunc("POST /v1/jobs/{id}/resume", s.handleResume)
+	mux.HandleFunc("POST /v1/jobs/{id}/chapters/{index}/regenerate", s.handleRegenerateChapter)
 	return mux
+}
+
+func (s *Server) handleRegenerateChapter(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	index, err := strconv.Atoi(r.PathValue("index"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_chapter"})
+		return
+	}
+	stored, err := s.Checkpoint.Load(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "jobId": id})
+		return
+	}
+	if index < 0 || index >= len(stored.Scenes) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "chapter_not_found"})
+		return
+	}
+	if err := s.Pipeline.RegenerateChapter(r.Context(), stored, index); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "regeneration_failed", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, ProjectJob(stored))
 }
 
 func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {

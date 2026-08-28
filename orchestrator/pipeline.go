@@ -115,6 +115,29 @@ func (p *Pipeline) run(ctx context.Context, s *JobContext) error {
 	return p.Director.Apply(ctx, s, JobFinalized{Final: clipsOnlyAssembly(s)})
 }
 
+// RegenerateChapter rebuilds exactly one chapter and refreshes the stitched derivative.
+func (p *Pipeline) RegenerateChapter(ctx context.Context, s *JobContext, index int) error {
+	if index < 0 || index >= len(s.Scenes) {
+		return fmt.Errorf("chapter index %d out of range", index)
+	}
+	beat := s.Scenes[index].Beat
+	if err := p.Director.Apply(ctx, s, BeatRevised{Index: index, Beat: beat}); err != nil {
+		return err
+	}
+	if err := p.runScene(ctx, s, index); err != nil {
+		return err
+	}
+	final := clipsOnlyAssembly(s)
+	if p.Stitcher != nil {
+		var err error
+		final, err = p.Stitcher.Stitch(ctx, s)
+		if err != nil {
+			return fmt.Errorf("stitch: %w", err)
+		}
+	}
+	return p.Director.Apply(ctx, s, JobFinalized{Final: final})
+}
+
 // runScenes fans the per-scene work out with bounded concurrency and returns the
 // first hard error (ladder-exhausted scenes degrade instead of erroring). Scenes
 // whose beat declares DependsOn (by beat ID, only ever backward — see

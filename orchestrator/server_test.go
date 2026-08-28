@@ -85,6 +85,24 @@ func TestGenerateJobLifecycle(t *testing.T) {
 	if view.Result == nil || len(view.Result.SceneOffsets) != 4 || view.Result.DurationSec != 24 {
 		t.Fatalf("result missing/wrong: %+v", view.Result)
 	}
+	if view.Manifest == nil || len(view.Manifest.Chapters) != 4 || view.Manifest.Chapters[0].LearningGoal == "" {
+		t.Fatalf("chapter manifest missing/wrong: %+v", view.Manifest)
+	}
+	chapter := view.Manifest.Chapters[1]
+	if chapter.Video == nil || len(chapter.Spec) == 0 || chapter.SpecHash == "" || chapter.RegenerateURL == "" {
+		t.Fatalf("chapter assets/provenance missing: %+v", chapter)
+	}
+	keepKey := view.Manifest.Chapters[0].Video.Key
+	rebuild, err := ts.Client().Post(ts.URL+chapter.RegenerateURL, "application/json", nil)
+	if err != nil || rebuild.StatusCode != 200 {
+		t.Fatalf("regenerate chapter: status=%v err=%v", rebuild.StatusCode, err)
+	}
+	var regenerated JobView
+	_ = json.NewDecoder(rebuild.Body).Decode(&regenerated)
+	_ = rebuild.Body.Close()
+	if regenerated.Manifest.Chapters[0].Video.Key != keepKey {
+		t.Fatal("regenerating one chapter changed an unaffected chapter")
+	}
 }
 
 func TestGenerateRejectsEmptyInputAndUnknownJob(t *testing.T) {
@@ -109,7 +127,7 @@ func TestProjectJobHidesInternals(t *testing.T) {
 	}
 	b, _ := json.Marshal(ProjectJob(s))
 	out := string(b)
-	if strings.Contains(out, "placements") || strings.Contains(out, "specHash") || strings.Contains(out, "history") {
+	if strings.Contains(out, "placements") || strings.Contains(out, "history") {
 		t.Fatalf("projection leaks internals: %s", out)
 	}
 	if !strings.Contains(out, `"status":"assembled"`) {
