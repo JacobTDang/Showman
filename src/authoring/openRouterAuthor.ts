@@ -31,6 +31,8 @@ type MessageContent = string | null | Array<{ type?: string; text?: string }>;
 interface ChatResponse {
   choices?: Array<{ message?: { content?: MessageContent; reasoning?: string | null } }>;
   error?: { message?: string };
+  model?: string;
+  provider?: string;
 }
 
 /** Coalesce OpenRouter's content (string | array-of-parts | reasoning) to a string. */
@@ -51,6 +53,8 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
   private readonly fetchImpl: typeof fetch;
   private readonly prompts: AuthorPrompts;
   private readonly schemaMode: SchemaMode;
+  private resolvedModel?: string;
+  private resolvedProvider?: string;
 
   constructor(opts: OpenRouterAuthorOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
@@ -67,7 +71,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
     const system = this.prompts.system(this.schemaMode === "full" ? JSON.stringify(ctx.schema) : describeSceneCompact());
-    const correction = this.prompts.correction(ctx.feedback?.errors ?? []);
+    const correction = `${this.prompts.correction(ctx.feedback?.errors ?? [])}${ctx.feedback?.note ? `\n\nCorrection required: ${ctx.feedback.note}` : ""}`;
 
     let res: Response;
     try {
@@ -106,8 +110,14 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
     if (!res.ok || data.error) {
       throw new Error(`OpenRouter request failed (${res.status}): ${data.error?.message ?? "unknown error"}`);
     }
+    this.resolvedModel = data.model ?? this.model;
+    this.resolvedProvider = data.provider ?? res.headers?.get?.("x-openrouter-provider") ?? "openrouter";
     const text = contentToText(data.choices?.[0]?.message);
     if (!text.trim()) throw new Error("OpenRouter returned an empty completion.");
     return extractJson(text);
+  }
+
+  provenance() {
+    return { author: "OpenRouterSpecAuthor", model: this.resolvedModel ?? this.model, provider: this.resolvedProvider ?? "openrouter" };
   }
 }

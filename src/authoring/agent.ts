@@ -16,6 +16,7 @@ import type { RenderOptions } from "../service/renderService.js";
 import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 import { autoRepairSpec } from "./autoRepair.js";
 import { extractJson } from "./jsonRepair.js";
+import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
 export { extractJson } from "./jsonRepair.js";
@@ -42,6 +43,8 @@ export interface AuthorContext {
 export interface SpecAuthor {
   /** Propose a Scene Spec for `brief`, optionally correcting from prior feedback. */
   propose(brief: string, context: AuthorContext): Promise<unknown>;
+  /** Bounded public identity; never includes credentials or hidden reasoning. */
+  provenance?(): { author: string; model?: string; provider?: string };
 }
 
 export interface AuthoringAttempt {
@@ -51,6 +54,7 @@ export interface AuthoringAttempt {
   previewed?: boolean;
   /** Mechanical fixes auto-applied this attempt (clamps, key renames) — no LLM round-trip spent. */
   repaired?: string[];
+  semantic?: SemanticCheck;
 }
 
 export interface AuthoringResult {
@@ -60,6 +64,7 @@ export interface AuthoringResult {
   attempts: number;
   history: AuthoringAttempt[];
   error?: string;
+  provenance?: { author: string; model?: string; provider?: string };
 }
 
 export interface AuthoringOptions {
@@ -82,8 +87,10 @@ export class AuthoringAgent {
    * just stops at a good spec so callers can render synchronously (the atomic API path).
    */
   async authorSpec(
-    brief: string,
+    input: string | PedagogyRequest,
   ): Promise<{ ok: boolean; spec?: SceneSpec; attempts: number; history: AuthoringAttempt[]; error?: string }> {
+    const request: PedagogyRequest = typeof input === "string" ? { brief: input } : input;
+    const brief = authorBrief(request);
     const maxAttempts = Math.max(1, this.options.maxAttempts ?? 3);
     const schema = await this.client.getSchema();
     const history: AuthoringAttempt[] = [];
@@ -127,7 +134,16 @@ export class AuthoringAgent {
         previewed = true;
       }
 
-      history.push({ attempt, valid: true, errorCount: 0, previewed, ...(repaired ? { repaired } : {}) });
+      const semantic = checkSemanticAdherence(spec as SceneSpec, request);
+      if (!semantic.passed) {
+        history.push({ attempt, valid: true, errorCount: semantic.missing.length + semantic.foundForbidden.length, previewed, semantic });
+        feedback = {
+          note: `Semantic adherence failed. Missing required concepts: ${semantic.missing.join(", ") || "none"}. Forbidden concepts found: ${semantic.foundForbidden.join(", ") || "none"}.`,
+        };
+        continue;
+      }
+
+      history.push({ attempt, valid: true, errorCount: 0, previewed, semantic, ...(repaired ? { repaired } : {}) });
       return { ok: true, spec: spec as SceneSpec, attempts: attempt, history };
     }
     return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid spec" };
@@ -146,7 +162,18 @@ export class AuthoringAgent {
       history.push({ attempt: authored.attempts, valid: true, errorCount: submitted.errors.length, previewed });
       return { ok: false, attempts: authored.attempts, history, error: "submit rejected the spec" };
     }
-    return { ok: true, spec: authored.spec, jobId: submitted.jobId, attempts: authored.attempts, history };
+    return {
+      ok: true,
+      spec: authored.spec,
+      jobId: submitted.jobId,
+      attempts: authored.attempts,
+      history,
+      provenance: this.author.provenance?.() ?? { author: this.author.constructor.name },
+    };
+  }
+
+  provenance(): { author: string; model?: string; provider?: string } {
+    return this.author.provenance?.() ?? { author: this.author.constructor.name };
   }
 }
 
@@ -158,6 +185,9 @@ export class ScriptedAuthor implements SpecAuthor {
     const spec = this.specs[Math.min(this.i, this.specs.length - 1)];
     this.i++;
     return spec;
+  }
+  provenance() {
+    return { author: "ScriptedAuthor", provider: "offline" };
   }
 }
 
@@ -197,7 +227,7 @@ export class AnthropicSpecAuthor implements SpecAuthor {
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
     const system = this.prompts.system(schemaText(this.schemaMode, ctx.schema));
-    const correction = this.prompts.correction(ctx.feedback?.errors ?? []);
+    const correction = `${this.prompts.correction(ctx.feedback?.errors ?? [])}${ctx.feedback?.note ? `\n\nCorrection required: ${ctx.feedback.note}` : ""}`;
     const res = await this.fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
@@ -211,5 +241,9 @@ export class AnthropicSpecAuthor implements SpecAuthor {
     const data = (await res.json()) as { content?: Array<{ text?: string }> };
     const text = data.content?.map((c) => c.text ?? "").join("") ?? "";
     return extractJson(text);
+  }
+
+  provenance() {
+    return { author: "AnthropicSpecAuthor", model: this.model, provider: "anthropic" };
   }
 }

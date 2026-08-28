@@ -120,6 +120,28 @@ describe("authoring loop (M4.3)", () => {
     expect(result.attempts).toBe(2);
   });
 
+  it("rejects an unrelated schema-valid scene and retries on semantic anchors", async () => {
+    const percentage = {
+      ...validScene(),
+      nodes: [{ id: "percent", type: "text", text: "Percents: 2 out of every 100", x: 2, y: 20, fontSize: 8, fill: "#111111" }],
+    } satisfies SceneSpec;
+    const circuit = {
+      ...validScene(),
+      nodes: [{ id: "rc-circuit", type: "text", text: "Battery → Resistor → Capacitor", x: 2, y: 20, fontSize: 8, fill: "#111111" }],
+    } satisfies SceneSpec;
+    const agent = new AuthoringAgent(backend, new ScriptedAuthor([percentage, circuit]), { maxAttempts: 2 });
+
+    const result = await agent.authorSpec({
+      brief: "Explain an RC charging circuit",
+      mustShow: ["battery", "resistor", "capacitor"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.attempts).toBe(2);
+    expect(result.history[0]!.semantic).toMatchObject({ passed: false, missing: ["battery", "resistor", "capacitor"] });
+    expect(result.history[1]!.semantic).toMatchObject({ passed: true, missing: [] });
+  });
+
   it("extractJson pulls a spec object out of chatty text", () => {
     const obj = extractJson('Sure! Here you go:\n```json\n{"a": 1, "b": {"c": "}"}}\n```\nHope that helps') as {
       a: number;

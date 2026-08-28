@@ -122,6 +122,10 @@ export class TemplateAuthor implements SpecAuthor {
     };
     return buildCountingLesson(base);
   }
+
+  provenance() {
+    return { author: "TemplateAuthor", model: "deterministic-template", provider: "offline" };
+  }
 }
 
 /**

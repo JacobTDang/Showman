@@ -84,7 +84,7 @@ describe("brief -> finished video, end to end (the product goal)", () => {
     if (!ffmpeg) return expect.unreachable("ffmpeg required");
     const r = await fetch(`${baseUrl}/v1/generate`, {
       method: "POST",
-      body: JSON.stringify({ brief: "teach counting to three with stars" }),
+      body: JSON.stringify({ brief: "teach counting to three with stars", includeSpec: false }),
     });
     expect(r.status).toBe(200); // synchronous — no 202, no jobId, no polling
     const out = await body(r);
@@ -92,6 +92,16 @@ describe("brief -> finished video, end to end (the product goal)", () => {
     expect(out.video.key).toBeTruthy();
     expect(out.durationSec).toBeGreaterThan(0);
     expect(out.attempts).toBeGreaterThanOrEqual(1);
+    expect(out.spec).toBeUndefined();
+    expect(out.provenance).toMatchObject({
+      author: "TemplateAuthor",
+      model: "deterministic-template",
+      provider: "offline",
+    });
+    expect(out.provenance.specHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(out.provenance.specKey).toBe(`specs/${out.provenance.specHash}.json`);
+    const exactSpec = await fetch(`${baseUrl}/objects/${out.provenance.specKey}`);
+    expect(await exactSpec.json()).toMatchObject({ specVersion: 1, nodes: expect.any(Array) });
     // The returned reference fetches a real MP4 (ftyp box).
     const obj = await fetch(`${baseUrl}/objects/${out.video.key}`);
     expect(obj.headers.get("content-type")).toBe("video/mp4");
@@ -102,5 +112,14 @@ describe("brief -> finished video, end to end (the product goal)", () => {
   it("POST /v1/generate rejects an empty brief", async () => {
     const r = await fetch(`${baseUrl}/v1/generate`, { method: "POST", body: JSON.stringify({ brief: "" }) });
     expect(r.status).toBe(400);
+  });
+
+  it("rejects a hard duration budget before encoding an oversized authored scene", async () => {
+    const r = await fetch(`${baseUrl}/v1/generate`, {
+      method: "POST",
+      body: JSON.stringify({ brief: "teach counting to three with stars", durationBudgetSec: 0.5, durationMode: "hard" }),
+    });
+    expect(r.status).toBe(422);
+    expect(await body(r)).toMatchObject({ error: "duration_budget_exceeded", requestedDurationSec: 0.5 });
   });
 });

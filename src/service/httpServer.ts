@@ -22,6 +22,9 @@ import type { ObjectStorage } from "./storage.js";
 import { guessContentType } from "./storage.js";
 import { encodeSceneToStream } from "../encode/encodeVideo.js";
 import type { SceneSpec } from "../spec/types.js";
+import { createHash } from "node:crypto";
+import { stableStringify } from "./renderService.js";
+import type { PedagogyRequest } from "../authoring/semantic.js";
 import {
   defaultRegistry,
   describeCatalogCompact,
@@ -248,23 +251,83 @@ export function createServer(deps: ServerDeps): http.Server {
     // No schema fetch, no spec authoring, no job polling for the caller — just `{ brief }`.
     if (method === "POST" && (path === "/v1/generate" || path === "/generate")) {
       if (!deps.authoringAgent) return sendJson(res, 501, { error: "authoring_disabled" });
-      const body = (await readJson(req, limit)) as { brief?: unknown; options?: Record<string, unknown> };
+      const body = (await readJson(req, limit)) as Partial<PedagogyRequest> & {
+        brief?: unknown;
+        options?: Record<string, unknown>;
+        includeSpec?: boolean;
+      };
       const brief = typeof body?.brief === "string" ? body.brief : "";
       if (!brief.trim()) return sendJson(res, 400, { error: "missing_brief", message: "Provide a non-empty 'brief' string." });
-      const authored = await deps.authoringAgent.authorSpec(brief);
+      const listFields = ["objectives", "prerequisites", "mustShow", "misconceptions", "forbid"] as const;
+      for (const field of listFields) {
+        if (body[field] !== undefined && (!Array.isArray(body[field]) || body[field]!.some((v) => typeof v !== "string"))) {
+          return sendJson(res, 400, { error: "invalid_request", message: `'${field}' must be an array of strings.` });
+        }
+      }
+      if (body.durationBudgetSec !== undefined && (!Number.isFinite(body.durationBudgetSec) || body.durationBudgetSec <= 0)) {
+        return sendJson(res, 400, { error: "invalid_request", message: "'durationBudgetSec' must be a positive number." });
+      }
+      const request: PedagogyRequest = {
+        brief,
+        ...(typeof body.audience === "string" ? { audience: body.audience } : {}),
+        ...(typeof body.topic === "string" ? { topic: body.topic } : {}),
+        ...(body.depth === "quick" || body.depth === "standard" || body.depth === "deep" ? { depth: body.depth } : {}),
+        ...(body.durationMode === "hard" || body.durationMode === "soft" ? { durationMode: body.durationMode } : {}),
+        ...Object.fromEntries(listFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]])),
+        ...(body.durationBudgetSec !== undefined ? { durationBudgetSec: body.durationBudgetSec } : {}),
+      };
+      const authored = await deps.authoringAgent.authorSpec(request);
       if (!authored.ok || !authored.spec) {
         return sendJson(res, 422, { error: "authoring_failed", attempts: authored.attempts, history: authored.history });
+      }
+      const budget = request.durationBudgetSec;
+      const durationMode = request.durationMode ?? "soft";
+      if (budget !== undefined && durationMode === "hard" && authored.spec.duration > budget + 0.1) {
+        return sendJson(res, 422, {
+          error: "duration_budget_exceeded",
+          requestedDurationSec: budget,
+          authoredDurationSec: authored.spec.duration,
+          toleranceSec: 0.1,
+        });
       }
       const result = await service.render(authored.spec, stripModerateOptOut(body?.options));
       if (!result.ok) {
         if ("blocked" in result) return sendJson(res, 422, { error: "content_safety", findings: result.findings });
         return sendJson(res, 400, { error: "invalid_spec", errors: result.errors });
       }
+      if (budget !== undefined && durationMode === "hard" && result.durationSec > budget + 0.1) {
+        return sendJson(res, 422, {
+          error: "duration_budget_exceeded",
+          requestedDurationSec: budget,
+          actualDurationSec: result.durationSec,
+          toleranceSec: 0.1,
+        });
+      }
+      const specHash = createHash("sha256").update(stableStringify(authored.spec)).digest("hex");
+      const specKey = `specs/${specHash}.json`;
+      await storage.put(specKey, Buffer.from(stableStringify(authored.spec)), "application/json");
+      const warning =
+        budget !== undefined && result.durationSec > budget + 0.1
+          ? { code: "duration_budget_expanded", requestedDurationSec: budget, actualDurationSec: result.durationSec }
+          : undefined;
       return sendJson(res, 200, {
         videoUrl: result.video.url,
         video: result.video,
         brief,
         attempts: authored.attempts,
+        provenance: {
+          ...deps.authoringAgent.provenance(),
+          requestId: req.headers["x-request-id"] ?? createHash("sha256").update(`${specHash}:${Date.now()}`).digest("hex").slice(0, 20),
+          specHash,
+          specKey,
+          validation: {
+            schemaValid: true,
+            semantic: authored.history.at(-1)?.semantic,
+            repairs: authored.history.flatMap((a) => a.repaired ?? []),
+          },
+        },
+        ...(body.includeSpec === false ? {} : { spec: authored.spec }),
+        ...(warning ? { warnings: [warning] } : {}),
         ...(result.captions ? { captions: result.captions } : {}),
         hasAudio: result.hasAudio,
         width: result.width,
