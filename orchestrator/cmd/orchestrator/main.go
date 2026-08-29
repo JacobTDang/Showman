@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,12 +75,13 @@ func main() {
 	}
 
 	pipeline := &orch.Pipeline{
-		Director: orch.NewDirector(checkpoint, nil),
-		Planner:  planner,
-		Selector: selector,
-		Engine:   engine,
-		Stitcher: &orch.FFmpegStitcher{Fetcher: engine, OutDir: outDir},
-		Webhook:  &orch.WebhookSender{Secret: os.Getenv("SHOWMAN_WEBHOOK_SECRET"), Allowlist: allowlist},
+		Director:    orch.NewDirector(checkpoint, nil),
+		Planner:     planner,
+		Selector:    selector,
+		Engine:      engine,
+		Stitcher:    &orch.FFmpegStitcher{Fetcher: engine, OutDir: outDir},
+		Webhook:     &orch.WebhookSender{Secret: os.Getenv("SHOWMAN_WEBHOOK_SECRET"), Allowlist: allowlist},
+		Concurrency: envInt("SHOWMAN_SCENE_CONCURRENCY", 3),
 	}
 
 	ctx := context.Background()
@@ -103,6 +105,14 @@ func main() {
 	}
 	fmt.Printf("[showman-orchestrator] listening on %s (engine %s, llm=%v)\n", ln.Addr(), engineURL, llmEnabled)
 	select {} // serve forever
+}
+
+func envInt(key string, def int) int {
+	value, err := strconv.Atoi(os.Getenv(key))
+	if err != nil || value < 1 {
+		return def
+	}
+	return value
 }
 
 func envOr(key, def string) string {

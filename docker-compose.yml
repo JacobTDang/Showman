@@ -21,6 +21,8 @@ services:
       PORT: "8080"
       SHOWMAN_DATA_DIR: /data
       SHOWMAN_PUBLIC_URL: http://localhost:8080
+      SHOWMAN_CONCURRENCY: "1"
+      SHOWMAN_JOB_CONCURRENCY: "1"
     volumes:
       - showman-data:/data
 
@@ -55,6 +57,7 @@ services:
       PORT: "8090"
       SHOWMAN_ENGINE_URL: http://worker:8080
       SHOWMAN_OUT_DIR: /data/final
+      SHOWMAN_SCENE_CONCURRENCY: "1"
     ports:
       - "8091:8090"
     volumes:
