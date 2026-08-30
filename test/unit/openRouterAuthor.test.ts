@@ -16,7 +16,7 @@ function fakeFetch(content: string, opts: { ok?: boolean; status?: number; error
   return { impl, calls };
 }
 
-const ctx: AuthorContext = { schema: describeScene(), attempt: 1 };
+const ctx: AuthorContext = { schema: describeScene(), attempt: 1, audience: "electrical engineering graduate students" };
 
 const validSpecJson = JSON.stringify({
   specVersion: 1,
@@ -44,6 +44,7 @@ describe("OpenRouterSpecAuthor", () => {
     const body = JSON.parse(String(calls[0]!.init.body));
     expect(body.model).toBe("openai/gpt-oss-120b");
     expect(JSON.stringify(body.messages)).toContain("count to 3 with dots");
+    expect(JSON.stringify(body.messages)).toContain("electrical engineering graduate students");
     expect(JSON.stringify(body.messages)).toContain("specVersion"); // schema embedded
     const headers = calls[0]!.init.headers as Record<string, string>;
     expect(headers.authorization).toBe("Bearer test-key");

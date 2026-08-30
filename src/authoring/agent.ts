@@ -37,6 +37,7 @@ function defaultSchemaMode(): SchemaMode {
 export interface AuthorContext {
   schema: SchemaDescription;
   attempt: number;
+  audience?: string;
   feedback?: { errors?: ValidationError[]; note?: string };
   /** Candidate from the preceding successful completion, supplied for an actual repair turn. */
   previousCandidate?: unknown;
@@ -107,6 +108,7 @@ export class AuthoringAgent {
         spec = await this.author.propose(brief, {
           schema,
           attempt,
+          ...(request.audience ? { audience: request.audience } : {}),
           ...(feedback ? { feedback } : {}),
           ...(previousCandidate !== undefined ? { previousCandidate } : {}),
         });
@@ -253,7 +255,7 @@ export class AnthropicSpecAuthor implements SpecAuthor {
   }
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
-    const system = this.prompts.system(schemaText(this.schemaMode, ctx.schema));
+    const system = this.prompts.system(schemaText(this.schemaMode, ctx.schema), ctx.audience);
     const correction = `${this.prompts.correction(ctx.feedback?.errors ?? [])}${ctx.feedback?.note ? `\n\nCorrection required: ${ctx.feedback.note}` : ""}`;
     const messages = [
       { role: "user", content: `Brief: ${brief}` },

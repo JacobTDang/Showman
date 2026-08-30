@@ -17,6 +17,13 @@ describe("authoring prompt pack", () => {
     expect(p.sources.system).toContain("author-system.md");
   });
 
+  it("interpolates a request audience and keeps young children as the default", () => {
+    const prompts = loadPrompts();
+    expect(prompts.system("schema", "graduate electrical engineers")).toContain("graduate electrical engineers");
+    expect(prompts.system("schema")).toContain("young children");
+    expect(prompts.system("schema")).toContain("V_C(t)");
+  });
+
   it("correction is empty with no errors and embeds the errors otherwise", () => {
     const p = loadPrompts();
     expect(p.correction([])).toBe("");

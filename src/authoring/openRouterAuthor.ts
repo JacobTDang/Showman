@@ -82,7 +82,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
   }
 
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
-    const system = this.prompts.system(this.schemaMode === "full" ? JSON.stringify(ctx.schema) : describeSceneCompact());
+    const system = this.prompts.system(this.schemaMode === "full" ? JSON.stringify(ctx.schema) : describeSceneCompact(), ctx.audience);
     const correction = `${this.prompts.correction(ctx.feedback?.errors ?? [])}${ctx.feedback?.note ? `\n\nCorrection required: ${ctx.feedback.note}` : ""}`;
     const messages = [
       { role: "system", content: system },

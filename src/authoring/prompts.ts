@@ -31,7 +31,7 @@ export function defaultPromptDir(): string {
 /** Built-in fallbacks so authoring works even if the prompt files are absent. */
 const BUILTIN: Record<string, string> = {
   "author-system.md":
-    "You are an expert author of beautiful, warm, pedagogically-structured animated lessons for young children. " +
+    "You are an expert author of beautiful, pedagogically-structured animated lessons. Write for this audience and register: {{audience}}. " +
     "Given a brief, output ONLY a single JSON Scene Spec object — no prose, no markdown fences, no comments. " +
     "Use ONLY the node types, properties, easings, and fonts described in this schema, and respect its limits.\n\nSCHEMA:\n{{schema}}\n{{examples}}",
   "author-correction.md":
@@ -48,7 +48,7 @@ export interface PromptSourceOptions {
 
 export interface AuthorPrompts {
   /** The full system prompt with the schema text (and any few-shot examples) interpolated. */
-  system(schemaText: string): string;
+  system(schemaText: string, audience?: string): string;
   /** The correction suffix for the user message; empty string when there are no errors. */
   correction(errors: unknown[]): string;
   /** Where each template was actually loaded from (for diagnostics). */
@@ -78,8 +78,11 @@ export function loadPrompts(opts: PromptSourceOptions = {}): AuthorPrompts {
   const examples = ex.text.trim();
 
   return {
-    system(schemaText: string): string {
-      return sys.text.replace("{{schema}}", schemaText).replace("{{examples}}", examples ? `\n${examples}\n` : "");
+    system(schemaText: string, audience = "young children"): string {
+      return sys.text
+        .replace("{{schema}}", schemaText)
+        .replace("{{audience}}", audience)
+        .replace("{{examples}}", examples ? `\n${examples}\n` : "");
     },
     correction(errors: unknown[]): string {
       if (!errors || errors.length === 0) return "";
