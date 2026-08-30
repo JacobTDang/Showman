@@ -25,7 +25,7 @@ export interface ObjectStorage {
   stat(key: string): Promise<StoredObject | null>;
   /** Local filesystem path for a key, if this backend is filesystem-backed. */
   localPath?(key: string): string;
-  openRead?(key: string): ReadStream;
+  openRead?(key: string, range?: { start: number; end: number }): ReadStream;
 }
 
 /** Deterministic content-addressed id: same bytes -> same key (free dedupe + idempotency). */
@@ -91,8 +91,8 @@ export class LocalObjectStorage implements ObjectStorage {
     return { key, url: this.urlFor(key), size: st.size, contentType: guessContentType(key) };
   }
 
-  openRead(key: string): ReadStream {
-    return createReadStream(this.localPath(key));
+  openRead(key: string, range?: { start: number; end: number }): ReadStream {
+    return createReadStream(this.localPath(key), range);
   }
 
   private urlFor(key: string): string {

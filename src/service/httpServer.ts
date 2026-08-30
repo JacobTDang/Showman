@@ -357,21 +357,55 @@ export function createServer(deps: ServerDeps): http.Server {
 
     if (method === "GET" && path.startsWith("/objects/")) {
       const key = decodeURIComponent(path.slice("/objects/".length));
-      return serveObject(storage, key, res);
+      return serveObject(storage, key, req, res);
     }
 
     sendJson(res, 404, { error: "not_found", path });
   }
 }
 
-async function serveObject(storage: ObjectStorage, key: string, res: http.ServerResponse): Promise<void> {
+interface ByteRange {
+  start: number;
+  end: number;
+}
+
+function parseByteRange(header: string, size: number): ByteRange | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || size <= 0) return null;
+  const [, startText = "", endText = ""] = match;
+  if (!startText && !endText) return null;
+  if (!startText) {
+    const suffixLength = Number(endText);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    return { start: Math.max(0, size - suffixLength), end: size - 1 };
+  }
+  const start = Number(startText);
+  const requestedEnd = endText ? Number(endText) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start < 0 || start >= size || requestedEnd < start) return null;
+  return { start, end: Math.min(requestedEnd, size - 1) };
+}
+
+async function serveObject(storage: ObjectStorage, key: string, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const stat = await storage.stat(key);
   if (!stat) return sendJson(res, 404, { error: "not_found", key });
-  res.writeHead(200, { "content-type": guessContentType(key), "content-length": stat.size });
+  const rangeHeader = req.headers.range;
+  const range = (typeof rangeHeader === "string" ? parseByteRange(rangeHeader, stat.size) : undefined) ?? undefined;
+  if (rangeHeader !== undefined && !range) {
+    res.writeHead(416, { "content-range": `bytes */${stat.size}`, "accept-ranges": "bytes" });
+    return void res.end();
+  }
+  const headers: Record<string, string | number> = {
+    "content-type": stat.contentType || guessContentType(key),
+    "accept-ranges": "bytes",
+    "content-length": range ? range.end - range.start + 1 : stat.size,
+    ...(range ? { "content-range": `bytes ${range.start}-${range.end}/${stat.size}` } : {}),
+  };
+  res.writeHead(range ? 206 : 200, headers);
   if (storage.openRead) {
-    storage.openRead(key).pipe(res);
+    storage.openRead(key, range).pipe(res);
   } else {
-    res.end(await storage.get(key));
+    const bytes = await storage.get(key);
+    res.end(range ? bytes.subarray(range.start, range.end + 1) : bytes);
   }
 }
 

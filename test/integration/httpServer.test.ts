@@ -29,11 +29,12 @@ let server: Server;
 let baseUrl: string;
 let dataDir: string;
 let ffmpeg = false;
+let storage: LocalObjectStorage;
 
 beforeAll(async () => {
   ffmpeg = await hasFfmpeg();
   dataDir = mkdtempSync(join(tmpdir(), "showman-http-"));
-  const storage = new LocalObjectStorage(join(dataDir, "objects"));
+  storage = new LocalObjectStorage(join(dataDir, "objects"));
   const service = new RenderService({ storage, workDir: join(dataDir, "tmp") });
   server = createServer({ service, storage });
   const port = await listen(server, 0);
@@ -106,6 +107,25 @@ describe("HTTP capability surface (M1.3)", () => {
     expect(obj.headers.get("content-type")).toBe("video/mp4");
     const mp4 = Buffer.from(await obj.arrayBuffer());
     expect(mp4.subarray(4, 8).toString("latin1")).toBe("ftyp");
+  });
+
+  it("serves objects with byte ranges for browser seeking", async () => {
+    const bytes = Buffer.from("0123456789");
+    await storage.put("fixtures/range.mp4", bytes, "video/mp4");
+
+    const plain = await fetch(`${baseUrl}/objects/fixtures/range.mp4`);
+    expect(plain.status).toBe(200);
+    expect(plain.headers.get("accept-ranges")).toBe("bytes");
+
+    const partial = await fetch(`${baseUrl}/objects/fixtures/range.mp4`, { headers: { range: "bytes=2-5" } });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get("content-range")).toBe("bytes 2-5/10");
+    expect(partial.headers.get("content-length")).toBe("4");
+    expect(await partial.text()).toBe("2345");
+
+    const unsatisfiable = await fetch(`${baseUrl}/objects/fixtures/range.mp4`, { headers: { range: "bytes=20-30" } });
+    expect(unsatisfiable.status).toBe(416);
+    expect(unsatisfiable.headers.get("content-range")).toBe("bytes */10");
   });
 
   it("unknown route 404s", async () => {
