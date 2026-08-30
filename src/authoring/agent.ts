@@ -17,6 +17,8 @@ import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 import { autoRepairSpec } from "./autoRepair.js";
 import { extractJson, JsonExtractionError } from "./jsonRepair.js";
 import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
+import { expandBuilderPlacements } from "./builderPlacements.js";
+import { defaultRegistry } from "../catalog/index.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
 export { extractJson } from "./jsonRepair.js";
@@ -58,7 +60,7 @@ export interface AuthoringAttempt {
   /** Mechanical fixes auto-applied this attempt (clamps, key renames) — no LLM round-trip spent. */
   repaired?: string[];
   semantic?: SemanticCheck;
-  failure?: "truncated_response" | "malformed_response" | "author_error";
+  failure?: "truncated_response" | "malformed_response" | "author_error" | "builder_error";
   message?: string;
 }
 
@@ -129,6 +131,19 @@ export class AuthoringAgent {
         };
         continue;
       }
+      // A spec may reference catalog builders for geometry a model cannot place by
+      // eye -- schematics above all. Expand before validation, so everything
+      // downstream sees an ordinary spec.
+      const built = expandBuilderPlacements(spec, defaultRegistry());
+      spec = built.spec;
+      if (built.errors.length > 0) {
+        history.push({ attempt, valid: false, errorCount: built.errors.length, failure: "builder_error" });
+        feedback = {
+          note: `Builder placements failed: ${built.errors.join("; ")}. Correct the builder name or its params.`,
+        };
+        continue;
+      }
+
       let validation = await this.client.validate(spec);
       let repaired: string[] | undefined;
       if (!validation.valid) {
