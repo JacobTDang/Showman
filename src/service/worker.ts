@@ -3,7 +3,7 @@
  * service + the HTTP surface and listens. In production this is the image baked in
  * M1.4 and cloned horizontally in M3.
  *
- * Env: PORT, SHOWMAN_DATA_DIR, SHOWMAN_PUBLIC_URL, SHOWMAN_CONCURRENCY.
+ * Env: PORT, SHOWMAN_HOST, SHOWMAN_DATA_DIR, SHOWMAN_PUBLIC_URL, SHOWMAN_CONCURRENCY.
  */
 
 import { join } from "node:path";
@@ -39,7 +39,10 @@ export async function startWorker(): Promise<{ port: number; close: () => Promis
   // is set, otherwise the offline template author.
   const authoringAgent = new AuthoringAgent(new DirectBackend(service, jobRunner), createDefaultAuthor(), { maxAttempts: 3 });
   const server = createServer({ service, storage, jobRunner, authoringAgent });
-  const port = await listen(server, Number(process.env.PORT ?? 8080), "0.0.0.0");
+  // Loopback-pinned by an embedding host (circuit_mcp sets SHOWMAN_HOST=127.0.0.1);
+  // containers keep binding every interface so k8s/compose networking still works.
+  const host = process.env.SHOWMAN_HOST ?? "0.0.0.0";
+  const port = await listen(server, Number(process.env.PORT ?? 8080), host);
   return {
     port,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
