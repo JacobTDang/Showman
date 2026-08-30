@@ -163,7 +163,9 @@ describe("authoring loop (M4.3)", () => {
     const author: SpecAuthor = {
       async propose(_brief, context) {
         contexts.push(context);
-        return contexts.length === 1 ? invalid : validScene();
+        return contexts.length === 1
+          ? invalid
+          : { ...validScene(), nodes: [{ id: "label", type: "text", text: "dot", x: 2, y: 2, fontSize: 8 }] };
       },
     };
     const agent = new AuthoringAgent(backend, author, { maxAttempts: 2 });

@@ -58,7 +58,9 @@ export interface ParsedBrief {
 
 /** Heuristically parse a brief into lesson parameters. Always returns sane defaults. */
 export function parseBrief(brief: string): ParsedBrief {
-  const b = brief.toLowerCase();
+  // Structured pedagogy metadata can contain unrelated numbers (for example a
+  // 0.5-second budget); intent parsing must only inspect the caller's actual brief.
+  const b = brief.split("\nPedagogy constraints", 1)[0]!.toLowerCase();
 
   // Count: "count to N", or the first number word / digit (1..10).
   let count = 3;
@@ -107,12 +109,13 @@ export class TemplateAuthor implements SpecAuthor {
       ...(this.opts.height !== undefined ? { height: this.opts.height } : {}),
       ...(this.opts.fps !== undefined ? { fps: this.opts.fps } : {}),
     };
-    const mathIntent = parseMathBrief(brief);
+    const coreBrief = brief.split("\nPedagogy constraints", 1)[0]!;
+    const mathIntent = parseMathBrief(coreBrief);
     if (mathIntent) {
       return buildMathLesson(mathIntent.topic, { ...mathIntent.params, ...dims });
     }
 
-    const parsed = parseBrief(brief);
+    const parsed = parseBrief(coreBrief);
     const base: CountingLessonOptions = {
       count: parsed.count,
       topic: parsed.topic,

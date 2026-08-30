@@ -37,7 +37,7 @@ export const rcChargingTool: BuilderTool<Params> = {
     const blue = "#277da1";
     const tau = p.resistanceOhms * p.capacitanceFarads;
     const end = p.switchTimeSec + p.animationDurationSec;
-    const bat = battery({ id: "rc-battery", x: 0, y: 70, label: `${p.sourceVolts} V`, color: ink });
+    const bat = battery({ id: "rc-battery", x: 0, y: 70, label: `Battery ${p.sourceVolts} V`, color: ink });
     const sw = switchSym({ id: "rc-switch", x: 105, y: 70, label: "closes at t = 0", color: ink });
     const blade = sw.node.children.find((node) => node.id === "rc-switch-blade");
     if (blade) {
@@ -52,8 +52,8 @@ export const rcChargingTool: BuilderTool<Params> = {
         },
       ];
     }
-    const res = resistor({ id: "rc-resistor", x: 210, y: 70, label: `${p.resistanceOhms} Ω`, color: ink });
-    const cap = capacitor({ id: "rc-capacitor", x: 325, y: 70, label: `${p.capacitanceFarads} F`, color: ink });
+    const res = resistor({ id: "rc-resistor", x: 210, y: 70, label: `Resistor ${p.resistanceOhms} Ω`, color: ink });
+    const cap = capacitor({ id: "rc-capacitor", x: 325, y: 70, label: `Capacitor ${p.capacitanceFarads} F`, color: ink });
     const graphX = 470;
     const graphY = 45;
     const graphW = 270;

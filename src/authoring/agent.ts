@@ -164,7 +164,7 @@ export class AuthoringAgent {
       }
 
       const semantic = checkSemanticAdherence(spec as SceneSpec, request);
-      if (!semantic.passed) {
+      if (semantic.status === "failed") {
         history.push({ attempt, valid: true, errorCount: semantic.missing.length + semantic.foundForbidden.length, previewed, semantic });
         feedback = {
           note: `Semantic adherence failed. Missing required concepts: ${semantic.missing.join(", ") || "none"}. Forbidden concepts found: ${semantic.foundForbidden.join(", ") || "none"}.`,

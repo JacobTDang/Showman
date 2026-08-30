@@ -15,6 +15,7 @@ export interface PedagogyRequest {
 }
 
 export interface SemanticCheck {
+  status: "passed" | "failed" | "unchecked";
   passed: boolean;
   required: string[];
   missing: string[];
@@ -22,11 +23,11 @@ export interface SemanticCheck {
   foundForbidden: string[];
 }
 
-const TOPIC_ANCHORS: Array<{ pattern: RegExp; anchors: string[] }> = [
-  { pattern: /\b(?:rc|resistor.capacitor|capacitor.resistor|charging circuit)\b/i, anchors: ["resistor", "capacitor"] },
-  { pattern: /\bprojectile\b/i, anchors: ["projectile"] },
-  { pattern: /\bphotosynthesis\b/i, anchors: ["photosynthesis"] },
-];
+const STOP_WORDS = new Set([
+  "about", "after", "again", "also", "animated", "animation", "before", "brief", "connect", "current", "demonstrate", "describe",
+  "counting", "diagram", "explain", "flowing", "from", "friendly", "into", "lesson", "make", "show", "simple", "teach", "that", "their", "then",
+  "through", "using", "video", "what", "when", "where", "which", "while", "with", "why", "would", "it",
+]);
 
 function normalize(value: string): string {
   return value
@@ -38,8 +39,16 @@ function normalize(value: string): string {
     .trim();
 }
 
-function sceneCorpus(spec: SceneSpec): string {
-  return normalize(JSON.stringify(spec));
+function visibleCorpus(spec: SceneSpec): string {
+  const visible: string[] = [];
+  const visit = (node: SceneSpec["nodes"][number]): void => {
+    if (node.type === "text") visible.push(node.text);
+    if (node.type === "counter") visible.push(node.prefix ?? "", String(node.value ?? 0), node.suffix ?? "");
+    if (node.type === "group") node.children.forEach(visit);
+  };
+  spec.nodes.forEach(visit);
+  visible.push(...(spec.narration?.segments?.map((segment) => segment.text) ?? []));
+  return normalize(visible.join(" "));
 }
 
 function present(corpus: string, anchor: string): boolean {
@@ -47,15 +56,37 @@ function present(corpus: string, anchor: string): boolean {
   return words.length > 0 && words.every((word) => corpus.includes(word));
 }
 
+/** Content-bearing terms from any topic, rather than a fixed list of supported subjects. */
+function inferredAnchors(request: PedagogyRequest): string[] {
+  const source = normalize(`${request.topic ?? ""} ${request.brief}`);
+  return [
+    ...new Set(
+      source
+        .split(" ")
+        .filter((word) => word.length >= 4)
+        .filter((word) => !STOP_WORDS.has(word) && !/^\d+$/.test(word)),
+    ),
+  ].slice(0, 10);
+}
+
 /** Cheap, deterministic guard against a valid scene about an unrelated subject. */
 export function checkSemanticAdherence(spec: SceneSpec, request: PedagogyRequest): SemanticCheck {
-  const inferred = TOPIC_ANCHORS.find(({ pattern }) => pattern.test(`${request.topic ?? ""} ${request.brief}`))?.anchors ?? [];
-  const required = [...new Set([...(request.mustShow ?? []), ...inferred])];
+  const explicit = [...new Set(request.mustShow ?? [])];
+  // Explicit mustShow constraints are authoritative and conjunctive. Otherwise,
+  // derived terms form a disjunctive relevance signal: one visible match proves
+  // the scene is about the requested topic without requiring every word verbatim.
+  const inferred = explicit.length === 0 ? inferredAnchors(request) : [];
+  const required = [...explicit, ...inferred];
   const forbidden = [...new Set(request.forbid ?? [])];
-  const corpus = sceneCorpus(spec);
-  const missing = required.filter((anchor) => !present(corpus, anchor));
+  const corpus = visibleCorpus(spec);
+  const missingExplicit = explicit.filter((anchor) => !present(corpus, anchor));
+  const inferredMatched = inferred.length === 0 || inferred.some((anchor) => present(corpus, anchor));
+  const missing = [...missingExplicit, ...(!inferredMatched ? inferred : [])];
   const foundForbidden = forbidden.filter((anchor) => present(corpus, anchor));
-  return { passed: missing.length === 0 && foundForbidden.length === 0, required, missing, forbidden, foundForbidden };
+  const checked = required.length > 0 || forbidden.length > 0;
+  const passed = checked && missingExplicit.length === 0 && inferredMatched && foundForbidden.length === 0;
+  const status = !checked ? "unchecked" : passed ? "passed" : "failed";
+  return { status, passed, required, missing, forbidden, foundForbidden };
 }
 
 export function authorBrief(request: PedagogyRequest): string {
