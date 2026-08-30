@@ -75,4 +75,20 @@ describe("OpenRouterSpecAuthor", () => {
     const author = new OpenRouterSpecAuthor({ apiKey: "k", fetchImpl: impl });
     await expect(author.propose("x", ctx)).rejects.toThrow(/empty completion/);
   });
+
+  it("reports a timeout that occurs while reading the response body", async () => {
+    const timeout = Object.assign(new Error("body aborted"), { name: "TimeoutError" });
+    const impl = (async () => ({ ok: true, status: 200, json: async () => Promise.reject(timeout) }) as unknown as Response) as typeof fetch;
+    const author = new OpenRouterSpecAuthor({ apiKey: "k", timeoutMs: 1234, fetchImpl: impl });
+
+    await expect(author.propose("x", ctx)).rejects.toThrow(/timed out after 1234ms while reading/);
+  });
+
+  it("still reports genuine response parse failures as non-JSON", async () => {
+    const impl = (async () =>
+      ({ ok: true, status: 200, json: async () => Promise.reject(new SyntaxError("bad JSON")) }) as unknown as Response) as typeof fetch;
+    const author = new OpenRouterSpecAuthor({ apiKey: "k", fetchImpl: impl });
+
+    await expect(author.propose("x", ctx)).rejects.toThrow(/non-JSON response \(status 200\)/);
+  });
 });

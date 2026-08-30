@@ -43,6 +43,18 @@ function contentToText(message: { content?: MessageContent; reasoning?: string |
   return message?.reasoning ?? "";
 }
 
+function configuredTimeoutMs(value: string | undefined): number {
+  if (value === undefined || value.trim() === "") return 90_000;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("OPENROUTER_TIMEOUT_MS must be a positive number.");
+  return parsed;
+}
+
+function isAbortError(err: unknown): boolean {
+  const name = (err as { name?: unknown } | null)?.name;
+  return name === "TimeoutError" || name === "AbortError";
+}
+
 export class OpenRouterSpecAuthor implements SpecAuthor {
   private readonly apiKey: string;
   private readonly model: string;
@@ -62,7 +74,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
     this.maxTokens = opts.maxTokens ?? 6000;
     this.temperature = opts.temperature ?? 0.4;
     this.baseUrl = (opts.baseUrl ?? process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
-    this.timeoutMs = opts.timeoutMs ?? 90_000;
+    this.timeoutMs = opts.timeoutMs ?? configuredTimeoutMs(process.env.OPENROUTER_TIMEOUT_MS);
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.prompts = opts.prompts ?? loadPrompts();
     this.schemaMode = opts.schemaMode ?? (process.env.SHOWMAN_SCHEMA_MODE === "full" ? "full" : "compact");
@@ -98,7 +110,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
-      if ((err as Error).name === "TimeoutError" || (err as Error).name === "AbortError") {
+      if (isAbortError(err)) {
         throw new Error(`OpenRouter request timed out after ${this.timeoutMs}ms`);
       }
       throw new Error(`OpenRouter request failed: ${(err as Error).message}`);
@@ -107,7 +119,8 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
     let data: ChatResponse;
     try {
       data = (await res.json()) as ChatResponse;
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) throw new Error(`OpenRouter request timed out after ${this.timeoutMs}ms while reading the response body`);
       throw new Error(`OpenRouter returned a non-JSON response (status ${res.status}).`);
     }
     if (!res.ok || data.error) {
