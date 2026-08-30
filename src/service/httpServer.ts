@@ -381,7 +381,8 @@ function parseByteRange(header: string, size: number): ByteRange | null {
   }
   const start = Number(startText);
   const requestedEnd = endText ? Number(endText) : size - 1;
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start < 0 || start >= size || requestedEnd < start) return null;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start < 0 || start >= size || requestedEnd < start)
+    return null;
   return { start, end: Math.min(requestedEnd, size - 1) };
 }
 

@@ -5,7 +5,10 @@ import { JsonExtractionError } from "../../src/authoring/jsonRepair.js";
 
 describe("tolerant JSON extraction (LLM author output)", () => {
   it("distinguishes a truncated object from balanced invalid JSON", () => {
-    for (const [text, kind] of [[`{"nodes":[`, "truncated"], [`{"a": nope}`, "invalid"]] as const) {
+    for (const [text, kind] of [
+      [`{"nodes":[`, "truncated"],
+      [`{"a": nope}`, "invalid"],
+    ] as const) {
       try {
         extractJson(text);
         throw new Error("expected extraction to fail");

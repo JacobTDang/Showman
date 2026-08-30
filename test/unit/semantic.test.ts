@@ -26,10 +26,17 @@ describe("semantic adherence", () => {
       status: "failed",
       passed: false,
     });
-    expect(checkSemanticAdherence(scene("Bode magnitude plot"), { brief: "Explain a Bode plot" })).toMatchObject({ status: "passed", passed: true });
+    expect(checkSemanticAdherence(scene("Bode magnitude plot"), { brief: "Explain a Bode plot" })).toMatchObject({
+      status: "passed",
+      passed: true,
+    });
   });
 
   it("reports unchecked when no usable anchors or constraints are available", () => {
-    expect(checkSemanticAdherence(scene("Anything"), { brief: "show it" })).toMatchObject({ status: "unchecked", passed: false, required: [] });
+    expect(checkSemanticAdherence(scene("Anything"), { brief: "show it" })).toMatchObject({
+      status: "unchecked",
+      passed: false,
+      required: [],
+    });
   });
 });

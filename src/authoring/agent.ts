@@ -122,11 +122,7 @@ export class AuthoringAgent {
       } catch (err) {
         const error = err as Error;
         const failure =
-          err instanceof JsonExtractionError
-            ? err.kind === "truncated"
-              ? "truncated_response"
-              : "malformed_response"
-            : "author_error";
+          err instanceof JsonExtractionError ? (err.kind === "truncated" ? "truncated_response" : "malformed_response") : "author_error";
         history.push({ attempt, valid: false, errorCount: 1, failure, message: error.message });
         feedback = {
           note: `${failure === "truncated_response" ? "The response was truncated" : "The response could not be used"}: ${error.message}. Return one complete JSON object.`,
