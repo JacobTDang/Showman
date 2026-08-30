@@ -101,6 +101,13 @@ export class AuthoringAgent {
     const history: AuthoringAttempt[] = [];
     let feedback: AuthorContext["feedback"];
     let previousCandidate: unknown;
+    let bestCandidateRank = Number.POSITIVE_INFINITY;
+    const retainBestCandidate = (candidate: unknown, rank: number): void => {
+      if (rank < bestCandidateRank) {
+        previousCandidate = candidate;
+        bestCandidateRank = rank;
+      }
+    };
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       let spec: unknown;
@@ -126,8 +133,6 @@ export class AuthoringAgent {
         };
         continue;
       }
-      previousCandidate = spec;
-
       let validation = await this.client.validate(spec);
       let repaired: string[] | undefined;
       if (!validation.valid) {
@@ -141,11 +146,13 @@ export class AuthoringAgent {
             validation = reval;
             repaired = fix.fixed;
           } else {
+            retainBestCandidate(fix.spec, 1_000 + reval.errors.length);
             history.push({ attempt, valid: false, errorCount: reval.errors.length, repaired: fix.fixed });
             feedback = { errors: reval.errors, note: "The spec failed validation. Fix the listed errors." };
             continue;
           }
         } else {
+          retainBestCandidate(spec, 1_000 + validation.errors.length);
           history.push({ attempt, valid: false, errorCount: validation.errors.length });
           feedback = { errors: validation.errors, note: "The spec failed validation. Fix the listed errors." };
           continue;
@@ -156,6 +163,7 @@ export class AuthoringAgent {
       if (this.options.preview) {
         const pv = await this.client.preview(spec, 0);
         if (!pv.ok) {
+          retainBestCandidate(spec, 100 + pv.errors.length);
           history.push({ attempt, valid: true, errorCount: pv.errors.length, previewed: false, ...(repaired ? { repaired } : {}) });
           feedback = { errors: pv.errors as ValidationError[], note: "Preview failed." };
           continue;
@@ -165,6 +173,7 @@ export class AuthoringAgent {
 
       const semantic = checkSemanticAdherence(spec as SceneSpec, request);
       if (semantic.status === "failed") {
+        retainBestCandidate(spec, semantic.missing.length + semantic.foundForbidden.length);
         history.push({ attempt, valid: true, errorCount: semantic.missing.length + semantic.foundForbidden.length, previewed, semantic });
         feedback = {
           note: `Semantic adherence failed. Missing required concepts: ${semantic.missing.join(", ") || "none"}. Forbidden concepts found: ${semantic.foundForbidden.join(", ") || "none"}.`,

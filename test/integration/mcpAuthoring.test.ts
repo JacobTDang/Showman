@@ -175,6 +175,33 @@ describe("authoring loop (M4.3)", () => {
     expect(contexts[1]?.previousCandidate).toEqual(invalid);
   });
 
+  it("keeps the best prior candidate when a later repair regresses", async () => {
+    const best = {
+      ...validScene(),
+      nodes: [{ id: "topic", type: "text", text: "resistor", x: 2, y: 2, fontSize: 8 }],
+    } satisfies SceneSpec;
+    const worse = { specVersion: 1 };
+    const repaired = {
+      ...validScene(),
+      nodes: [{ id: "topic", type: "text", text: "resistor capacitor", x: 2, y: 2, fontSize: 8 }],
+    } satisfies SceneSpec;
+    const contexts: AuthorContext[] = [];
+    const candidates = [best, worse, repaired];
+    const author: SpecAuthor = {
+      async propose(_brief, context) {
+        contexts.push(context);
+        return candidates[contexts.length - 1];
+      },
+    };
+    const result = await new AuthoringAgent(backend, author, { maxAttempts: 3 }).authorSpec({
+      brief: "explain an RC circuit",
+      mustShow: ["resistor", "capacitor"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(contexts[2]?.previousCandidate).toEqual(best);
+  });
+
   it("rejects an unrelated schema-valid scene and retries on semantic anchors", async () => {
     const percentage = {
       ...validScene(),
