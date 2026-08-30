@@ -1,8 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { extractJson } from "../../src/authoring/agent.js";
 import { sliceBalancedJson, repairJsonText } from "../../src/index.js";
+import { JsonExtractionError } from "../../src/authoring/jsonRepair.js";
 
 describe("tolerant JSON extraction (LLM author output)", () => {
+  it("distinguishes a truncated object from balanced invalid JSON", () => {
+    for (const [text, kind] of [[`{"nodes":[`, "truncated"], [`{"a": nope}`, "invalid"]] as const) {
+      try {
+        extractJson(text);
+        throw new Error("expected extraction to fail");
+      } catch (error) {
+        expect(error).toBeInstanceOf(JsonExtractionError);
+        expect((error as JsonExtractionError).kind).toBe(kind);
+      }
+    }
+  });
   it("pulls a spec object out of chatty prose", () => {
     const obj = extractJson('Sure! Here you go:\n{"a": 1, "b": {"c": "}"}}\nHope that helps') as { a: number; b: { c: string } };
     expect(obj.a).toBe(1);

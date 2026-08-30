@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RenderService, LocalObjectStorage, InMemoryJobStore, JobRunner, TemplateAuthor } from "../../src/index.js";
 import { DirectBackend, TOOL_DEFINITIONS, callTool } from "../../src/mcp/showmanTools.js";
-import { AuthoringAgent, ScriptedAuthor, extractJson } from "../../src/authoring/agent.js";
+import { AuthoringAgent, ScriptedAuthor, extractJson, type AuthorContext, type SpecAuthor } from "../../src/authoring/agent.js";
+import { JsonExtractionError } from "../../src/authoring/jsonRepair.js";
 import type { SceneSpec } from "../../src/index.js";
 
 function validScene(): SceneSpec {
@@ -140,6 +141,36 @@ describe("authoring loop (M4.3)", () => {
     const result = await agent.run("nonsense");
     expect(result.ok).toBe(false);
     expect(result.attempts).toBe(2);
+  });
+
+  it("counts malformed completions as attempts and returns structured history", async () => {
+    const author: SpecAuthor = {
+      async propose() {
+        throw new JsonExtractionError("incomplete JSON object", "truncated");
+      },
+    };
+    const agent = new AuthoringAgent(backend, author, { maxAttempts: 3 });
+    const result = await agent.authorSpec("explain a circuit");
+
+    expect(result).toMatchObject({ ok: false, attempts: 3 });
+    expect(result.history).toHaveLength(3);
+    expect(result.history.every((attempt) => attempt.failure === "truncated_response")).toBe(true);
+  });
+
+  it("passes the previous candidate into repair turns", async () => {
+    const invalid = { specVersion: 1 };
+    const contexts: AuthorContext[] = [];
+    const author: SpecAuthor = {
+      async propose(_brief, context) {
+        contexts.push(context);
+        return contexts.length === 1 ? invalid : validScene();
+      },
+    };
+    const agent = new AuthoringAgent(backend, author, { maxAttempts: 2 });
+    const result = await agent.authorSpec({ brief: "show the dot", mustShow: ["dot"] });
+
+    expect(result.ok).toBe(true);
+    expect(contexts[1]?.previousCandidate).toEqual(invalid);
   });
 
   it("rejects an unrelated schema-valid scene and retries on semantic anchors", async () => {

@@ -15,7 +15,7 @@ import type { ShowmanClient } from "../mcp/showmanTools.js";
 import type { RenderOptions } from "../service/renderService.js";
 import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 import { autoRepairSpec } from "./autoRepair.js";
-import { extractJson } from "./jsonRepair.js";
+import { extractJson, JsonExtractionError } from "./jsonRepair.js";
 import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
@@ -38,6 +38,8 @@ export interface AuthorContext {
   schema: SchemaDescription;
   attempt: number;
   feedback?: { errors?: ValidationError[]; note?: string };
+  /** Candidate from the preceding successful completion, supplied for an actual repair turn. */
+  previousCandidate?: unknown;
 }
 
 export interface SpecAuthor {
@@ -55,6 +57,8 @@ export interface AuthoringAttempt {
   /** Mechanical fixes auto-applied this attempt (clamps, key renames) — no LLM round-trip spent. */
   repaired?: string[];
   semantic?: SemanticCheck;
+  failure?: "truncated_response" | "malformed_response" | "author_error";
+  message?: string;
 }
 
 export interface AuthoringResult {
@@ -95,9 +99,32 @@ export class AuthoringAgent {
     const schema = await this.client.getSchema();
     const history: AuthoringAttempt[] = [];
     let feedback: AuthorContext["feedback"];
+    let previousCandidate: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      let spec = await this.author.propose(brief, { schema, attempt, ...(feedback ? { feedback } : {}) });
+      let spec: unknown;
+      try {
+        spec = await this.author.propose(brief, {
+          schema,
+          attempt,
+          ...(feedback ? { feedback } : {}),
+          ...(previousCandidate !== undefined ? { previousCandidate } : {}),
+        });
+      } catch (err) {
+        const error = err as Error;
+        const failure =
+          err instanceof JsonExtractionError
+            ? err.kind === "truncated"
+              ? "truncated_response"
+              : "malformed_response"
+            : "author_error";
+        history.push({ attempt, valid: false, errorCount: 1, failure, message: error.message });
+        feedback = {
+          note: `${failure === "truncated_response" ? "The response was truncated" : "The response could not be used"}: ${error.message}. Return one complete JSON object.`,
+        };
+        continue;
+      }
+      previousCandidate = spec;
 
       let validation = await this.client.validate(spec);
       let repaired: string[] | undefined;
@@ -228,6 +255,11 @@ export class AnthropicSpecAuthor implements SpecAuthor {
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
     const system = this.prompts.system(schemaText(this.schemaMode, ctx.schema));
     const correction = `${this.prompts.correction(ctx.feedback?.errors ?? [])}${ctx.feedback?.note ? `\n\nCorrection required: ${ctx.feedback.note}` : ""}`;
+    const messages = [
+      { role: "user", content: `Brief: ${brief}` },
+      ...(ctx.previousCandidate !== undefined ? [{ role: "assistant", content: JSON.stringify(ctx.previousCandidate) }] : []),
+      ...(correction ? [{ role: "user", content: correction.trim() }] : []),
+    ];
     const res = await this.fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
@@ -235,7 +267,7 @@ export class AnthropicSpecAuthor implements SpecAuthor {
         model: this.model,
         max_tokens: this.maxTokens,
         system,
-        messages: [{ role: "user", content: `Brief: ${brief}${correction}` }],
+        messages,
       }),
     });
     const data = (await res.json()) as { content?: Array<{ text?: string }> };

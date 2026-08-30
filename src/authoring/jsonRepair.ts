@@ -81,14 +81,28 @@ export function repairJsonText(s: string): string {
   return out;
 }
 
+export type JsonExtractionFailure = "truncated" | "invalid";
+
+/** Parse failure with enough structure for the authoring loop to report/retry it accurately. */
+export class JsonExtractionError extends Error {
+  constructor(
+    message: string,
+    readonly kind: JsonExtractionFailure,
+  ) {
+    super(message);
+    this.name = "JsonExtractionError";
+  }
+}
+
 /**
  * Extract a JSON value from a (possibly chatty / fenced / slightly-malformed) string.
  * Throws only if no recoverable JSON object is present.
  */
 export function extractJson(text: string): unknown {
   const body = stripFences(text);
-  const candidate = sliceBalancedJson(body) ?? body.trim();
-  if (!candidate) throw new Error("no JSON object in author response");
+  const balanced = sliceBalancedJson(body);
+  const candidate = balanced ?? body.trim();
+  if (!candidate) throw new JsonExtractionError("no JSON object in author response", "invalid");
   try {
     return JSON.parse(candidate);
   } catch {
@@ -97,6 +111,7 @@ export function extractJson(text: string): unknown {
   try {
     return JSON.parse(repairJsonText(candidate));
   } catch (e) {
-    throw new Error(`could not parse JSON from author response: ${(e as Error).message}`);
+    const kind: JsonExtractionFailure = balanced === null && body.includes("{") ? "truncated" : "invalid";
+    throw new JsonExtractionError(`could not parse JSON from author response: ${(e as Error).message}`, kind);
   }
 }

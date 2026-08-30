@@ -72,6 +72,12 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
   async propose(brief: string, ctx: AuthorContext): Promise<unknown> {
     const system = this.prompts.system(this.schemaMode === "full" ? JSON.stringify(ctx.schema) : describeSceneCompact());
     const correction = `${this.prompts.correction(ctx.feedback?.errors ?? [])}${ctx.feedback?.note ? `\n\nCorrection required: ${ctx.feedback.note}` : ""}`;
+    const messages = [
+      { role: "system", content: system },
+      { role: "user", content: `Brief: ${brief}` },
+      ...(ctx.previousCandidate !== undefined ? [{ role: "assistant", content: JSON.stringify(ctx.previousCandidate) }] : []),
+      ...(correction ? [{ role: "user", content: correction.trim() }] : []),
+    ];
 
     let res: Response;
     try {
@@ -87,10 +93,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
           model: this.model,
           max_tokens: this.maxTokens,
           temperature: this.temperature,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: `Brief: ${brief}${correction}` },
-          ],
+          messages,
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });

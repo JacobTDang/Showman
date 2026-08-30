@@ -55,10 +55,13 @@ describe("OpenRouterSpecAuthor", () => {
     await author.propose("count to 3", {
       schema: describeScene(),
       attempt: 2,
+      previousCandidate: { specVersion: 1, nodes: [] },
       feedback: { errors: [{ path: "nodes", code: "MISSING_FIELD", message: "nodes required" }] },
     });
     const body = JSON.parse(String(calls[0]!.init.body));
     expect(JSON.stringify(body.messages)).toContain("MISSING_FIELD");
+    expect(body.messages).toContainEqual({ role: "assistant", content: JSON.stringify({ specVersion: 1, nodes: [] }) });
+    expect(body.messages.at(-1).role).toBe("user");
   });
 
   it("throws on a non-OK response", async () => {
