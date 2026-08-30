@@ -31,6 +31,9 @@ export interface Rgba {
  */
 const NAMED: Readonly<Record<string, Rgba>> = Object.assign(Object.create(null), {
   transparent: { r: 0, g: 0, b: 0, a: 0 },
+  // SVG spells "no fill" as `none`, so an author drawing an outline reaches
+  // for it by reflex. It means exactly `transparent`.
+  none: { r: 0, g: 0, b: 0, a: 0 },
   black: { r: 0, g: 0, b: 0, a: 1 },
   white: { r: 255, g: 255, b: 255, a: 1 },
   red: { r: 255, g: 0, b: 0, a: 1 },

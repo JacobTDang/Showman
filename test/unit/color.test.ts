@@ -1,6 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { parseColor, rgbaToString, isParseableColor, normalizeColor } from "../../src/index.js";
 
+describe("fill: none", () => {
+  // SVG's spelling of "no fill". A model reaches for it whenever it draws an
+  // outline, and rejecting it threw out the whole spec.
+  it("parses as fully transparent", () => {
+    expect(parseColor("none")).toEqual({ r: 0, g: 0, b: 0, a: 0 });
+  });
+
+  it("is accepted wherever a color is required", () => {
+    expect(isParseableColor("none")).toBe(true);
+  });
+
+  it("is case- and space-insensitive like every other named color", () => {
+    expect(parseColor("  NONE ")).toEqual({ r: 0, g: 0, b: 0, a: 0 });
+  });
+});
+
 describe("parseColor", () => {
   it("parses 6-digit hex", () => {
     expect(parseColor("#ff0000")).toEqual({ r: 255, g: 0, b: 0, a: 1 });
