@@ -19,6 +19,7 @@ import { extractJson, JsonExtractionError } from "./jsonRepair.js";
 import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
 import { expandBuilderPlacements } from "./builderPlacements.js";
 import { fitAuthoredText } from "./textFit.js";
+import { checkConductorConnectivity, strandedFeedback, type ConnectivityCheck } from "./connectivity.js";
 import { defaultRegistry } from "../catalog/index.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
@@ -61,6 +62,8 @@ export interface AuthoringAttempt {
   /** Mechanical fixes auto-applied this attempt (clamps, key renames) — no LLM round-trip spent. */
   repaired?: string[];
   semantic?: SemanticCheck;
+  /** Conductor connectivity, on a scene that draws a schematic. "unchecked" otherwise. */
+  connectivity?: ConnectivityCheck;
   failure?: "truncated_response" | "malformed_response" | "author_error" | "builder_error";
   message?: string;
 }
@@ -200,7 +203,19 @@ export class AuthoringAgent {
         continue;
       }
 
-      history.push({ attempt, valid: true, errorCount: 0, previewed, semantic, ...(repaired ? { repaired } : {}) });
+      // A schematic's topology IS its content, and a model placing wires by eye leaves
+      // them stopping short of the components. Unlike a text measurement the model can act
+      // on this: it wrote those coordinates and can move them, so a wrong answer costs a
+      // retry rather than rejecting good output.
+      const connectivity = checkConductorConnectivity(spec);
+      if (connectivity.status === "failed") {
+        retainBestCandidate(spec, connectivity.stranded.length);
+        history.push({ attempt, valid: true, errorCount: connectivity.stranded.length, previewed, semantic, connectivity });
+        feedback = { note: strandedFeedback(connectivity) };
+        continue;
+      }
+
+      history.push({ attempt, valid: true, errorCount: 0, previewed, semantic, connectivity, ...(repaired ? { repaired } : {}) });
       return { ok: true, spec: spec as SceneSpec, attempts: attempt, history };
     }
     return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid spec" };
