@@ -347,14 +347,14 @@ describe("the authoring loop routes without being asked to", () => {
     expect(result.history.at(-1)?.repaired?.join(" ")).toMatch(/physics\.voltageDivider/);
   });
 
-  it("leaves a brief that names no topology exactly as the author drew it", async () => {
+  it("leaves a brief that names no topology to the author, and to the connectivity gate", async () => {
     const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([freehandThevenin()]));
     const result = await agent.authorSpec({ brief: "Explain equivalent resistance for R1 and R2" });
 
-    expect(result.ok).toBe(true);
-    const ids = allNodes(result.spec as any).map((n: any) => n.id);
-    expect(ids).toContain("w1");
-    expect(ids).not.toContain("voltage-divider");
-    expect(result.history.at(-1)?.repaired).toBeUndefined();
+    // Routing declined, so the drawing was never replaced. It is the disconnected drawing
+    // from #121, so the connectivity gate then rejects it -- which is the point: the gate
+    // is still reachable for exactly the briefs routing cannot help.
+    expect(result.history[0]?.connectivity?.status).toBe("failed");
+    expect(result.ok).toBe(false);
   });
 });

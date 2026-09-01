@@ -549,7 +549,12 @@ describe("the authoring loop refuses a disconnected schematic", () => {
       submit: async () => ({ ok: true, jobId: "job-1", errors: [] }),
     }) as never;
 
-  const brief = "Explain the Thevenin equivalent of a resistive network with a 12 V source, R1 = 4 kilohm and R2 = 2 kilohm";
+  // Deliberately names NO topology. A brief that does ("thevenin equivalent", "rectifier",
+  // "integrator", ...) is routed to a catalog builder before this gate runs, which replaces
+  // the freehand drawing outright -- so the gate never sees it, and these tests would pass
+  // for the wrong reason. The gate exists for what routing declines. There is a test below
+  // pinning that split; do not "fix" this brief by naming the topology.
+  const brief = "Explain how R1 = 4 kilohm and R2 = 2 kilohm share a 12 V source between terminals A and B";
 
   it("both fixtures are valid specs, so only connectivity is under test", () => {
     expect(validateScene(disconnectedThevenin() as never).errors).toEqual([]);
@@ -582,6 +587,17 @@ describe("the authoring loop refuses a disconnected schematic", () => {
     expect(notes[0]).toContain("(500, 85)");
     expect(notes[0]).toMatch(/50px/);
     expect(notes[0]).toMatch(/physics\.circuit/);
+  });
+
+  // The split between the two mechanisms, stated once so neither can drift silently.
+  it("does not reach the gate when the brief names a topology, because routing fixes it first", async () => {
+    const routable = "Explain the Thevenin equivalent of a resistive network with a 12 V source, R1 = 4 kilohm and R2 = 2 kilohm";
+    const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([disconnectedThevenin()]), { maxAttempts: 1 });
+    const result = await agent.authorSpec(routable);
+
+    // Same disconnected drawing, but the builder replaced it, so there is nothing to fail on.
+    expect(result.ok).toBe(true);
+    expect(result.history[0]?.connectivity?.status).not.toBe("failed");
   });
 
   it("fails rather than publishing when the schematic stays disconnected", async () => {
