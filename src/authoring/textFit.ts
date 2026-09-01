@@ -261,6 +261,51 @@ function fitToCanvas(c: Candidate, canvasW: number, canvasH: number, repairs: st
   clampToCanvas(c, canvasW, canvasH, repairs);
 }
 
+/** Overlap of two boxes per axis; zero or negative means they are clear on that axis. */
+function overlapOf(a: Box, b: Box): { ox: number; oy: number } {
+  return { ox: Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), oy: Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) };
+}
+
+function collides(a: Box, b: Box): boolean {
+  const { ox, oy } = overlapOf(a, b);
+  return ox >= MIN_COLLISION && oy >= MIN_COLLISION;
+}
+
+/**
+ * Push each colliding pair apart along the axis of least displacement, moving the LATER
+ * node in document order. Canvas containment wins: if re-clamping the moved node restores
+ * the overlap, the clamp is kept and the collision is recorded but left unresolved, so the
+ * pass cannot oscillate.
+ */
+function separate(candidates: Candidate[], canvasW: number, canvasH: number, repairs: string[]): void {
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const a = candidates[i]!;
+      const b = candidates[j]!;
+      if (!collides(a.box, b.box)) continue;
+
+      const { ox, oy } = overlapOf(a.box, b.box);
+      const aCx = (a.box.x0 + a.box.x1) / 2;
+      const bCx = (b.box.x0 + b.box.x1) / 2;
+      const aCy = (a.box.y0 + a.box.y1) / 2;
+      const bCy = (b.box.y0 + b.box.y1) / 2;
+
+      // Ties and coincident centres resolve the same way every run: push down, or right.
+      if (oy <= ox) moveBy(b, 0, bCy < aCy ? -oy - 1 : oy + 1);
+      else moveBy(b, bCx < aCx ? -ox - 1 : ox + 1, 0);
+
+      clampToCanvas(b, canvasW, canvasH, []);
+      const label = shortLabel(b.node["text"]);
+      const other = shortLabel(a.node["text"]);
+      repairs.push(
+        collides(a.box, b.box)
+          ? `text "${label}" still overlaps "${other}" after clamping to the canvas`
+          : `moved text "${label}" clear of "${other}"`,
+      );
+    }
+  }
+}
+
 export function fitAuthoredText(spec: unknown): TextFitResult {
   if (!isObject(spec)) return { spec, repairs: [] };
   // A camera re-maps the whole coordinate space; canvas-space reasoning is invalid.
@@ -275,6 +320,7 @@ export function fitAuthoredText(spec: unknown): TextFitResult {
   collect(clone["nodes"], 0, 0, 1, 1, false, candidates);
 
   for (const c of candidates) fitToCanvas(c, canvasW, canvasH, repairs);
+  separate(candidates, canvasW, canvasH, repairs);
 
   return { spec: repairs.length > 0 ? clone : spec, repairs };
 }

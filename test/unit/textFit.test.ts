@@ -164,3 +164,58 @@ describe("fitAuthoredText — eligibility", () => {
     expect(fitAuthoredText(42).repairs).toEqual([]);
   });
 });
+
+describe("fitAuthoredText — label collisions", () => {
+  const overlaps = (a: Box, b: Box) =>
+    Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) >= 2 && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) >= 2;
+
+  it("separates two labels sitting at identical coordinates", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "12V AC Input", x: 400, y: 300, fontSize: 28 },
+      { id: "b", type: "text", text: "Diode (0.7V drop)", x: 400, y: 300, fontSize: 28 },
+    ]);
+    const out = fitAuthoredText(spec).spec;
+    expect(overlaps(boxOf(out, "a"), boxOf(out, "b"))).toBe(false);
+  });
+
+  it("keeps the separated label on the canvas", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "12V AC Input", x: 400, y: 690, fontSize: 28 },
+      { id: "b", type: "text", text: "Diode (0.7V drop)", x: 400, y: 690, fontSize: 28 },
+    ]);
+    const out = fitAuthoredText(spec).spec;
+    for (const id of ["a", "b"]) {
+      const box = boxOf(out, id);
+      expect(box.y0).toBeGreaterThanOrEqual(0);
+      expect(box.y1).toBeLessThanOrEqual(720);
+    }
+  });
+
+  it("moves the later node, not the earlier one", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "first", x: 400, y: 300, fontSize: 28 },
+      { id: "b", type: "text", text: "second", x: 400, y: 300, fontSize: 28 },
+    ]);
+    const out = fitAuthoredText(spec).spec as { nodes: Array<Record<string, unknown>> };
+    expect(out.nodes[0]!["x"]).toBe(400);
+    expect(out.nodes[0]!["y"]).toBe(300);
+    expect(out.nodes[1]!["y"]).not.toBe(300);
+  });
+
+  it("leaves labels that merely sit near each other alone", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "left", x: 200, y: 300, fontSize: 24 },
+      { id: "b", type: "text", text: "right", x: 800, y: 300, fontSize: 24 },
+    ]);
+    expect(fitAuthoredText(spec).repairs).toEqual([]);
+  });
+
+  it("stays idempotent once labels are separated", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "12V AC Input", x: 400, y: 300, fontSize: 28 },
+      { id: "b", type: "text", text: "Diode (0.7V drop)", x: 400, y: 300, fontSize: 28 },
+    ]);
+    const once = fitAuthoredText(spec).spec;
+    expect(fitAuthoredText(once).repairs).toEqual([]);
+  });
+});
