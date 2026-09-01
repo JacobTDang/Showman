@@ -63,6 +63,24 @@ describe("fitAuthoredText — canvas containment", () => {
     expect(box.y1).toBeLessThanOrEqual(720);
   });
 
+  // An absolute margin is nonsense on a small canvas -- 16px each side of a 64px-wide
+  // scene reserves half of it. The margin scales down with the frame.
+  it("scales its edge margin to a small canvas", () => {
+    const spec = {
+      specVersion: 1,
+      width: 64,
+      height: 64,
+      fps: 30,
+      duration: 2,
+      background: "#ffffff",
+      nodes: [{ id: "topic", type: "text", text: "resistor", x: 2, y: 2, fontSize: 8 }],
+    };
+    const before = JSON.stringify(spec);
+    const result = fitAuthoredText(spec);
+    expect(result.repairs).toEqual([]);
+    expect(JSON.stringify(result.spec)).toBe(before);
+  });
+
   it("is idempotent", () => {
     const spec = base([{ id: "n", type: "text", text: NARRATION, x: 300, y: 600, fontSize: 28, align: "center" }]);
     const once = fitAuthoredText(spec).spec;
@@ -168,8 +186,7 @@ describe("fitAuthoredText — eligibility", () => {
 });
 
 describe("fitAuthoredText — label collisions", () => {
-  const overlaps = (a: Box, b: Box) =>
-    Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) >= 2 && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) >= 2;
+  const overlaps = (a: Box, b: Box) => Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) >= 2 && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) >= 2;
 
   it("separates two labels sitting at identical coordinates", () => {
     const spec = base([

@@ -26,7 +26,7 @@ export interface TextFitResult {
   repairs: string[];
 }
 
-/** px kept clear of every canvas edge. */
+/** px kept clear of every canvas edge, on a canvas big enough to spare them. */
 const EDGE_MARGIN = 16;
 /** Below this, wrapping shreds a line into a one-word column — worse than the clipping. */
 const MIN_WRAP_WIDTH = 80;
@@ -42,6 +42,22 @@ export interface Box {
   y0: number;
   x1: number;
   y1: number;
+}
+
+/** The canvas the text has to fit, and the margin it keeps clear of the edges. */
+interface Frame {
+  w: number;
+  h: number;
+  m: number;
+}
+
+/**
+ * A fixed 16px margin is nonsense on a small canvas — it would reserve half the width of
+ * a 64px-wide scene — so it scales down with the frame and only reaches its full value
+ * once there is room to spare.
+ */
+function frameOf(w: number, h: number): Frame {
+  return { w, h, m: Math.min(EDGE_MARGIN, Math.round(Math.min(w, h) * 0.05)) };
 }
 
 interface Candidate {
@@ -139,7 +155,8 @@ function measureBox(node: Record<string, unknown>, originX: number, originY: num
   const localX0 = align === "center" ? -widest / 2 : align === "right" ? -widest : 0;
   // Vertical, matching the block offset in paintGlyphs (render.ts:466).
   const span = (n - 1) * lineHeightPx;
-  const localY0 = baseline === "middle" ? -span / 2 - fontSize / 2 : baseline === "bottom" || baseline === "alphabetic" ? -span - fontSize : 0;
+  const localY0 =
+    baseline === "middle" ? -span / 2 - fontSize / 2 : baseline === "bottom" || baseline === "alphabetic" ? -span - fontSize : 0;
 
   return {
     x0: originX + localX0 * effSx,
@@ -200,12 +217,12 @@ function moveBy(c: Candidate, ddx: number, ddy: number): void {
 }
 
 /** Width available to a node at its anchor, given its alignment. */
-function availableWidth(node: Record<string, unknown>, originX: number, canvasW: number): number {
+function availableWidth(node: Record<string, unknown>, originX: number, frame: Frame): number {
   const align = node["align"];
-  const m = EDGE_MARGIN;
-  if (align === "center") return Math.max(0, 2 * Math.min(originX - m, canvasW - m - originX));
+  const m = frame.m;
+  if (align === "center") return Math.max(0, 2 * Math.min(originX - m, frame.w - m - originX));
   if (align === "right") return Math.max(0, originX - m);
-  return Math.max(0, canvasW - m - originX);
+  return Math.max(0, frame.w - m - originX);
 }
 
 function shortLabel(text: unknown): string {
@@ -214,19 +231,23 @@ function shortLabel(text: unknown): string {
 }
 
 /** Translate a candidate the minimum amount that brings its box inside the canvas. */
-function clampToCanvas(c: Candidate, canvasW: number, canvasH: number, repairs: string[]): void {
-  const m = EDGE_MARGIN;
+function clampToCanvas(c: Candidate, frame: Frame, repairs: string[]): void {
+  const m = frame.m;
   const label = shortLabel(c.node["text"]);
   let ddx = 0;
   let ddy = 0;
 
+  // The criterion is the canvas edge, not the margin: text already fully on canvas is
+  // left where the author put it, however close to the edge. Text that does cross an
+  // edge is moved to sit a margin inside it, so it lands with breathing room.
+  //
   // Wider than the canvas even after wrapping: pin the left edge — text reads
   // left-to-right, so losing the tail beats losing the head.
-  if (c.box.x1 - c.box.x0 > canvasW - 2 * m || c.box.x0 < m) ddx = m - c.box.x0;
-  else if (c.box.x1 > canvasW - m) ddx = canvasW - m - c.box.x1;
+  if (c.box.x1 - c.box.x0 > frame.w || c.box.x0 < 0) ddx = m - c.box.x0;
+  else if (c.box.x1 > frame.w) ddx = frame.w - m - c.box.x1;
 
-  if (c.box.y1 - c.box.y0 > canvasH - 2 * m || c.box.y0 < m) ddy = m - c.box.y0;
-  else if (c.box.y1 > canvasH - m) ddy = canvasH - m - c.box.y1;
+  if (c.box.y1 - c.box.y0 > frame.h || c.box.y0 < 0) ddy = m - c.box.y0;
+  else if (c.box.y1 > frame.h) ddy = frame.h - m - c.box.y1;
 
   if (ddx === 0 && ddy === 0) return;
   moveBy(c, ddx, ddy);
@@ -237,8 +258,8 @@ function clampToCanvas(c: Candidate, canvasW: number, canvasH: number, repairs: 
 }
 
 /** Wrap an over-wide line, then clamp anything still crossing an edge. */
-function fitToCanvas(c: Candidate, canvasW: number, canvasH: number, repairs: string[]): void {
-  const usable = canvasW - 2 * EDGE_MARGIN;
+function fitToCanvas(c: Candidate, frame: Frame, repairs: string[]): void {
+  const usable = frame.w - 2 * frame.m;
   const label = shortLabel(c.node["text"]);
 
   if (numOpt(c.node["maxWidth"]) === undefined) {
@@ -247,8 +268,8 @@ function fitToCanvas(c: Candidate, canvasW: number, canvasH: number, repairs: st
     if (width > usable) {
       // Too wide to fit anywhere on the canvas — wrap to the usable width regardless of anchor.
       target = usable;
-    } else if (c.box.x0 < EDGE_MARGIN || c.box.x1 > canvasW - EDGE_MARGIN) {
-      const avail = availableWidth(c.node, c.originX, canvasW);
+    } else if (c.box.x0 < 0 || c.box.x1 > frame.w) {
+      const avail = availableWidth(c.node, c.originX, frame);
       if (avail >= MIN_WRAP_WIDTH && width > avail) target = avail;
     }
     if (target !== undefined && c.effSx !== 0) {
@@ -258,7 +279,7 @@ function fitToCanvas(c: Candidate, canvasW: number, canvasH: number, repairs: st
     }
   }
 
-  clampToCanvas(c, canvasW, canvasH, repairs);
+  clampToCanvas(c, frame, repairs);
 }
 
 /** Overlap of two boxes per axis; zero or negative means they are clear on that axis. */
@@ -277,7 +298,7 @@ function collides(a: Box, b: Box): boolean {
  * the overlap, the clamp is kept and the collision is recorded but left unresolved, so the
  * pass cannot oscillate.
  */
-function separate(candidates: Candidate[], canvasW: number, canvasH: number, repairs: string[]): void {
+function separate(candidates: Candidate[], frame: Frame, repairs: string[]): void {
   for (let i = 0; i < candidates.length; i++) {
     for (let j = i + 1; j < candidates.length; j++) {
       const a = candidates[i]!;
@@ -294,7 +315,7 @@ function separate(candidates: Candidate[], canvasW: number, canvasH: number, rep
       if (oy <= ox) moveBy(b, 0, bCy < aCy ? -oy - 1 : oy + 1);
       else moveBy(b, bCx < aCx ? -ox - 1 : ox + 1, 0);
 
-      clampToCanvas(b, canvasW, canvasH, []);
+      clampToCanvas(b, frame, []);
       const label = shortLabel(b.node["text"]);
       const other = shortLabel(a.node["text"]);
       repairs.push(
@@ -319,8 +340,9 @@ export function fitAuthoredText(spec: unknown): TextFitResult {
   const candidates: Candidate[] = [];
   collect(clone["nodes"], 0, 0, 1, 1, false, candidates);
 
-  for (const c of candidates) fitToCanvas(c, canvasW, canvasH, repairs);
-  separate(candidates, canvasW, canvasH, repairs);
+  const frame = frameOf(canvasW, canvasH);
+  for (const c of candidates) fitToCanvas(c, frame, repairs);
+  separate(candidates, frame, repairs);
 
   return { spec: repairs.length > 0 ? clone : spec, repairs };
 }
