@@ -292,6 +292,33 @@ function collides(a: Box, b: Box): boolean {
   return ox >= MIN_COLLISION && oy >= MIN_COLLISION;
 }
 
+/** A canvas-space displacement to try. */
+type Move = [ddx: number, ddy: number];
+
+/**
+ * Apply `move` to `c` and clamp it. Keeps the result only if it actually clears `other`;
+ * otherwise restores the candidate exactly as it was, so a rejected direction leaves no
+ * trace and the next one starts from the same place.
+ */
+function tryMove(c: Candidate, move: Move, other: Box, frame: Frame): boolean {
+  const hadX = "x" in c.node;
+  const hadY = "y" in c.node;
+  const saved = { x: c.node["x"], y: c.node["y"], box: { ...c.box }, originX: c.originX, originY: c.originY };
+
+  moveBy(c, move[0], move[1]);
+  clampToCanvas(c, frame, []);
+  if (!collides(other, c.box)) return true;
+
+  if (hadX) c.node["x"] = saved.x;
+  else delete c.node["x"];
+  if (hadY) c.node["y"] = saved.y;
+  else delete c.node["y"];
+  c.box = saved.box;
+  c.originX = saved.originX;
+  c.originY = saved.originY;
+  return false;
+}
+
 /**
  * Push each colliding pair apart along the axis of least displacement, moving the LATER
  * node in document order. Canvas containment wins: if re-clamping the moved node restores
@@ -312,10 +339,29 @@ function separate(candidates: Candidate[], frame: Frame, repairs: string[]): voi
       const bCy = (b.box.y0 + b.box.y1) / 2;
 
       // Ties and coincident centres resolve the same way every run: push down, or right.
-      if (oy <= ox) moveBy(b, 0, bCy < aCy ? -oy - 1 : oy + 1);
-      else moveBy(b, bCx < aCx ? -ox - 1 : ox + 1, 0);
+      const down: Move = [0, oy + 1];
+      const up: Move = [0, -oy - 1];
+      const right: Move = [ox + 1, 0];
+      const left: Move = [-ox - 1, 0];
+      const vertical = bCy < aCy ? [up, down] : [down, up];
+      const horizontal = bCx < aCx ? [left, right] : [right, left];
+      // Least displacement first, but a direction the canvas edge would undo is no use,
+      // so fall through to the opposite one and then to the other axis before conceding.
+      const order = oy <= ox ? [...vertical, ...horizontal] : [...horizontal, ...vertical];
 
-      clampToCanvas(b, frame, []);
+      let resolved = false;
+      for (const move of order) {
+        if (tryMove(b, move, a.box, frame)) {
+          resolved = true;
+          break;
+        }
+      }
+      // Nothing cleared it — apply the first choice so the collision is at least reduced.
+      if (!resolved) {
+        moveBy(b, order[0]![0], order[0]![1]);
+        clampToCanvas(b, frame, []);
+      }
+
       const label = shortLabel(b.node["text"]);
       const other = shortLabel(a.node["text"]);
       repairs.push(

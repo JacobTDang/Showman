@@ -229,6 +229,28 @@ describe("fitAuthoredText — label collisions", () => {
     expect(fitAuthoredText(spec).repairs).toEqual([]);
   });
 
+  // Pushing down is the first choice, but near the bottom edge the clamp drags the node
+  // straight back into the collision. Try the other direction before giving up.
+  it("pushes the other way when the preferred direction is against an edge", () => {
+    const spec = base([
+      { id: "a", type: "text", text: NARRATION, x: 300, y: 600, fontSize: 28, align: "center" },
+      {
+        id: "b",
+        type: "text",
+        text: "During the negative half-cycle, the diode blocks current.",
+        x: 300,
+        y: 600,
+        fontSize: 28,
+        align: "center",
+      },
+    ]);
+    const out = fitAuthoredText(spec).spec;
+    expect(overlaps(boxOf(out, "a"), boxOf(out, "b"))).toBe(false);
+    const box = boxOf(out, "b");
+    expect(box.y0).toBeGreaterThanOrEqual(0);
+    expect(box.y1).toBeLessThanOrEqual(720);
+  });
+
   it("stays idempotent once labels are separated", () => {
     const spec = base([
       { id: "a", type: "text", text: "12V AC Input", x: 400, y: 300, fontSize: 28 },
