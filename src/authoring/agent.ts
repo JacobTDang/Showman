@@ -18,6 +18,7 @@ import { autoRepairSpec } from "./autoRepair.js";
 import { extractJson, JsonExtractionError } from "./jsonRepair.js";
 import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
 import { expandBuilderPlacements } from "./builderPlacements.js";
+import { routeSchematicToBuilder, selectSchematicBuilder } from "./schematicRouting.js";
 import { fitAuthoredText } from "./textFit.js";
 import { checkConductorConnectivity, strandedFeedback, type ConnectivityCheck } from "./connectivity.js";
 import { defaultRegistry } from "../catalog/index.js";
@@ -104,6 +105,12 @@ export class AuthoringAgent {
     const brief = authorBrief(request);
     const maxAttempts = Math.max(1, this.options.maxAttempts ?? 3);
     const schema = await this.client.getSchema();
+    // Which builder draws this brief is decided HERE, in code, once -- never asked of the
+    // model. Prompting for it was measured on #125 and made authoring worse: two briefs
+    // that authored cleanly began returning malformed and truncated JSON, and two others
+    // ignored the instruction. Null means nothing in the brief names a topology, and the
+    // model authors freehand exactly as before.
+    const schematic = selectSchematicBuilder(request);
     const history: AuthoringAttempt[] = [];
     let feedback: AuthorContext["feedback"];
     let previousCandidate: unknown;
@@ -142,6 +149,16 @@ export class AuthoringAgent {
       const fitted = fitAuthoredText(spec);
       spec = fitted.spec;
       let repaired: string[] | undefined = fitted.repairs.length > 0 ? [...fitted.repairs] : undefined;
+
+      // Hand the schematic to the builder that owns its topology, in the space the model
+      // reserved for the drawing. Runs AFTER the text fit so the surviving labels keep the
+      // positions they were fitted to, and before expansion so the builder arrives as an
+      // ordinary placement.
+      if (schematic) {
+        const routed = routeSchematicToBuilder(spec, schematic, defaultRegistry());
+        spec = routed.spec;
+        if (routed.repairs.length > 0) repaired = [...(repaired ?? []), ...routed.repairs];
+      }
 
       // A spec may reference catalog builders for geometry a model cannot place by
       // eye -- schematics above all. Expand before validation, so everything
