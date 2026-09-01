@@ -18,6 +18,7 @@ import { autoRepairSpec } from "./autoRepair.js";
 import { extractJson, JsonExtractionError } from "./jsonRepair.js";
 import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
 import { expandBuilderPlacements } from "./builderPlacements.js";
+import { fitAuthoredText } from "./textFit.js";
 import { defaultRegistry } from "../catalog/index.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
@@ -131,6 +132,14 @@ export class AuthoringAgent {
         };
         continue;
       }
+      // The model cannot measure rendered text, so it cannot tell whether what it wrote
+      // fits the canvas. Do that here, BEFORE builder expansion, so the pass only ever
+      // touches text the model placed freehand -- builder geometry is inserted afterwards
+      // and never repositioned.
+      const fitted = fitAuthoredText(spec);
+      spec = fitted.spec;
+      let repaired: string[] | undefined = fitted.repairs.length > 0 ? [...fitted.repairs] : undefined;
+
       // A spec may reference catalog builders for geometry a model cannot place by
       // eye -- schematics above all. Expand before validation, so everything
       // downstream sees an ordinary spec.
@@ -145,7 +154,6 @@ export class AuthoringAgent {
       }
 
       let validation = await this.client.validate(spec);
-      let repaired: string[] | undefined;
       if (!validation.valid) {
         // Try a cheap, deterministic repair (clamp ranges, fix typo'd keys/easings) before
         // spending another whole LLM round-trip on errors a machine can fix itself.
@@ -155,10 +163,10 @@ export class AuthoringAgent {
           if (reval.valid) {
             spec = fix.spec;
             validation = reval;
-            repaired = fix.fixed;
+            repaired = [...(repaired ?? []), ...fix.fixed];
           } else {
             retainBestCandidate(fix.spec, 1_000 + reval.errors.length);
-            history.push({ attempt, valid: false, errorCount: reval.errors.length, repaired: fix.fixed });
+            history.push({ attempt, valid: false, errorCount: reval.errors.length, repaired: [...(repaired ?? []), ...fix.fixed] });
             feedback = { errors: reval.errors, note: "The spec failed validation. Fix the listed errors." };
             continue;
           }

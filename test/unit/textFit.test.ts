@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fitAuthoredText, measureBoxForTest } from "../../src/authoring/textFit.js";
+import { AuthoringAgent, ScriptedAuthor } from "../../src/authoring/agent.js";
+import { validateScene } from "../../src/index.js";
 
 const base = (nodes: unknown[]) => ({
   specVersion: 1,
@@ -217,5 +219,35 @@ describe("fitAuthoredText — label collisions", () => {
     ]);
     const once = fitAuthoredText(spec).spec;
     expect(fitAuthoredText(once).repairs).toEqual([]);
+  });
+});
+
+describe("authoring loop reports text fixes", () => {
+  /** Minimal ShowmanClient: real validation, no rendering. */
+  const stubClient = () =>
+    ({
+      getSchema: async () => ({}) as never,
+      validate: async (spec: unknown) => validateScene(spec as never),
+      preview: async () => ({ ok: true, errors: [] }),
+      submit: async () => ({ ok: true, jobId: "job-1", errors: [] }),
+    }) as never;
+
+  it("fits authored text and records the repair", async () => {
+    const spec = base([{ id: "n", type: "text", text: NARRATION, x: 300, y: 600, fontSize: 28, align: "center" }]);
+    const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([spec]));
+    const result = await agent.authorSpec("the diode during the positive half-cycle");
+
+    expect(result.ok).toBe(true);
+    expect(result.history.at(-1)?.repaired?.join(" ")).toMatch(/wrapped|moved/);
+    expect((result.spec as unknown as { nodes: Array<Record<string, unknown>> }).nodes[0]!["maxWidth"]).toBeGreaterThan(0);
+  });
+
+  it("leaves a spec that already fits without recording repairs", async () => {
+    const spec = base([{ id: "n", type: "text", text: "Hi", x: 640, y: 360, fontSize: 28, align: "center" }]);
+    const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([spec]));
+    const result = await agent.authorSpec("hi");
+
+    expect(result.ok).toBe(true);
+    expect(result.history.at(-1)?.repaired).toBeUndefined();
   });
 });
