@@ -549,6 +549,116 @@ export function meter(opts: SymbolOptions & { symbol?: string }): CircuitSymbol 
   );
 }
 
+/** An op-amp has three terminals, so it cannot use the a/b pair a two-terminal symbol reports. */
+export interface OpAmpSymbol {
+  node: GroupNode;
+  /** Inverting input, at the end of its lead. */
+  inMinus: Point;
+  /** Non-inverting input, at the end of its lead. */
+  inPlus: Point;
+  /** Output, at the end of its lead. */
+  out: Point;
+}
+
+/** A polarity glyph drawn just inside the op-amp's left edge. */
+function mark(id: string, x: number, y: number, text: string, color: Color): Node {
+  return {
+    id,
+    type: "text",
+    x,
+    y,
+    text,
+    fontFamily: "Inter",
+    fontWeight: 700,
+    fontSize: 16,
+    fill: color,
+    align: "center",
+    baseline: "middle",
+  };
+}
+
+/**
+ * An op-amp: triangle body pointing right, inverting (−) above non-inverting (+) on the left
+ * edge, output at the apex. Every terminal sits at the end of a short lead so a wire meets a
+ * lead end rather than an arbitrary point on a sloped edge.
+ */
+export function opAmp(opts: SymbolOptions): OpAmpSymbol {
+  const id = opts.id ?? "opamp";
+  const { x, y } = opts;
+  const size = opts.size ?? 90;
+  const color = opts.color ?? "#1e293b";
+  const lead = Math.round(size * 0.22);
+  const minusY = y + size / 3;
+  const plusY = y + (size * 2) / 3;
+  const outY = y + size / 2;
+
+  const children: Node[] = [
+    {
+      id: `${id}-body`,
+      type: "polyline",
+      x: 0,
+      y: 0,
+      points: [
+        { x, y },
+        { x, y: y + size },
+        { x: x + size, y: outY },
+      ],
+      closed: true,
+      stroke: color,
+      strokeWidth: SW,
+    },
+    poly(
+      `${id}-lead-minus`,
+      [
+        { x: x - lead, y: minusY },
+        { x, y: minusY },
+      ],
+      color,
+    ),
+    poly(
+      `${id}-lead-plus`,
+      [
+        { x: x - lead, y: plusY },
+        { x, y: plusY },
+      ],
+      color,
+    ),
+    poly(
+      `${id}-lead-out`,
+      [
+        { x: x + size, y: outY },
+        { x: x + size + lead, y: outY },
+      ],
+      color,
+    ),
+    mark(`${id}-mark-minus`, x + size * 0.17, minusY, "−", color),
+    mark(`${id}-mark-plus`, x + size * 0.17, plusY, "+", color),
+  ];
+
+  if (opts.label !== undefined && opts.label.trim() !== "") {
+    children.push({
+      id: `${id}-lbl`,
+      type: "text",
+      x: x + size / 2,
+      y: y - size * 0.16,
+      text: opts.label,
+      fontFamily: "Inter",
+      fontWeight: 600,
+      fontSize: 15,
+      fill: color,
+      align: "center",
+      baseline: "middle",
+    });
+  }
+
+  return {
+    node: { id, type: "group", x: 0, y: 0, children },
+    inMinus: { x: x - lead, y: minusY },
+    inPlus: { x: x - lead, y: plusY },
+    out: { x: x + size + lead, y: outY },
+  };
+}
+
 export interface WireOptions {
   id?: string;
   points: Point[];
