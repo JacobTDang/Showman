@@ -77,6 +77,14 @@ describe("builder placements", () => {
     expect(height).toBeGreaterThan(80);
   });
 
+  // A builder's natural size is not always the space the scene has for it.
+  it("scales a placement that has to fit a smaller space", () => {
+    const spec: any = { ...base(), builders: [{ ...rectifier, scale: 0.6 }] };
+    const node = (expandBuilderPlacements(spec, defaultRegistry()).spec as any).nodes[1];
+    expect(node.scale).toBe(0.6);
+    expect(node.x).toBe(120);
+  });
+
   it("reports an unknown builder instead of throwing", () => {
     const spec: any = { ...base(), builders: [{ id: "x", builder: "physics.nope", params: {} }] };
     const result = expandBuilderPlacements(spec, defaultRegistry());

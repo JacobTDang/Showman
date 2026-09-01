@@ -20,6 +20,8 @@ export interface BuilderPlacement {
   params?: unknown;
   x?: number;
   y?: number;
+  /** Uniform scale for the whole assembly, when it has to fit a smaller space than its natural size. */
+  scale?: number;
 }
 
 export interface ExpansionResult {
@@ -58,6 +60,7 @@ export function expandBuilderPlacements(spec: unknown, registry: BuilderRegistry
         type: "group",
         x: placement.x ?? 0,
         y: placement.y ?? 0,
+        ...(typeof placement.scale === "number" && placement.scale !== 1 ? { scale: placement.scale } : {}),
         children: [built.node],
       });
       expanded.push(name);
