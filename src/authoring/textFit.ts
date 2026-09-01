@@ -6,15 +6,24 @@
  * engine can measure it — it lays out the glyphs — so it does that here,
  * deterministically, instead of asking the model to guess pixel positions it cannot see.
  *
- * Three repairs, in order: wrap an over-wide line to the width actually available at its
- * anchor, clamp anything still crossing an edge back inside, then separate any two labels
- * that visibly collide. Canvas containment always wins over separation, so the pass
- * cannot oscillate.
+ * Four repairs, in order: wrap an over-wide line to the width actually available at its
+ * anchor, clamp anything still crossing an edge back inside, lift a label off the artwork
+ * it is lying across, then separate any two labels that visibly collide. Canvas
+ * containment always wins, so the pass cannot oscillate.
+ *
+ * The artwork test is legibility, not geometry. Nothing links a label to the shape it
+ * describes, and a label centred inside its own shape is a deliberate idiom — a flowchart
+ * box, a button, a card — so "overlaps a shape" rejects correct output. What is wrong is a
+ * label that lies ACROSS a filled shape's edge, with half its glyphs on one ground and half
+ * on another; and a label that sits wholly on a fill it cannot be read against. The first
+ * is nudged clear, the second is only reported, because the fix for it is a colour and this
+ * pass does not choose colours.
  *
  * Pure: the input is deep-cloned and the clone is mutated, like `autoRepairSpec`. It runs
  * on unvalidated input, so anything it cannot read is skipped, never thrown on.
  */
 import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
+import { contrastRatio, mix, parseColor, wcagTextContrastMin } from "../engine/color.js";
 import { ensureFontsRegistered } from "../engine/fonts.js";
 import { wrapText } from "../engine/textLayout.js";
 import { SHAPE_DEFAULTS } from "../spec/schema.js";
@@ -34,8 +43,34 @@ const MIN_WRAP_WIDTH = 80;
 const MIN_COLLISION = 2;
 const DEFAULT_LINE_HEIGHT = 1.25;
 
+/**
+ * How much of a label must fall on EACH side of a shape's edge before it reads as lying
+ * across that edge. Less than this on the shape and it merely grazes the artwork, which
+ * costs nothing to read; less than this off the shape and it is on the shape on purpose
+ * with a corner hanging over, and dragging it off would be the worse picture.
+ */
+const MIN_OCCLUSION = 0.2;
+/**
+ * A fill this close to the scene background paints no visible ground: text over it reads
+ * exactly as it does over the background, so it is not occluded by anything.
+ */
+const MIN_GROUND_CONTRAST = 1.1;
+/** Minimum effective opacity for a shape whose colour we cannot read (image, gradient). */
+const MIN_OPAQUE = 0.5;
+/** Sample grid over a label's box, used to measure how much of it lands on a shape. */
+const SAMPLE_COLS = 7;
+const SAMPLE_ROWS = 3;
+
 /** Animating any of these invalidates reasoning from the static coordinates. */
 const GEOMETRIC_PROPS = new Set(["x", "y", "scale", "scaleX", "scaleY", "rotation", "fontSize"]);
+/** Node types whose painted region can be decided from static props alone. */
+const OCCLUDING_TYPES = new Set(["rect", "ellipse", "polygon", "image"]);
+/** Animating any of these moves or resizes a shape's painted footprint. */
+const FOOTPRINT_PROPS = new Set([...GEOMETRIC_PROPS, "width", "height", "radius", "innerRadius", "sides"]);
+/** Animating either of these means the shape may not be painted when the label shows. */
+const PAINT_PROPS = new Set(["opacity", "fill"]);
+/** A regular polygon is sampled as drawn; past this many sides it is a circle anyway. */
+const MAX_POLYGON_SIDES = 128;
 
 export interface Box {
   x0: number;
@@ -71,7 +106,40 @@ interface Candidate {
   /** Scale applied to the node's glyphs (ancestors × its own). */
   effSx: number;
   effSy: number;
+  /** Opacity multiplied down from the ancestors, including the node's own. */
+  alpha: number;
   box: Box;
+}
+
+/** A filled region that can hide a label drawn across it. */
+interface Occluder {
+  node: Record<string, unknown>;
+  /** Canvas-space bounding box — the cheap reject, and the basis for the escape moves. */
+  box: Box;
+  /** Is this canvas-space point actually painted? Exact for the shape, not its box. */
+  covers: (x: number, y: number) => boolean;
+  /** The colour it paints over the background, or null when it is not one colour. */
+  ground: string | null;
+}
+
+/** State inherited from the ancestors during the walk. */
+interface Inherited {
+  dx: number;
+  dy: number;
+  sx: number;
+  sy: number;
+  alpha: number;
+  /** An ancestor makes reasoning from static coordinates unsafe. */
+  blocked: boolean;
+  /** An ancestor animates its paint, so what it shows is not static. */
+  fading: boolean;
+}
+
+/** What the walk collects. */
+interface Collected {
+  text: Candidate[];
+  shapes: Occluder[];
+  background: string;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -102,11 +170,15 @@ function measurer(family: string, weight: number | string, fontSize: number): SK
   return measureCtx;
 }
 
-/** Does this node animate something geometric? */
-function hasGeometricTrack(node: Record<string, unknown>): boolean {
+/** Does this node animate any of these properties? */
+function animates(node: Record<string, unknown>, props: ReadonlySet<string>): boolean {
   const tracks = node["tracks"];
   if (!Array.isArray(tracks)) return false;
-  return tracks.some((t) => isObject(t) && typeof t["property"] === "string" && GEOMETRIC_PROPS.has(t["property"]));
+  return tracks.some((t) => isObject(t) && typeof t["property"] === "string" && props.has(t["property"]));
+}
+
+function clamp01(n: number): number {
+  return n < 0 ? 0 : n > 1 ? 1 : n;
 }
 
 /** A node whose own transform makes an axis-aligned box unreliable. */
@@ -166,32 +238,187 @@ function measureBox(node: Record<string, unknown>, originX: number, originY: num
   };
 }
 
-/** Depth-first walk collecting every measurable text node with its canvas-space box. */
-function collect(nodes: unknown, dx: number, dy: number, sx: number, sy: number, blocked: boolean, out: Candidate[]): void {
+/**
+ * The local-space size of a shape's painted box, or null when it cannot be known
+ * statically — an image without explicit dimensions is drawn at its natural size, which
+ * only the renderer knows.
+ */
+function footprint(node: Record<string, unknown>, type: string): { w: number; h: number } | null {
+  if (type === "polygon") {
+    const r = num(node["radius"], 50);
+    return r > 0 ? { w: 2 * r, h: 2 * r } : null;
+  }
+  const w = type === "image" ? numOpt(node["width"]) : num(node["width"], SHAPE_DEFAULTS.width);
+  const h = type === "image" ? numOpt(node["height"]) : num(node["height"], SHAPE_DEFAULTS.height);
+  if (w === undefined || h === undefined || !(w > 0) || !(h > 0)) return null;
+  return { w, h };
+}
+
+/** A regular polygon's / star's vertices in local space, exactly as `drawPolygon` lays them out. */
+function polygonVertices(node: Record<string, unknown>, r: number): Array<{ x: number; y: number }> {
+  const sidesRaw = node["sides"];
+  const sides = Math.min(MAX_POLYGON_SIDES, Math.max(3, typeof sidesRaw === "number" ? Math.floor(sidesRaw) : 3));
+  const innerRaw = numOpt(node["innerRadius"]);
+  const star = innerRaw !== undefined && innerRaw >= 0;
+  const inner = star ? Math.max(0, innerRaw) : 0;
+  const count = star ? sides * 2 : sides;
+  const pts: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const rad = star ? (i % 2 === 0 ? r : inner) : r;
+    const a = -Math.PI / 2 + (star ? (i * Math.PI) / sides : (i * 2 * Math.PI) / sides);
+    pts.push({ x: r + rad * Math.cos(a), y: r + rad * Math.sin(a) });
+  }
+  return pts;
+}
+
+function insidePolygon(pts: Array<{ x: number; y: number }>, x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i]!;
+    const b = pts[j]!;
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * The shape as something a label can be hidden by, or null when it hides nothing: an
+ * outline, a fill that matches the background, a wash too faint to read as ground, or
+ * geometry/paint that animates and so cannot be pinned to one static footprint.
+ */
+function occluderOf(
+  node: Record<string, unknown>,
+  inh: Inherited,
+  originX: number,
+  originY: number,
+  effSx: number,
+  effSy: number,
+  background: string,
+): Occluder | null {
+  const type = node["type"];
+  if (typeof type !== "string" || !OCCLUDING_TYPES.has(type)) return null;
+  if (inh.fading || animates(node, FOOTPRINT_PROPS) || animates(node, PAINT_PROPS)) return null;
+  if (effSx === 0 || effSy === 0) return null;
+  const local = footprint(node, type);
+  if (!local) return null;
+
+  const alpha = inh.alpha * clamp01(num(node["opacity"], 1));
+  if (alpha <= 0) return null;
+
+  let ground: string | null = null;
+  if (node["gradient"] !== undefined || type === "image") {
+    // No single colour to compare against; it still hides whatever is under it.
+    if (alpha < MIN_OPAQUE) return null;
+  } else {
+    const raw = typeof node["fill"] === "string" ? node["fill"] : SHAPE_DEFAULTS.fill;
+    const parsed = parseColor(raw);
+    if (!parsed) return null;
+    ground = mix(background, raw, parsed.a * alpha);
+    if (contrastRatio(ground, background) < MIN_GROUND_CONTRAST) return null;
+  }
+
+  const box: Box = {
+    x0: Math.min(originX, originX + local.w * effSx),
+    x1: Math.max(originX, originX + local.w * effSx),
+    y0: Math.min(originY, originY + local.h * effSy),
+    y1: Math.max(originY, originY + local.h * effSy),
+  };
+  // Ancestor rotation is excluded by `breaksBoxMath`, so canvas -> local is this inverse.
+  const toLocal = (x: number, y: number): { lx: number; ly: number } => ({ lx: (x - originX) / effSx, ly: (y - originY) / effSy });
+
+  let covers: (x: number, y: number) => boolean;
+  if (type === "ellipse") {
+    const rx = local.w / 2;
+    const ry = local.h / 2;
+    covers = (x, y) => {
+      const { lx, ly } = toLocal(x, y);
+      const nx = (lx - rx) / rx;
+      const ny = (ly - ry) / ry;
+      return nx * nx + ny * ny <= 1;
+    };
+  } else if (type === "polygon") {
+    const pts = polygonVertices(node, local.w / 2);
+    covers = (x, y) => {
+      const { lx, ly } = toLocal(x, y);
+      return insidePolygon(pts, lx, ly);
+    };
+  } else {
+    covers = (x, y) => {
+      const { lx, ly } = toLocal(x, y);
+      return lx >= 0 && lx <= local.w && ly >= 0 && ly <= local.h;
+    };
+  }
+
+  return { node, box, covers, ground };
+}
+
+/** Depth-first walk collecting the measurable text nodes and the artwork they sit on. */
+function collect(nodes: unknown, inh: Inherited, into: Collected): void {
   if (!Array.isArray(nodes)) return;
   for (const raw of nodes) {
     if (!isObject(raw)) continue;
     const node = raw;
-    const stop = blocked || hasGeometricTrack(node) || breaksBoxMath(node);
-    const originX = dx + num(node["x"], 0) * sx;
-    const originY = dy + num(node["y"], 0) * sy;
+    const stop = inh.blocked || animates(node, GEOMETRIC_PROPS) || breaksBoxMath(node);
+    const fading = inh.fading || animates(node, PAINT_PROPS);
+    const originX = inh.dx + num(node["x"], 0) * inh.sx;
+    const originY = inh.dy + num(node["y"], 0) * inh.sy;
     const ownSx = num(node["scaleX"], num(node["scale"], 1));
     const ownSy = num(node["scaleY"], num(node["scale"], 1));
-    const effSx = sx * ownSx;
-    const effSy = sy * ownSy;
+    const effSx = inh.sx * ownSx;
+    const effSy = inh.sy * ownSy;
+    const alpha = inh.alpha * clamp01(num(node["opacity"], 1));
 
     if (node["type"] === "group") {
-      collect(node["children"], originX, originY, effSx, effSy, stop, out);
+      collect(node["children"], { dx: originX, dy: originY, sx: effSx, sy: effSy, alpha, blocked: stop, fading }, into);
       continue;
     }
-    if (node["type"] !== "text" || stop) continue;
+    if (stop) continue;
     // A non-numeric coordinate means the spec is malformed here; leave it to the validator.
     if (node["x"] !== undefined && numOpt(node["x"]) === undefined) continue;
     if (node["y"] !== undefined && numOpt(node["y"]) === undefined) continue;
 
-    const box = measureBox(node, originX, originY, effSx, effSy);
-    if (box) out.push({ node, originX, originY, parentSx: sx, parentSy: sy, effSx, effSy, box });
+    if (node["type"] === "text") {
+      const box = measureBox(node, originX, originY, effSx, effSy);
+      if (box) into.text.push({ node, originX, originY, parentSx: inh.sx, parentSy: inh.sy, effSx, effSy, alpha, box });
+      continue;
+    }
+    const shape = occluderOf(node, inh, originX, originY, effSx, effSy, into.background);
+    if (shape) into.shapes.push(shape);
   }
+}
+
+/** How much of `box` lands on the shape, sampled over the label's own area. */
+function coverage(box: Box, occ: Occluder): number {
+  if (Math.min(box.x1, occ.box.x1) <= Math.max(box.x0, occ.box.x0)) return 0;
+  if (Math.min(box.y1, occ.box.y1) <= Math.max(box.y0, occ.box.y0)) return 0;
+  const w = box.x1 - box.x0;
+  const h = box.y1 - box.y0;
+  let inside = 0;
+  for (let i = 0; i < SAMPLE_COLS; i++) {
+    const x = box.x0 + ((i + 0.5) * w) / SAMPLE_COLS;
+    for (let j = 0; j < SAMPLE_ROWS; j++) {
+      if (occ.covers(x, box.y0 + ((j + 0.5) * h) / SAMPLE_ROWS)) inside++;
+    }
+  }
+  return inside / (SAMPLE_COLS * SAMPLE_ROWS);
+}
+
+/**
+ * How a label sits on a shape: clear of it, lying across its edge (the accident), or on
+ * it (the deliberate placement — a flowchart box, a button, a card).
+ */
+function sitOf(box: Box, occ: Occluder): "clear" | "across" | "on" {
+  const c = coverage(box, occ);
+  if (c < MIN_OCCLUSION) return "clear";
+  return c > 1 - MIN_OCCLUSION ? "on" : "across";
+}
+
+function liesAcross(box: Box, occ: Occluder): boolean {
+  return sitOf(box, occ) === "across";
+}
+
+function acrossAny(box: Box, occluders: Occluder[]): boolean {
+  return occluders.some((o) => liesAcross(box, o));
 }
 
 /** Re-measure after a mutation that changed what the node paints. */
@@ -295,27 +522,50 @@ function collides(a: Box, b: Box): boolean {
 /** A canvas-space displacement to try. */
 type Move = [ddx: number, ddy: number];
 
-/**
- * Apply `move` to `c` and clamp it. Keeps the result only if it actually clears `other`;
- * otherwise restores the candidate exactly as it was, so a rejected direction leaves no
- * trace and the next one starts from the same place.
- */
-function tryMove(c: Candidate, move: Move, other: Box, frame: Frame): boolean {
-  const hadX = "x" in c.node;
-  const hadY = "y" in c.node;
-  const saved = { x: c.node["x"], y: c.node["y"], box: { ...c.box }, originX: c.originX, originY: c.originY };
+interface Placement {
+  hadX: boolean;
+  hadY: boolean;
+  x: unknown;
+  y: unknown;
+  box: Box;
+  originX: number;
+  originY: number;
+}
 
+function placementOf(c: Candidate): Placement {
+  return {
+    hadX: "x" in c.node,
+    hadY: "y" in c.node,
+    x: c.node["x"],
+    y: c.node["y"],
+    box: { ...c.box },
+    originX: c.originX,
+    originY: c.originY,
+  };
+}
+
+/** Put a candidate back exactly as it was, so a rejected direction leaves no trace. */
+function restore(c: Candidate, p: Placement): void {
+  if (p.hadX) c.node["x"] = p.x;
+  else delete c.node["x"];
+  if (p.hadY) c.node["y"] = p.y;
+  else delete c.node["y"];
+  c.box = p.box;
+  c.originX = p.originX;
+  c.originY = p.originY;
+}
+
+/**
+ * Apply `move` to `c` and clamp it. Keeps the result only if `accept` is satisfied at the
+ * clamped position; otherwise restores the candidate, so the next direction starts from
+ * the same place.
+ */
+function tryMove(c: Candidate, move: Move, frame: Frame, accept: (box: Box) => boolean): boolean {
+  const saved = placementOf(c);
   moveBy(c, move[0], move[1]);
   clampToCanvas(c, frame, []);
-  if (!collides(other, c.box)) return true;
-
-  if (hadX) c.node["x"] = saved.x;
-  else delete c.node["x"];
-  if (hadY) c.node["y"] = saved.y;
-  else delete c.node["y"];
-  c.box = saved.box;
-  c.originX = saved.originX;
-  c.originY = saved.originY;
+  if (accept(c.box)) return true;
+  restore(c, saved);
   return false;
 }
 
@@ -325,33 +575,38 @@ function tryMove(c: Candidate, move: Move, other: Box, frame: Frame): boolean {
  * the overlap, the clamp is kept and the collision is recorded but left unresolved, so the
  * pass cannot oscillate.
  */
-function separate(candidates: Candidate[], frame: Frame, repairs: string[]): void {
+function separate(candidates: Candidate[], occluders: Occluder[], frame: Frame, repairs: string[]): void {
   for (let i = 0; i < candidates.length; i++) {
     for (let j = i + 1; j < candidates.length; j++) {
       const a = candidates[i]!;
       const b = candidates[j]!;
       if (!collides(a.box, b.box)) continue;
 
-      const { ox, oy } = overlapOf(a.box, b.box);
       const aCx = (a.box.x0 + a.box.x1) / 2;
       const bCx = (b.box.x0 + b.box.x1) / 2;
       const aCy = (a.box.y0 + a.box.y1) / 2;
       const bCy = (b.box.y0 + b.box.y1) / 2;
 
+      // Clear past the far edge of the other box, not by the overlap: when one label's box
+      // spans the other's on an axis, the overlap is the narrower box's whole width and
+      // moving by it leaves them still on top of each other.
       // Ties and coincident centres resolve the same way every run: push down, or right.
-      const down: Move = [0, oy + 1];
-      const up: Move = [0, -oy - 1];
-      const right: Move = [ox + 1, 0];
-      const left: Move = [-ox - 1, 0];
+      const down: Move = [0, a.box.y1 - b.box.y0 + 1];
+      const up: Move = [0, a.box.y0 - b.box.y1 - 1];
+      const right: Move = [a.box.x1 - b.box.x0 + 1, 0];
+      const left: Move = [a.box.x0 - b.box.x1 - 1, 0];
       const vertical = bCy < aCy ? [up, down] : [down, up];
       const horizontal = bCx < aCx ? [left, right] : [right, left];
       // Least displacement first, but a direction the canvas edge would undo is no use,
       // so fall through to the opposite one and then to the other axis before conceding.
-      const order = oy <= ox ? [...vertical, ...horizontal] : [...horizontal, ...vertical];
+      const order = Math.abs(vertical[0]![1]) <= Math.abs(horizontal[0]![0]) ? [...vertical, ...horizontal] : [...horizontal, ...vertical];
 
+      // Separating is not allowed to undo the artwork repair: a direction that parks the
+      // label across a shape is no better than the collision it was solving.
+      const accept = (box: Box): boolean => !collides(a.box, box) && !acrossAny(box, occluders);
       let resolved = false;
       for (const move of order) {
-        if (tryMove(b, move, a.box, frame)) {
+        if (tryMove(b, move, frame, accept)) {
           resolved = true;
           break;
         }
@@ -373,6 +628,92 @@ function separate(candidates: Candidate[], frame: Frame, repairs: string[]): voi
   }
 }
 
+function shapeName(node: Record<string, unknown>): string {
+  const id = node["id"];
+  return typeof id === "string" && id.length > 0 ? `shape "${id}"` : `a ${String(node["type"])}`;
+}
+
+/**
+ * Lift each label off any shape it is lying across, by the shortest move that clears every
+ * one of them. Down before up and vertical before horizontal on a tie, because a label
+ * under the thing it names is the idiom the author was reaching for. A move the canvas
+ * clamp would undo, or that lands on other artwork, is rejected in favour of the next
+ * direction; if none work the label is left where it is and the problem is reported.
+ */
+function clearArtwork(candidates: Candidate[], occluders: Occluder[], frame: Frame, repairs: string[]): void {
+  if (occluders.length === 0) return;
+  // Enough air that the glyphs do not touch the shape's edge, scaled like the margin.
+  const gap = Math.max(1, Math.round(frame.m / 4));
+  for (const c of candidates) {
+    const across = occluders.filter((o) => liesAcross(c.box, o));
+    if (across.length === 0) continue;
+
+    const moves: Move[] = [];
+    for (const o of across) {
+      moves.push(
+        [0, o.box.y1 + gap - c.box.y0],
+        [0, o.box.y0 - gap - c.box.y1],
+        [o.box.x1 + gap - c.box.x0, 0],
+        [o.box.x0 - gap - c.box.x1, 0],
+      );
+    }
+    moves.sort((m, n) => Math.hypot(m[0], m[1]) - Math.hypot(n[0], n[1]));
+
+    const accept = (box: Box): boolean => !acrossAny(box, occluders);
+    const cleared = moves.some((move) => tryMove(c, move, frame, accept));
+    const label = shortLabel(c.node["text"]);
+    const name = shapeName(across[0]!.node);
+    repairs.push(cleared ? `moved text "${label}" clear of ${name}` : `text "${label}" still sits across ${name}`);
+  }
+}
+
+/**
+ * Report a label that sits wholly on a fill it cannot be read against. It is not moved:
+ * the placement is deliberate — a flowchart box, a button — and what is wrong with it is
+ * the colour, which this pass has no business choosing.
+ */
+function reportIllegibleGround(candidates: Candidate[], occluders: Occluder[], repairs: string[]): void {
+  for (const c of candidates) {
+    if (c.node["gradient"] !== undefined) continue;
+    const raw = typeof c.node["fill"] === "string" ? c.node["fill"] : SHAPE_DEFAULTS.fill;
+    const parsed = parseColor(raw);
+    if (!parsed || parsed.a === 0 || c.alpha === 0) continue;
+
+    // The last shape the label sits on is the one painted on top of the others, so it is
+    // what the glyphs are actually read against.
+    let under: Occluder | undefined;
+    for (const o of occluders) if (o.ground !== null && sitOf(c.box, o) === "on") under = o;
+    if (!under?.ground) continue;
+
+    const seen = mix(under.ground, raw, parsed.a * c.alpha);
+    const ratio = contrastRatio(seen, under.ground);
+    const weightRaw = c.node["fontWeight"];
+    const weight = typeof weightRaw === "number" || typeof weightRaw === "string" ? weightRaw : SHAPE_DEFAULTS.fontWeight;
+    const min = wcagTextContrastMin(num(c.node["fontSize"], SHAPE_DEFAULTS.fontSize), weight);
+    if (ratio >= min) continue;
+    repairs.push(
+      `text "${shortLabel(c.node["text"])}" reads at ${ratio.toFixed(2)}:1 against ${shapeName(under.node)} beneath it (needs ${min}:1)`,
+    );
+  }
+}
+
+/** The solid colour the scene is painted on, for deciding what a fill actually shows. */
+function backgroundOf(spec: Record<string, unknown>): string {
+  const bg = spec["background"];
+  if (typeof bg === "string") return bg === "transparent" || bg === "none" ? "#ffffff" : bg;
+  if (isObject(bg)) {
+    const fill = bg["fill"];
+    if (typeof fill === "string") return fill;
+    if (isObject(fill) && Array.isArray(fill["stops"])) {
+      const first: unknown = fill["stops"][0];
+      if (isObject(first) && typeof first["color"] === "string") return first["color"];
+    }
+  }
+  return "#ffffff";
+}
+
+const ROOT: Inherited = { dx: 0, dy: 0, sx: 1, sy: 1, alpha: 1, blocked: false, fading: false };
+
 export function fitAuthoredText(spec: unknown): TextFitResult {
   if (!isObject(spec)) return { spec, repairs: [] };
   // A camera re-maps the whole coordinate space; canvas-space reasoning is invalid.
@@ -383,12 +724,14 @@ export function fitAuthoredText(spec: unknown): TextFitResult {
 
   const clone = structuredClone(spec) as Record<string, unknown>;
   const repairs: string[] = [];
-  const candidates: Candidate[] = [];
-  collect(clone["nodes"], 0, 0, 1, 1, false, candidates);
+  const found: Collected = { text: [], shapes: [], background: backgroundOf(clone) };
+  collect(clone["nodes"], ROOT, found);
 
   const frame = frameOf(canvasW, canvasH);
-  for (const c of candidates) fitToCanvas(c, frame, repairs);
-  separate(candidates, frame, repairs);
+  for (const c of found.text) fitToCanvas(c, frame, repairs);
+  clearArtwork(found.text, found.shapes, frame, repairs);
+  separate(found.text, found.shapes, frame, repairs);
+  reportIllegibleGround(found.text, found.shapes, repairs);
 
   return { spec: repairs.length > 0 ? clone : spec, repairs };
 }
@@ -396,7 +739,7 @@ export function fitAuthoredText(spec: unknown): TextFitResult {
 /** Test seam: the canvas-space box of the text node with `id`, or null. */
 export function measureBoxForTest(spec: unknown, id: string): Box | null {
   if (!isObject(spec)) return null;
-  const out: Candidate[] = [];
-  collect(spec["nodes"], 0, 0, 1, 1, false, out);
-  return out.find((c) => c.node["id"] === id)?.box ?? null;
+  const found: Collected = { text: [], shapes: [], background: backgroundOf(spec) };
+  collect(spec["nodes"], ROOT, found);
+  return found.text.find((c) => c.node["id"] === id)?.box ?? null;
 }
