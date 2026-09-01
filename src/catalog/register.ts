@@ -29,6 +29,7 @@ import { rayDiagramTool, bohrAtomTool, energyLevelsTool, emSpectrumTool } from "
 import { projectileTool } from "./physics/projectile.tool.js";
 import { circuitTool } from "./physics/circuit.tool.js";
 import { voltageDividerTool } from "./physics/voltageDivider.tool.js";
+import { opAmpStageTool } from "./physics/opAmpStage.tool.js";
 import { rcChargingTool } from "./physics/rcCharging.tool.js";
 import { motionGraphTool } from "./physics/motionGraph.tool.js";
 import { vectorFieldTool } from "./physics/vectorField.tool.js";
@@ -80,6 +81,7 @@ const PHYSICS_NODE_TOOLS: BuilderTool[] = [
   projectileTool,
   circuitTool,
   voltageDividerTool,
+  opAmpStageTool,
   rcChargingTool,
   motionGraphTool,
   vectorFieldTool,

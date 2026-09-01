@@ -42,6 +42,33 @@ function endpoints(node: unknown): Pt[] {
   return polylines(node).flatMap((p) => [p[0]!, p[p.length - 1]!]);
 }
 
+/**
+ * Only the conductors, not symbol glyph strokes. A capacitor's plates and a ground symbol's
+ * bars are free-standing marks with open ends by design; a wire with an open end is the
+ * defect this issue is about. Both builders name their wires `*-w-*`.
+ */
+function wires(node: unknown, out: Pt[][] = []): Pt[][] {
+  const n = node as {
+    id?: unknown;
+    type?: string;
+    points?: Pt[];
+    children?: Node[];
+    x?: number;
+    y?: number;
+    rotation?: number;
+    anchor?: Pt;
+  };
+  if (n?.type === "polyline" && Array.isArray(n.points) && typeof n.id === "string" && n.id.includes("-w-")) {
+    out.push(n.points.map((q) => apply(q, n)));
+  }
+  for (const c of n?.children ?? []) {
+    const inner: Pt[][] = [];
+    wires(c, inner);
+    for (const line of inner) out.push(line.map((q) => apply(q, n)));
+  }
+  return out;
+}
+
 /** Every terminal dot in a subtree, in the root's coordinate space. A wire may legitimately
  * end at one: an open A–B pair is precisely what a Thevenin equivalent's output is. */
 function dots(node: unknown, out: Pt[] = []): Pt[] {
@@ -56,6 +83,25 @@ function dots(node: unknown, out: Pt[] = []): Pt[] {
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const samePolyline = (a: Pt[], b: Pt[]) => a.length === b.length && a.every((q, i) => dist(q, b[i]!) < 1e-9);
+
+/**
+ * For each conductor endpoint, the distance to the nearest thing it could legitimately meet:
+ * a DIFFERENT polyline's endpoint (another wire, or a symbol lead) or a marked terminal dot.
+ *
+ * Excluding the endpoint's own polyline matters — matching a point against its own line makes
+ * the measurement vacuously zero and the check meaningless.
+ */
+function connectivityGaps(node: unknown): number[] {
+  const all = polylines(node);
+  const terminals = dots(node);
+  return wires(node).flatMap((w) => {
+    const others = all.filter((l) => !samePolyline(l, w)).flatMap((l) => [l[0]!, l[l.length - 1]!]);
+    const meetable = [...others, ...terminals];
+    return [w[0]!, w[w.length - 1]!].map((e) => Math.min(...meetable.map((o) => dist(o, e))));
+  });
+}
 
 /** Every text string in a subtree. */
 function texts(node: unknown, out: string[] = []): string[] {
@@ -122,15 +168,11 @@ describe("physics.voltageDivider", () => {
     });
 
   it("leaves no wire endpoint stranded", () => {
-    const node = build().node;
-    const ends = endpoints(node);
-    const terminals = dots(node);
-    expect(ends.length).toBeGreaterThan(8);
-    // A wire end must meet another conductor or a marked terminal. Symbol glyphs leave a
-    // small draughting gap at their leads; the freehand output this replaces had 50px gaps
-    // and no return path at all.
-    const nearest = (e: Pt) => Math.min(...[...ends.filter((o) => o !== e), ...terminals].map((o) => dist(o, e)));
-    expect(Math.max(...ends.map(nearest))).toBeLessThan(15);
+    // Every wire end must meet a symbol lead, another wire, or a marked terminal. The
+    // freehand output this replaces had 50px gaps and no return path at all.
+    const gaps = connectivityGaps(build().node);
+    expect(gaps.length).toBeGreaterThan(8);
+    expect(Math.max(...gaps)).toBeLessThan(15);
   });
 
   // THE criterion-2 test: this fails if R2 is placed in series after R1.
@@ -149,8 +191,14 @@ describe("physics.voltageDivider", () => {
     // That column carries conductors touching BOTH rails.
     const columnX = verticals[0]![0]!.x;
     const inColumn = ends.filter((p) => Math.abs(p.x - columnX) < 0.001);
-    expect(inColumn.some((p) => Math.abs(p.y - topY) < 0.001), "shunt does not reach the top rail").toBe(true);
-    expect(inColumn.some((p) => Math.abs(p.y - botY) < 0.001), "shunt does not reach the return rail").toBe(true);
+    expect(
+      inColumn.some((p) => Math.abs(p.y - topY) < 0.001),
+      "shunt does not reach the top rail",
+    ).toBe(true);
+    expect(
+      inColumn.some((p) => Math.abs(p.y - botY) < 0.001),
+      "shunt does not reach the return rail",
+    ).toBe(true);
 
     // And the top rail continues PAST that column to the output terminal -- R2 taps the
     // rail rather than interrupting it, which is what V = V*R2/(R1+R2) describes.
@@ -182,5 +230,156 @@ describe("physics.voltageDivider", () => {
     expect(JSON.stringify(a.node)).toBe(JSON.stringify(build().node));
     const scene = { specVersion: 1, width: 800, height: 450, fps: 30, duration: 4, seed: 0, background: "#ffffff", nodes: [a.node] };
     expect(validateScene(scene as never).errors).toEqual([]);
+  });
+});
+
+describe("physics.opAmpStage", () => {
+  /** The reported brief: R = 10 kΩ in, C = 100 nF in the feedback path. */
+  const integrator = () =>
+    createDefaultRegistry().invokeNode("physics.opAmpStage", {
+      inputKind: "resistor",
+      feedbackKind: "capacitor",
+      inputLabel: "R = 10 kΩ",
+      feedbackLabel: "C = 100 nF",
+    });
+
+  it("leaves no wire endpoint stranded", () => {
+    // The reported output had "a stray vertical wire rising from the capacitor to nothing".
+    expect(Math.max(...connectivityGaps(integrator().node))).toBeLessThan(15);
+  });
+
+  // THE criterion-2 test: this fails if the feedback element is drawn in series on the input.
+  it("routes the feedback element from the output back to the inverting input", () => {
+    const node = integrator().node;
+    const segments = wires(node);
+    const ends = segments.flatMap((p) => [p[0]!, p[p.length - 1]!]);
+    const feedbackY = Math.min(...ends.map((e) => e.y));
+
+    // The feedback element sits on a rail ABOVE everything else.
+    const onFeedbackRail = segments.filter((p) => p.every((q) => Math.abs(q.y - feedbackY) < 0.001));
+    expect(onFeedbackRail.length, "no horizontal run on the feedback rail").toBeGreaterThan(0);
+
+    // A conductor rises from the inverting node to that rail, and another descends from it,
+    // further right, to the output node. Both are required: the loop only closes if the
+    // element is in the feedback path rather than in series on the input.
+    const risers = segments.filter(
+      (p) => Math.abs(p[0]!.x - p[p.length - 1]!.x) < 0.001 && Math.min(p[0]!.y, p[p.length - 1]!.y) <= feedbackY + 0.001,
+    );
+    expect(risers.length, "nothing joins the feedback rail vertically").toBeGreaterThanOrEqual(2);
+    const xs = risers.map((p) => p[0]!.x).sort((a, b) => a - b);
+    expect(xs[xs.length - 1]! - xs[0]!, "the feedback rail does not span the amplifier").toBeGreaterThan(100);
+  });
+
+  it("grounds the non-inverting input", () => {
+    const node = integrator().node as { children?: unknown[] };
+    const find = (n: any): any => {
+      if (typeof n?.id === "string" && n.id.includes("gnd")) return n;
+      for (const c of n?.children ?? []) {
+        const hit = find(c);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const gnd = find(node);
+    expect(gnd, "no ground symbol").not.toBeNull();
+    const gndTop = endpoints(gnd).reduce((a, b) => (a.y < b.y ? a : b));
+    // A conductor must arrive at the ground symbol's top, and it must come from the
+    // non-inverting input.
+    const arriving = wires(node).flatMap((p) => [p[0]!, p[p.length - 1]!]);
+    expect(Math.min(...arriving.map((o) => dist(o, gndTop))), "ground is not wired to anything").toBeLessThan(1);
+  });
+
+  it("draws the element kinds the params ask for", () => {
+    expect(ids(integrator().node).some((i) => i.startsWith("oa-zin"))).toBe(true);
+    expect(ids(integrator().node).some((i) => i.startsWith("oa-zf"))).toBe(true);
+    // A differentiator swaps them; the builder must follow rather than hardcode.
+    const diff = createDefaultRegistry().invokeNode("physics.opAmpStage", { inputKind: "capacitor", feedbackKind: "resistor" });
+    expect(ids(diff.node).some((i) => i.startsWith("oa-zin"))).toBe(true);
+    expect(JSON.stringify(diff.node)).not.toBe(JSON.stringify(integrator().node));
+  });
+
+  it("produces a valid, deterministic scene", () => {
+    const a = integrator();
+    expect(JSON.stringify(a.node)).toBe(JSON.stringify(integrator().node));
+    const scene = { specVersion: 1, width: 800, height: 450, fps: 30, duration: 4, seed: 0, background: "#ffffff", nodes: [a.node] };
+    expect(validateScene(scene as never).errors).toEqual([]);
+  });
+});
+
+describe("the connectivity check has teeth", () => {
+  // The freehand geometry the issue reported, verbatim: 50px gaps on both sides of every
+  // component and three mutually disjoint bottom segments. If the check above cannot fail
+  // on this, it is not measuring anything.
+  it("fails on the disconnected schematic from the issue", () => {
+    const freehand = {
+      id: "freehand",
+      type: "group",
+      x: 0,
+      y: 0,
+      children: [
+        {
+          id: "f-w-1",
+          type: "polyline",
+          x: 0,
+          y: 0,
+          points: [
+            { x: -180, y: -140 },
+            { x: -100, y: -140 },
+          ],
+        },
+        {
+          id: "f-w-2",
+          type: "polyline",
+          x: 0,
+          y: 0,
+          points: [
+            { x: -180, y: -60 },
+            { x: -100, y: -60 },
+          ],
+        },
+        {
+          id: "f-w-3",
+          type: "polyline",
+          x: 0,
+          y: 0,
+          points: [
+            { x: 50, y: -140 },
+            { x: 100, y: -140 },
+          ],
+        },
+        {
+          id: "f-w-4",
+          type: "polyline",
+          x: 0,
+          y: 0,
+          points: [
+            { x: 50, y: -60 },
+            { x: 100, y: -60 },
+          ],
+        },
+        {
+          id: "f-w-5",
+          type: "polyline",
+          x: 0,
+          y: 0,
+          points: [
+            { x: 250, y: -140 },
+            { x: 300, y: -140 },
+          ],
+        },
+        {
+          id: "f-w-6",
+          type: "polyline",
+          x: 0,
+          y: 0,
+          points: [
+            { x: 250, y: -60 },
+            { x: 300, y: -60 },
+          ],
+        },
+      ],
+    };
+    // The issue measured 50px gaps; anything at or above that is a stranded conductor.
+    expect(Math.max(...connectivityGaps(freehand))).toBeGreaterThanOrEqual(50);
   });
 });
