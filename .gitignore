@@ -22,3 +22,6 @@ test/golden/__received__/
 # D1/D2 e2e eval artifacts (regenerated every run; uploaded as CI artifacts, not committed)
 orchestrator/eval-scorecards.json
 orchestrator/eval-live-scorecards.json
+
+# Agent worktrees (transient; each is its own checkout of this repo)
+.claude/worktrees/

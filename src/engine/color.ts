@@ -325,6 +325,16 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/**
+ * The WCAG AA contrast minimum for text of this size and weight: 3:1 for large text
+ * (>= 24px, or >= 18.66px bold), 4.5:1 for everything else — success criterion 1.4.3.
+ * One definition, shared by the a11y audit and the authoring text-fit pass.
+ */
+export function wcagTextContrastMin(fontSize: number, fontWeight?: number | string): number {
+  const bold = fontWeight === "bold" || (typeof fontWeight === "number" && fontWeight >= 700);
+  return fontSize >= 24 || (bold && fontSize >= 18.66) ? 3 : 4.5;
+}
+
 /** Pick the foreground (black or white, or the provided pair) with the better contrast on `bg`. */
 export function readableOn(bg: string, dark = "#000000", light = "#ffffff"): string {
   return contrastRatio(bg, dark) >= contrastRatio(bg, light) ? dark : light;

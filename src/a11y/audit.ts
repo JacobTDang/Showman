@@ -11,7 +11,7 @@
  */
 
 import type { SceneSpec, Node, Backdrop, Color } from "../spec/types.js";
-import { parseColor, relativeLuminance, contrastRatio } from "../engine/color.js";
+import { parseColor, relativeLuminance, contrastRatio, wcagTextContrastMin } from "../engine/color.js";
 
 export type A11ySeverity = "serious" | "warning";
 
@@ -120,10 +120,8 @@ function contrastFinding(node: Node, bg: string): A11yFinding | null {
   if ((node as { gradient?: unknown }).gradient !== undefined) return null;
   const ratio = contrastRatio(fill, bg);
   const fontSize = (node as { fontSize?: number }).fontSize ?? 48;
-  const weight = (node as { fontWeight?: number | string }).fontWeight;
-  const bold = weight === "bold" || (typeof weight === "number" && weight >= 700);
-  const large = fontSize >= 24 || (bold && fontSize >= 18.66);
-  const threshold = large ? 3 : 4.5;
+  const threshold = wcagTextContrastMin(fontSize, (node as { fontWeight?: number | string }).fontWeight);
+  const large = threshold === 3;
   if (ratio < threshold) {
     return {
       code: "contrast",

@@ -17,6 +17,11 @@ import { loadPrompts, type AuthorPrompts } from "./prompts.js";
 import { autoRepairSpec } from "./autoRepair.js";
 import { extractJson, JsonExtractionError } from "./jsonRepair.js";
 import { authorBrief, checkSemanticAdherence, type PedagogyRequest, type SemanticCheck } from "./semantic.js";
+import { expandBuilderPlacements } from "./builderPlacements.js";
+import { routeSchematicToBuilder, selectSchematicBuilder } from "./schematicRouting.js";
+import { fitAuthoredText } from "./textFit.js";
+import { checkConductorConnectivity, strandedFeedback, type ConnectivityCheck } from "./connectivity.js";
+import { defaultRegistry } from "../catalog/index.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
 export { extractJson } from "./jsonRepair.js";
@@ -58,7 +63,9 @@ export interface AuthoringAttempt {
   /** Mechanical fixes auto-applied this attempt (clamps, key renames) — no LLM round-trip spent. */
   repaired?: string[];
   semantic?: SemanticCheck;
-  failure?: "truncated_response" | "malformed_response" | "author_error";
+  /** Conductor connectivity, on a scene that draws a schematic. "unchecked" otherwise. */
+  connectivity?: ConnectivityCheck;
+  failure?: "truncated_response" | "malformed_response" | "author_error" | "builder_error";
   message?: string;
 }
 
@@ -98,6 +105,12 @@ export class AuthoringAgent {
     const brief = authorBrief(request);
     const maxAttempts = Math.max(1, this.options.maxAttempts ?? 3);
     const schema = await this.client.getSchema();
+    // Which builder draws this brief is decided HERE, in code, once -- never asked of the
+    // model. Prompting for it was measured on #125 and made authoring worse: two briefs
+    // that authored cleanly began returning malformed and truncated JSON, and two others
+    // ignored the instruction. Null means nothing in the brief names a topology, and the
+    // model authors freehand exactly as before.
+    const schematic = selectSchematicBuilder(request);
     const history: AuthoringAttempt[] = [];
     let feedback: AuthorContext["feedback"];
     let previousCandidate: unknown;
@@ -129,8 +142,38 @@ export class AuthoringAgent {
         };
         continue;
       }
+      // The model cannot measure rendered text, so it cannot tell whether what it wrote
+      // fits the canvas. Do that here, BEFORE builder expansion, so the pass only ever
+      // touches text the model placed freehand -- builder geometry is inserted afterwards
+      // and never repositioned.
+      const fitted = fitAuthoredText(spec);
+      spec = fitted.spec;
+      let repaired: string[] | undefined = fitted.repairs.length > 0 ? [...fitted.repairs] : undefined;
+
+      // Hand the schematic to the builder that owns its topology, in the space the model
+      // reserved for the drawing. Runs AFTER the text fit so the surviving labels keep the
+      // positions they were fitted to, and before expansion so the builder arrives as an
+      // ordinary placement.
+      if (schematic) {
+        const routed = routeSchematicToBuilder(spec, schematic, defaultRegistry());
+        spec = routed.spec;
+        if (routed.repairs.length > 0) repaired = [...(repaired ?? []), ...routed.repairs];
+      }
+
+      // A spec may reference catalog builders for geometry a model cannot place by
+      // eye -- schematics above all. Expand before validation, so everything
+      // downstream sees an ordinary spec.
+      const built = expandBuilderPlacements(spec, defaultRegistry());
+      spec = built.spec;
+      if (built.errors.length > 0) {
+        history.push({ attempt, valid: false, errorCount: built.errors.length, failure: "builder_error" });
+        feedback = {
+          note: `Builder placements failed: ${built.errors.join("; ")}. Correct the builder name or its params.`,
+        };
+        continue;
+      }
+
       let validation = await this.client.validate(spec);
-      let repaired: string[] | undefined;
       if (!validation.valid) {
         // Try a cheap, deterministic repair (clamp ranges, fix typo'd keys/easings) before
         // spending another whole LLM round-trip on errors a machine can fix itself.
@@ -140,10 +183,10 @@ export class AuthoringAgent {
           if (reval.valid) {
             spec = fix.spec;
             validation = reval;
-            repaired = fix.fixed;
+            repaired = [...(repaired ?? []), ...fix.fixed];
           } else {
             retainBestCandidate(fix.spec, 1_000 + reval.errors.length);
-            history.push({ attempt, valid: false, errorCount: reval.errors.length, repaired: fix.fixed });
+            history.push({ attempt, valid: false, errorCount: reval.errors.length, repaired: [...(repaired ?? []), ...fix.fixed] });
             feedback = { errors: reval.errors, note: "The spec failed validation. Fix the listed errors." };
             continue;
           }
@@ -177,7 +220,19 @@ export class AuthoringAgent {
         continue;
       }
 
-      history.push({ attempt, valid: true, errorCount: 0, previewed, semantic, ...(repaired ? { repaired } : {}) });
+      // A schematic's topology IS its content, and a model placing wires by eye leaves
+      // them stopping short of the components. Unlike a text measurement the model can act
+      // on this: it wrote those coordinates and can move them, so a wrong answer costs a
+      // retry rather than rejecting good output.
+      const connectivity = checkConductorConnectivity(spec);
+      if (connectivity.status === "failed") {
+        retainBestCandidate(spec, connectivity.stranded.length);
+        history.push({ attempt, valid: true, errorCount: connectivity.stranded.length, previewed, semantic, connectivity });
+        feedback = { note: strandedFeedback(connectivity) };
+        continue;
+      }
+
+      history.push({ attempt, valid: true, errorCount: 0, previewed, semantic, connectivity, ...(repaired ? { repaired } : {}) });
       return { ok: true, spec: spec as SceneSpec, attempts: attempt, history };
     }
     return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid spec" };

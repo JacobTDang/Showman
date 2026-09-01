@@ -24,6 +24,33 @@ describe("authoring prompt pack", () => {
     expect(prompts.system("schema")).toContain("V_C(t)");
   });
 
+  // The example is the one worked spec the author is told to study, so anything it
+  // demonstrates gets copied. It used to draw a label dead-centre on the shape it
+  // annotates and never set maxWidth -- both are issue #124's defects.
+  it("demonstrates wrapped text and labels clear of their artwork", () => {
+    const sys = loadPrompts().system("schema");
+    const specs = [...sys.matchAll(/^\{"specVersion".*$/gm)].map((m) => JSON.parse(m[0]));
+    expect(specs.length).toBeGreaterThan(0);
+
+    const texts = specs.flatMap((s: any) => s.nodes.filter((n: any) => n.type === "text"));
+    expect(texts.length).toBeGreaterThan(0);
+    // Every multi-word label shows the wrap control.
+    for (const t of texts.filter((n: any) => n.text.split(" ").length > 1)) {
+      expect(t.maxWidth, `"${t.text}" should set maxWidth`).toBeGreaterThan(0);
+    }
+
+    // No text node sits inside a rect it is not the caption of.
+    for (const spec of specs) {
+      const rects = spec.nodes.filter((n: any) => n.type === "rect");
+      for (const t of spec.nodes.filter((n: any) => n.type === "text")) {
+        for (const r of rects) {
+          const inside = t.x > r.x && t.x < r.x + r.width && t.y > r.y && t.y < r.y + r.height;
+          expect(inside, `"${t.text}" sits on top of rect "${r.id}"`).toBe(false);
+        }
+      }
+    }
+  });
+
   it("correction is empty with no errors and embeds the errors otherwise", () => {
     const p = loadPrompts();
     expect(p.correction([])).toBe("");
