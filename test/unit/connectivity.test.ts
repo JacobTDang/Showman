@@ -655,3 +655,46 @@ describe("checkConductorConnectivity — wires drawn as SVG paths", () => {
     expect(check.status === "failed" && check.stranded.length).toBe(3);
   });
 });
+
+describe("checkConductorConnectivity — arc-drawn components", () => {
+  // A round meter face drawn as an arc is a component body like any other. Routing already
+  // treats it as one; the gate did not, so a wire that met it read as stranded.
+  it("accepts a wire that ends on an arc-drawn body", () => {
+    const meterX = 300;
+    const meterY = 100;
+    const r = 20;
+    const spec = scene([
+      box("src", 40, 100, 40, 40),
+      box("r1", 160, 100, 80, 40),
+      { id: "meter", type: "arc", x: meterX, y: meterY, radius: r, stroke: INK, strokeWidth: 3 },
+      wire("w1", [
+        { x: 80, y: 120 },
+        { x: 160, y: 120 },
+      ]),
+      wire("w2", [
+        { x: 240, y: 120 },
+        { x: meterX, y: 120 },
+      ]),
+      wire("w3", [
+        { x: meterX + 2 * r, y: 120 },
+        { x: 420, y: 120 },
+      ]),
+      wire("w4", [
+        { x: 420, y: 120 },
+        { x: 420, y: 200 },
+      ]),
+      wire("w5", [
+        { x: 420, y: 200 },
+        { x: 60, y: 200 },
+      ]),
+      wire("w6", [
+        { x: 60, y: 200 },
+        { x: 60, y: 140 },
+      ]),
+      label("l0", 60, 80, "12 V"),
+      label("l1", 200, 80, "R1 = 4 kΩ"),
+      label("l2", 320, 70, "V"),
+    ]);
+    expect(checkConductorConnectivity(spec).status).toBe("passed");
+  });
+});

@@ -237,6 +237,21 @@ function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
         });
         break;
       }
+      case "arc": {
+        // The renderer centres an arc at (radius, radius) from its origin, so the body it
+        // draws lies inside the full circle's box -- taken as a region, like an ellipse.
+        const r = num(node["radius"], 50);
+        if (!(r > 0)) break;
+        out.regions.push(
+          [
+            { x: 0, y: 0 },
+            { x: 2 * r, y: 0 },
+            { x: 2 * r, y: 2 * r },
+            { x: 0, y: 2 * r },
+          ].map((p) => transform(here, p)),
+        );
+        break;
+      }
       case "rect":
       case "ellipse": {
         const w = num(node["width"], 0);
