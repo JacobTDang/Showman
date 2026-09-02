@@ -40,6 +40,8 @@
  * cannot read.
  */
 
+import { flattenPath } from "../engine/svgPath.js";
+
 /** px of slack allowed at a joint. Symbol leads meet wires exactly; the reported holes were 50px. */
 const MAX_GAP = 12;
 /**
@@ -218,6 +220,21 @@ function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
         const closed = node["closed"] === true || node["type"] === "polygon";
         if (closed) points.push(points[0]!);
         out.segments.push({ id, points, closed, judgeable: !closed && !stillMoving });
+        break;
+      }
+      case "path": {
+        // The engine's own parser flattens every subpath and never throws. Each subpath is
+        // its own run -- a stub drawn as "M ... L ... M ... L ..." is two conductors, not
+        // one -- and gets its own id so an endpoint is never matched against itself.
+        const subpaths = flattenPath(String(node["d"] ?? ""));
+        subpaths.forEach((raw, k) => {
+          if (raw.length < 2) return;
+          const points = raw.map((p) => transform(here, p));
+          const first = points[0]!;
+          const last = points[points.length - 1]!;
+          const closed = points.length > 2 && Math.hypot(first.x - last.x, first.y - last.y) < 1e-6;
+          out.segments.push({ id: subpaths.length > 1 ? `${id}#${k}` : id, points, closed, judgeable: !closed && !stillMoving });
+        });
         break;
       }
       case "rect":

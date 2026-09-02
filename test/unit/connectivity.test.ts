@@ -610,3 +610,48 @@ describe("the authoring loop refuses a disconnected schematic", () => {
     expect(result.history.every((h) => h.connectivity?.status === "failed")).toBe(true);
   });
 });
+
+describe("checkConductorConnectivity — wires drawn as SVG paths", () => {
+  /** The same spec with every polyline redrawn as an equivalent path node. */
+  const asPaths = (spec: any): any => {
+    const convert = (n: any): any => {
+      if (n?.type === "polyline" && Array.isArray(n.points)) {
+        const { points, ...rest } = n;
+        return { ...rest, type: "path", d: points.map((p: any, i: number) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ") };
+      }
+      if (Array.isArray(n?.children)) return { ...n, children: n.children.map(convert) };
+      return n;
+    };
+    return { ...spec, nodes: spec.nodes.map(convert) };
+  };
+
+  // The gate measured polylines only, so a schematic whose wires were drawn as paths
+  // found no conductors and came back "unchecked" -- the defect it exists to catch,
+  // waved through because of the node type the author happened to pick.
+  it("fails the disconnected schematic when its wires are paths", () => {
+    const check = checkConductorConnectivity(asPaths(disconnectedThevenin()));
+    expect(check.status).toBe("failed");
+    expect(check.status === "failed" && check.stranded.length).toBeGreaterThan(0);
+  });
+
+  it("passes the connected loop when its wires are paths", () => {
+    expect(checkConductorConnectivity(asPaths(connectedLoop())).status).toBe("passed");
+  });
+
+  it("reads a path with several subpaths as several runs", () => {
+    // Three disjoint stubs in ONE path node, each leaving a component and stopping short
+    // of the next: every one of them must be found, not just the first subpath.
+    const spec = scene([
+      box("src", 40, 100, 40, 40),
+      box("r1", 200, 100, 100, 40),
+      box("r2", 400, 100, 100, 40),
+      { id: "all", type: "path", x: 0, y: 0, d: "M 80 120 L 150 120 M 300 120 L 350 120 M 500 120 L 560 120", stroke: INK, strokeWidth: 3 },
+      label("l0", 60, 80, "12 V"),
+      label("l1", 250, 80, "R1 = 4 kΩ"),
+      label("l2", 450, 80, "R2 = 2 kΩ"),
+    ]);
+    const check = checkConductorConnectivity(spec);
+    expect(check.status).toBe("failed");
+    expect(check.status === "failed" && check.stranded.length).toBe(3);
+  });
+});
