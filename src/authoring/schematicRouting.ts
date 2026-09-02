@@ -30,6 +30,7 @@
  * An RC brief routes to `physics.circuit` with a closed battery-switch-R-C loop instead.
  */
 import type { BuilderRegistry } from "../catalog/index.js";
+import { flattenPath } from "../engine/svgPath.js";
 import type { PedagogyRequest } from "./semantic.js";
 
 export interface SchematicSelection {
@@ -353,7 +354,21 @@ function shapeBox(node: Record<string, unknown>, ox: number, oy: number, sx: num
     const r = num(node["radius"], 50);
     return { x0: ox, y0: oy, x1: ox + 2 * r * sx, y1: oy + 2 * r * sy };
   }
-  // `path` and `arc` would need their own geometry parsed; they are left in place.
+  if (type === "path") {
+    // Flatten every subpath and take the extent; the flattener never throws, and an
+    // empty or malformed d simply yields no points.
+    const pts = flattenPath(String(node["d"] ?? "")).flat();
+    if (pts.length < 2) return null;
+    const xs = pts.map((q) => q.x);
+    const ys = pts.map((q) => q.y);
+    return { x0: ox + Math.min(...xs) * sx, x1: ox + Math.max(...xs) * sx, y0: oy + Math.min(...ys) * sy, y1: oy + Math.max(...ys) * sy };
+  }
+  if (type === "arc") {
+    // The renderer centres an arc at (radius, radius) from its origin, so whatever sweep it
+    // draws lies inside the full circle's box -- the same convention as polygon.
+    const r = num(node["radius"], 50);
+    return { x0: ox, y0: oy, x1: ox + 2 * r * sx, y1: oy + 2 * r * sy };
+  }
   return null;
 }
 
@@ -399,7 +414,7 @@ function collectWires(nodes: unknown, ox: number, oy: number, sx: number, sy: nu
       collectWires(raw["children"], nx, ny, esx, esy, out);
       continue;
     }
-    if (raw["type"] !== "polyline") continue;
+    if (raw["type"] !== "polyline" && raw["type"] !== "path") continue;
     const box = shapeBox(raw, nx, ny, esx, esy);
     if (box) out.push(box);
   }
@@ -418,7 +433,7 @@ function collectShapes(nodes: unknown, ox: number, oy: number, sx: number, sy: n
       collectShapes(raw["children"], nx, ny, esx, esy, out);
       continue;
     }
-    if (raw["type"] === "polyline" || raw["type"] === "text" || raw["type"] === "counter") continue;
+    if (raw["type"] === "polyline" || raw["type"] === "path" || raw["type"] === "text" || raw["type"] === "counter") continue;
     const box = shapeBox(raw, nx, ny, esx, esy);
     if (box) out.push(box);
   }

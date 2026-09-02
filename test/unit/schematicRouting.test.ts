@@ -237,6 +237,40 @@ describe("routing a freehand schematic to a builder", () => {
     expect(ids, "its label should go with it").not.toContain("r2-label");
   });
 
+  // The routing region was measured from polylines only, so a schematic whose wires were
+  // drawn as SVG paths found no wires at all, fell to the empty-band placement, and left
+  // every freehand stroke in place beside the builder.
+  it("treats wires drawn as SVG paths like polylines", () => {
+    const spec: any = freehandThevenin();
+    const sch = spec.nodes.find((n: any) => n.id === "schematic");
+    sch.children = sch.children.map((n: any) =>
+      n.type !== "polyline"
+        ? n
+        : {
+            id: n.id,
+            type: "path",
+            d: n.points.map((p: any, i: number) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "),
+            stroke: n.stroke,
+            strokeWidth: n.strokeWidth,
+          },
+    );
+    const out = routeSchematicToBuilder(spec, selection(), registry);
+    expect(out.routed).toBe(true);
+    const ids = allNodes(out.spec).map((n) => n.id);
+    for (const gone of ["w1", "w2", "w3", "w4", "w5", "w6", "source", "r1", "r2"]) {
+      expect(ids, `${gone} should have been replaced`).not.toContain(gone);
+    }
+  });
+
+  it("claims an arc drawn as part of the schematic", () => {
+    const spec: any = freehandThevenin();
+    const sch = spec.nodes.find((n: any) => n.id === "schematic");
+    // A round meter face sitting on the top rail, drawn as an arc.
+    sch.children.push({ id: "meter", type: "arc", x: -20, y: -170, radius: 20, stroke: "#334155", strokeWidth: 3 });
+    const out = routeSchematicToBuilder(spec, selection(), registry);
+    expect(allNodes(out.spec).map((n) => n.id)).not.toContain("meter");
+  });
+
   it("does not absorb unrelated artwork that merely sits on the same canvas", () => {
     const spec: any = freehandThevenin();
     // A bar chart well clear of the wiring, on the far side of the canvas.
