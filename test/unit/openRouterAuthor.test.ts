@@ -94,3 +94,55 @@ describe("OpenRouterSpecAuthor", () => {
     await expect(author.propose("x", ctx)).rejects.toThrow(/non-JSON response \(status 200\)/);
   });
 });
+
+describe("OPENROUTER_MAX_TOKENS", () => {
+  const withEnv = async <T>(value: string | undefined, fn: () => Promise<T> | T): Promise<T> => {
+    const had = Object.prototype.hasOwnProperty.call(process.env, "OPENROUTER_MAX_TOKENS");
+    const prev = process.env.OPENROUTER_MAX_TOKENS;
+    if (value === undefined) delete process.env.OPENROUTER_MAX_TOKENS;
+    else process.env.OPENROUTER_MAX_TOKENS = value;
+    try {
+      return await fn();
+    } finally {
+      if (had) process.env.OPENROUTER_MAX_TOKENS = prev;
+      else delete process.env.OPENROUTER_MAX_TOKENS;
+    }
+  };
+
+  const sentMaxTokens = async (calls: Array<{ init: RequestInit }>): Promise<number> => JSON.parse(String(calls[0]!.init.body)).max_tokens;
+
+  // A reasoning model spends part of its budget thinking before the JSON starts, so the
+  // 6000 default truncates specs that a larger budget completes. Every other OpenRouter
+  // setting is env-readable; this one was not, leaving no way to raise it in deployment.
+  it("raises the output budget from the environment", async () => {
+    const { impl, calls } = fakeFetch(validSpecJson);
+    await withEnv("16000", async () => {
+      await new OpenRouterSpecAuthor({ apiKey: "k", fetchImpl: impl }).propose("brief", ctx);
+    });
+    expect(await sentMaxTokens(calls)).toBe(16000);
+  });
+
+  it("keeps the 6000 default when unset", async () => {
+    const { impl, calls } = fakeFetch(validSpecJson);
+    await withEnv(undefined, async () => {
+      await new OpenRouterSpecAuthor({ apiKey: "k", fetchImpl: impl }).propose("brief", ctx);
+    });
+    expect(await sentMaxTokens(calls)).toBe(6000);
+  });
+
+  it("lets an explicit option win over the environment", async () => {
+    const { impl, calls } = fakeFetch(validSpecJson);
+    await withEnv("16000", async () => {
+      await new OpenRouterSpecAuthor({ apiKey: "k", fetchImpl: impl, maxTokens: 2048 }).propose("brief", ctx);
+    });
+    expect(await sentMaxTokens(calls)).toBe(2048);
+  });
+
+  it("rejects a non-positive or unparseable value instead of silently ignoring it", async () => {
+    for (const bad of ["0", "-1", "lots"]) {
+      await withEnv(bad, () => {
+        expect(() => new OpenRouterSpecAuthor({ apiKey: "k" }), `value ${bad}`).toThrow(/OPENROUTER_MAX_TOKENS/);
+      });
+    }
+  });
+});

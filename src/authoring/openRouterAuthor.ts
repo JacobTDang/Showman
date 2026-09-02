@@ -50,6 +50,20 @@ function configuredTimeoutMs(value: string | undefined): number {
   return parsed;
 }
 
+/**
+ * A reasoning model spends part of its output budget thinking before the JSON begins, so
+ * 6000 tokens truncates specs that a larger budget completes — measured on the free tier,
+ * where a brief that failed three attempts at 6000 authored on the first at 16000. Every
+ * other OpenRouter setting is env-readable; this one was not, so there was no way to raise
+ * it in a deployment without changing code.
+ */
+function configuredMaxTokens(value: string | undefined): number {
+  if (value === undefined || value.trim() === "") return 6000;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error("OPENROUTER_MAX_TOKENS must be a positive number.");
+  return parsed;
+}
+
 function isAbortError(err: unknown): boolean {
   const name = (err as { name?: unknown } | null)?.name;
   return name === "TimeoutError" || name === "AbortError";
@@ -71,7 +85,7 @@ export class OpenRouterSpecAuthor implements SpecAuthor {
   constructor(opts: OpenRouterAuthorOptions = {}) {
     this.apiKey = opts.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
     this.model = opts.model ?? process.env.OPENROUTER_MODEL ?? "openai/gpt-oss-120b";
-    this.maxTokens = opts.maxTokens ?? 6000;
+    this.maxTokens = opts.maxTokens ?? configuredMaxTokens(process.env.OPENROUTER_MAX_TOKENS);
     this.temperature = opts.temperature ?? 0.4;
     this.baseUrl = (opts.baseUrl ?? process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
     this.timeoutMs = opts.timeoutMs ?? configuredTimeoutMs(process.env.OPENROUTER_TIMEOUT_MS);
