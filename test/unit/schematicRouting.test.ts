@@ -216,6 +216,38 @@ describe("routing a freehand schematic to a builder", () => {
     }
   });
 
+  // The region was the wires' bounding box, so a component drawn BEYOND the last wire --
+  // the signature of a disconnected schematic -- survived and double-drew beside the
+  // builder. A component within reach of the wiring belongs to it.
+  it("also removes a component the wires stop short of", () => {
+    const spec: any = freehandThevenin();
+    // Push r2 and its label 50px past the last wire end, like the reported geometry.
+    const sch = spec.nodes.find((n: any) => n.id === "schematic");
+    const r2 = sch.children.find((n: any) => n.id === "r2");
+    const r2Label = sch.children.find((n: any) => n.id === "r2-label");
+    const lastWireEnd = Math.max(
+      ...sch.children.filter((n: any) => n.type === "polyline").flatMap((n: any) => n.points.map((p: any) => p.x)),
+    );
+    r2.x = lastWireEnd + 50;
+    r2Label.x = r2.x + r2.width / 2;
+
+    const out = routeSchematicToBuilder(spec, selection(), registry);
+    const ids = allNodes(out.spec).map((n) => n.id);
+    expect(ids, "stranded component should have been replaced").not.toContain("r2");
+    expect(ids, "its label should go with it").not.toContain("r2-label");
+  });
+
+  it("does not absorb unrelated artwork that merely sits on the same canvas", () => {
+    const spec: any = freehandThevenin();
+    // A bar chart well clear of the wiring, on the far side of the canvas.
+    spec.nodes.push({ id: "bar", type: "rect", x: 900, y: 380, width: 40, height: 120, fill: "#4a90d9" });
+    spec.nodes.push({ id: "bar-label", type: "text", x: 920, y: 520, text: "Q3", fontSize: 16, align: "center" });
+    const out = routeSchematicToBuilder(spec, selection(), registry);
+    const ids = allNodes(out.spec).map((n) => n.id);
+    expect(ids).toContain("bar");
+    expect(ids).toContain("bar-label");
+  });
+
   it("keeps the authored algebra and title, which sit outside the drawing", () => {
     const out = routeSchematicToBuilder(freehandThevenin(), selection(), registry);
     const ids = allNodes(out.spec).map((n) => n.id);

@@ -281,6 +281,13 @@ function scannedLoop(text: string): Record<string, unknown> | null {
 
 /** px of slack around the freehand line-art before the region is considered clear. */
 const PAD = 24;
+/**
+ * How far past the wiring a component can sit and still be part of the schematic. The
+ * reported freehand output left 50px between every wire end and the part it should have
+ * met; a component that far off is the defect, not a separate drawing. Far enough to
+ * bridge that, not so far it reaches a chart on the other side of the canvas.
+ */
+const REACH = 80;
 /** px kept clear of every canvas edge. */
 const MARGIN = 16;
 /** Below this a schematic stops being readable; the canvas may still force smaller. */
@@ -396,6 +403,57 @@ function collectWires(nodes: unknown, ox: number, oy: number, sx: number, sy: nu
     const box = shapeBox(raw, nx, ny, esx, esy);
     if (box) out.push(box);
   }
+}
+
+/** Every filled or outlined shape that could be a drawn component, in canvas space. */
+function collectShapes(nodes: unknown, ox: number, oy: number, sx: number, sy: number, out: Box[]): void {
+  if (!Array.isArray(nodes)) return;
+  for (const raw of nodes) {
+    if (!isObject(raw) || breaksBoxMath(raw)) continue;
+    const nx = ox + num(raw["x"], 0) * sx;
+    const ny = oy + num(raw["y"], 0) * sy;
+    const esx = sx * num(raw["scaleX"], num(raw["scale"], 1));
+    const esy = sy * num(raw["scaleY"], num(raw["scale"], 1));
+    if (raw["type"] === "group") {
+      collectShapes(raw["children"], nx, ny, esx, esy, out);
+      continue;
+    }
+    if (raw["type"] === "polyline" || raw["type"] === "text" || raw["type"] === "counter") continue;
+    const box = shapeBox(raw, nx, ny, esx, esy);
+    if (box) out.push(box);
+  }
+}
+
+/** Gap between a box and a region: zero when they touch or overlap. */
+function gapTo(box: Box, region: Box): number {
+  const dx = Math.max(0, region.x0 - box.x1, box.x0 - region.x1);
+  const dy = Math.max(0, region.y0 - box.y1, box.y0 - region.y1);
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * Widen the wire region to take in every component within reach of it, repeating until
+ * nothing new is close enough. A part the freehand wires stopped short of is still part
+ * of the drawing; without this it survived the prune and double-drew beside the builder.
+ */
+function growToReach(region: Box, shapes: Box[]): Box {
+  const grown = { ...region };
+  const pending = [...shapes];
+  let absorbed = true;
+  while (absorbed) {
+    absorbed = false;
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const b = pending[i]!;
+      if (gapTo(b, grown) > REACH) continue;
+      grown.x0 = Math.min(grown.x0, b.x0 - PAD);
+      grown.y0 = Math.min(grown.y0, b.y0 - PAD);
+      grown.x1 = Math.max(grown.x1, b.x1 + PAD);
+      grown.y1 = Math.max(grown.y1, b.y1 + PAD);
+      pending.splice(i, 1);
+      absorbed = true;
+    }
+  }
+  return grown;
 }
 
 /** Every vertical band the remaining content occupies, in canvas space. */
@@ -533,6 +591,9 @@ export function routeSchematicToBuilder(spec: unknown, selection: SchematicSelec
       x1: Math.max(...wires.map((w) => w.x1)) + PAD,
       y1: Math.max(...wires.map((w) => w.y1)) + PAD,
     };
+    const shapes: Box[] = [];
+    collectShapes(clone["nodes"], 0, 0, 1, 1, shapes);
+    region = growToReach(region, shapes);
     const dropped: string[] = [];
     clone["nodes"] = prune(clone["nodes"] as unknown[], region, 0, 0, 1, 1, dropped);
     if (dropped.length > 0) repairs.push(`removed ${dropped.length} freehand schematic nodes (${dropped.slice(0, 6).join(", ")})`);
