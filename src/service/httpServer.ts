@@ -323,6 +323,7 @@ export function createServer(deps: ServerDeps): http.Server {
           validation: {
             schemaValid: true,
             semantic: authored.history.at(-1)?.semantic,
+            a11y: authored.history.at(-1)?.a11y,
             repairs: authored.history.flatMap((a) => a.repaired ?? []),
           },
         },

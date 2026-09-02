@@ -21,6 +21,7 @@ import { expandBuilderPlacements } from "./builderPlacements.js";
 import { routeSchematicToBuilder, selectSchematicBuilder } from "./schematicRouting.js";
 import { fitAuthoredText } from "./textFit.js";
 import { checkConductorConnectivity, strandedFeedback, type ConnectivityCheck } from "./connectivity.js";
+import { auditScene, type A11yReport } from "../a11y/audit.js";
 import { defaultRegistry } from "../catalog/index.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
@@ -65,6 +66,12 @@ export interface AuthoringAttempt {
   semantic?: SemanticCheck;
   /** Conductor connectivity, on a scene that draws a schematic. "unchecked" otherwise. */
   connectivity?: ConnectivityCheck;
+  /**
+   * Flash-safety and text-contrast audit of the published spec. Informational: it never
+   * fails an attempt, because the fix for a contrast finding is a colour choice this loop
+   * does not make. Attached only to the attempt that publishes.
+   */
+  a11y?: A11yReport;
   failure?: "truncated_response" | "malformed_response" | "author_error" | "builder_error";
   message?: string;
 }
@@ -232,7 +239,16 @@ export class AuthoringAgent {
         continue;
       }
 
-      history.push({ attempt, valid: true, errorCount: 0, previewed, semantic, connectivity, ...(repaired ? { repaired } : {}) });
+      history.push({
+        attempt,
+        valid: true,
+        errorCount: 0,
+        previewed,
+        semantic,
+        connectivity,
+        a11y: auditScene(spec as SceneSpec),
+        ...(repaired ? { repaired } : {}),
+      });
       return { ok: true, spec: spec as SceneSpec, attempts: attempt, history };
     }
     return { ok: false, attempts: maxAttempts, history, error: "exhausted attempts without a valid spec" };

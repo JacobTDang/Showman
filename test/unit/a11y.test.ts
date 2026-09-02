@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { SPEC_VERSION, a11y } from "../../src/index.js";
+import { SPEC_VERSION, a11y, validateScene } from "../../src/index.js";
+import { AuthoringAgent, ScriptedAuthor } from "../../src/authoring/agent.js";
 import type { SceneSpec, Node, Keyframe } from "../../src/index.js";
 
 const { auditScene } = a11y;
@@ -203,5 +204,44 @@ describe("contrast (WCAG 1.4.3)", () => {
     expect(auditScene(scene([{ id: "t", type: "text", x: 0, y: 0, text: "x", fontSize: 16, fill: "#ffffff" }], bg)).findings).toHaveLength(
       0,
     );
+  });
+});
+
+describe("surfaced by the authoring loop", () => {
+  // auditScene was exported, tested, and called by nothing in the pipeline. The loop now
+  // attaches its report to the published attempt -- informational, never failing it, since
+  // a contrast fix is a colour choice and this loop does not choose colours.
+  const stubClient = () =>
+    ({
+      getSchema: async () => ({}) as never,
+      validate: async (spec: unknown) => validateScene(spec as never),
+      preview: async () => ({ ok: true, errors: [] }),
+      submit: async () => ({ ok: true, jobId: "job-1", errors: [] }),
+    }) as never;
+  const base = (fill: string) => ({
+    specVersion: SPEC_VERSION,
+    width: 400,
+    height: 200,
+    fps: 30,
+    duration: 1,
+    seed: 1,
+    background: "#ffffff",
+    nodes: [{ id: "t", type: "text", text: "hello", x: 200, y: 100, fontSize: 24, fill, align: "center" }],
+  });
+
+  it("reports a contrast finding without failing the attempt", async () => {
+    const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([base("#f0f0f0")]));
+    const result = await agent.authorSpec("hello");
+    expect(result.ok).toBe(true);
+    const report = result.history.at(-1)?.a11y;
+    expect(report?.findings.some((f) => f.code === "contrast")).toBe(true);
+  });
+
+  it("reports a clean audit on legible text", async () => {
+    const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([base("#111111")]));
+    const result = await agent.authorSpec("hello");
+    expect(result.ok).toBe(true);
+    expect(result.history.at(-1)?.a11y?.passed).toBe(true);
+    expect(result.history.at(-1)?.a11y?.findings).toEqual([]);
   });
 });
