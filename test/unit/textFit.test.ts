@@ -567,3 +567,95 @@ describe("authoring loop reports text fixes", () => {
     expect(result.history.at(-1)?.repaired).toBeUndefined();
   });
 });
+
+describe("fitAuthoredText — labels sequenced in time", () => {
+  const fade = (t0: number, t1: number) => ({
+    property: "opacity",
+    keyframes: [
+      { t: t0, value: 0 },
+      { t: t0 + 0.3, value: 1 },
+      { t: t1 - 0.3, value: 1 },
+      { t: t1, value: 0 },
+    ],
+  });
+
+  // The project's own outline lesson stacks every segment's kind label at one point and
+  // sequences them by opacity. They never appear together, so there is nothing to separate.
+  it("leaves the outline lesson's stacked kind labels where the template put them", async () => {
+    const { lessonFromBriefOutline } = await import("../../src/authoring/templateAuthor.js");
+    const spec = lessonFromBriefOutline("Ohm's law", ["Voltage pushes current", "Resistance opposes it", "Current results"]);
+    const result = fitAuthoredText(spec);
+    expect(result.repairs.filter((r) => r.includes("clear of"))).toEqual([]);
+    const kinds = (result.spec as { nodes: Array<Record<string, unknown>> }).nodes.filter((n) => /^kind\d/.test(String(n["id"])));
+    expect(new Set(kinds.map((n) => `${n["x"]},${n["y"]}`)).size).toBe(1);
+  });
+
+  it("does not separate two labels whose visibility windows are disjoint", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "INTRO", x: 480, y: 162, fontSize: 22, align: "center", tracks: [fade(1, 4)] },
+      { id: "b", type: "text", text: "CONCEPT", x: 480, y: 162, fontSize: 22, align: "center", tracks: [fade(4, 7)] },
+    ]);
+    const before = JSON.stringify(spec);
+    const result = fitAuthoredText(spec);
+    expect(result.repairs).toEqual([]);
+    expect(JSON.stringify(result.spec)).toBe(before);
+  });
+
+  it("still separates two labels whose visibility windows overlap", () => {
+    const spec = base([
+      { id: "a", type: "text", text: "INTRO", x: 480, y: 162, fontSize: 22, align: "center", tracks: [fade(1, 5)] },
+      { id: "b", type: "text", text: "CONCEPT", x: 480, y: 162, fontSize: 22, align: "center", tracks: [fade(3, 7)] },
+    ]);
+    const out = fitAuthoredText(spec).spec;
+    expect(overlaps(boxOf(out, "a"), boxOf(out, "b"))).toBe(false);
+  });
+
+  it("still separates a fading label from a static one it lands on", () => {
+    // A static label is visible the whole time, so any fade-in collides with it.
+    const spec = base([
+      { id: "a", type: "text", text: "INTRO", x: 480, y: 162, fontSize: 22, align: "center" },
+      { id: "b", type: "text", text: "CONCEPT", x: 480, y: 162, fontSize: 22, align: "center", tracks: [fade(4, 7)] },
+    ]);
+    const out = fitAuthoredText(spec).spec;
+    expect(overlaps(boxOf(out, "a"), boxOf(out, "b"))).toBe(false);
+  });
+
+  it("reads a fade on an ancestor group, not just on the label", () => {
+    const spec = base([
+      {
+        id: "g1",
+        type: "group",
+        x: 0,
+        y: 0,
+        tracks: [fade(1, 4)],
+        children: [{ id: "a", type: "text", text: "INTRO", x: 480, y: 162, fontSize: 22, align: "center" }],
+      },
+      {
+        id: "g2",
+        type: "group",
+        x: 0,
+        y: 0,
+        tracks: [fade(4, 7)],
+        children: [{ id: "b", type: "text", text: "CONCEPT", x: 480, y: 162, fontSize: 22, align: "center" }],
+      },
+    ]);
+    expect(fitAuthoredText(spec).repairs).toEqual([]);
+  });
+
+  it("treats a label that fades in and stays as visible from then on", () => {
+    const stays = {
+      property: "opacity",
+      keyframes: [
+        { t: 2, value: 0 },
+        { t: 2.5, value: 1 },
+      ],
+    };
+    const spec = base([
+      { id: "a", type: "text", text: "INTRO", x: 480, y: 162, fontSize: 22, align: "center", tracks: [fade(1, 4)] },
+      { id: "b", type: "text", text: "CONCEPT", x: 480, y: 162, fontSize: 22, align: "center", tracks: [stays] },
+    ]);
+    // b is visible from t=2 onward, a until t=4: they overlap on [2, 4].
+    const out = fitAuthoredText(spec).spec;
+    expect(overlaps(boxOf(out, "a"), boxOf(out, "b"))).toBe(false);
+  });
+});

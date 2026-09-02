@@ -72,6 +72,75 @@ const PAINT_PROPS = new Set(["opacity", "fill"]);
 /** A regular polygon is sampled as drawn; past this many sides it is a circle anyway. */
 const MAX_POLYGON_SIDES = 128;
 
+/** A closed time interval in seconds during which something is on screen. */
+type Interval = [start: number, end: number];
+/** When a node is visible: a list of intervals, or null meaning the whole scene. */
+type Windows = Interval[] | null;
+const FOREVER = Number.POSITIVE_INFINITY;
+
+/**
+ * When an opacity track leaves a node visible, following the sampler's rules: the first
+ * keyframe's value holds before it, the last one's after, and between two keyframes the
+ * value is interpolated — so a span is on screen if either of its ends is. Two labels
+ * sequenced this way never share the frame, and pushing them apart wrecks a layout the
+ * author built deliberately. No opacity track means always visible.
+ */
+function windowsOf(node: Record<string, unknown>): Windows {
+  const tracks = node["tracks"];
+  if (!Array.isArray(tracks)) return null;
+  const track = tracks.find((t) => isObject(t) && t["property"] === "opacity") as { keyframes?: unknown } | undefined;
+  const kfs = Array.isArray(track?.keyframes)
+    ? (track.keyframes as unknown[])
+        .filter((k): k is { t: number; value: number } => isObject(k) && typeof k["t"] === "number" && typeof k["value"] === "number")
+        .sort((a, b) => a.t - b.t)
+    : [];
+  if (kfs.length === 0) return null;
+
+  const out: Interval[] = [];
+  const first = kfs[0]!;
+  const last = kfs[kfs.length - 1]!;
+  if (first.value > 0) out.push([0, first.t]);
+  for (let i = 0; i + 1 < kfs.length; i++) {
+    const a = kfs[i]!;
+    const b = kfs[i + 1]!;
+    if (a.value > 0 || b.value > 0) out.push([a.t, b.t]);
+  }
+  if (last.value > 0) out.push([last.t, FOREVER]);
+  return merge(out);
+}
+
+/** Coalesce touching or overlapping intervals so later comparisons stay simple. */
+function merge(intervals: Interval[]): Interval[] {
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+  const out: Interval[] = [];
+  for (const iv of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && iv[0] <= prev[1]) prev[1] = Math.max(prev[1], iv[1]);
+    else out.push([iv[0], iv[1]]);
+  }
+  return out;
+}
+
+/** A node is on screen only when it AND every ancestor are. */
+function intersectWindows(a: Windows, b: Windows): Windows {
+  if (a === null) return b;
+  if (b === null) return a;
+  const out: Interval[] = [];
+  for (const x of a)
+    for (const y of b) {
+      const lo = Math.max(x[0], y[0]);
+      const hi = Math.min(x[1], y[1]);
+      if (hi > lo) out.push([lo, hi]);
+    }
+  return out;
+}
+
+/** Do two nodes ever share the frame for a positive length of time? */
+function coVisible(a: Windows, b: Windows): boolean {
+  const both = intersectWindows(a, b);
+  return both === null || both.length > 0;
+}
+
 export interface Box {
   x0: number;
   y0: number;
@@ -108,6 +177,8 @@ interface Candidate {
   effSy: number;
   /** Opacity multiplied down from the ancestors, including the node's own. */
   alpha: number;
+  /** When this label is on screen, its own fade intersected with every ancestor's. */
+  visible: Windows;
   box: Box;
 }
 
@@ -133,6 +204,8 @@ interface Inherited {
   blocked: boolean;
   /** An ancestor animates its paint, so what it shows is not static. */
   fading: boolean;
+  /** When the ancestors leave their subtree on screen. */
+  visible: Windows;
 }
 
 /** What the walk collects. */
@@ -367,9 +440,10 @@ function collect(nodes: unknown, inh: Inherited, into: Collected): void {
     const effSx = inh.sx * ownSx;
     const effSy = inh.sy * ownSy;
     const alpha = inh.alpha * clamp01(num(node["opacity"], 1));
+    const visible = intersectWindows(inh.visible, windowsOf(node));
 
     if (node["type"] === "group") {
-      collect(node["children"], { dx: originX, dy: originY, sx: effSx, sy: effSy, alpha, blocked: stop, fading }, into);
+      collect(node["children"], { dx: originX, dy: originY, sx: effSx, sy: effSy, alpha, blocked: stop, fading, visible }, into);
       continue;
     }
     if (stop) continue;
@@ -379,7 +453,7 @@ function collect(nodes: unknown, inh: Inherited, into: Collected): void {
 
     if (node["type"] === "text") {
       const box = measureBox(node, originX, originY, effSx, effSy);
-      if (box) into.text.push({ node, originX, originY, parentSx: inh.sx, parentSy: inh.sy, effSx, effSy, alpha, box });
+      if (box) into.text.push({ node, originX, originY, parentSx: inh.sx, parentSy: inh.sy, effSx, effSy, alpha, visible, box });
       continue;
     }
     const shape = occluderOf(node, inh, originX, originY, effSx, effSy, into.background);
@@ -581,6 +655,9 @@ function separate(candidates: Candidate[], occluders: Occluder[], frame: Frame, 
       const a = candidates[i]!;
       const b = candidates[j]!;
       if (!collides(a.box, b.box)) continue;
+      // Same spot, different moments: a lesson that stacks its segment headings and
+      // sequences them by opacity is not a collision, and pushing them apart wrecks it.
+      if (!coVisible(a.visible, b.visible)) continue;
 
       const aCx = (a.box.x0 + a.box.x1) / 2;
       const bCx = (b.box.x0 + b.box.x1) / 2;
@@ -712,7 +789,7 @@ function backgroundOf(spec: Record<string, unknown>): string {
   return "#ffffff";
 }
 
-const ROOT: Inherited = { dx: 0, dy: 0, sx: 1, sy: 1, alpha: 1, blocked: false, fading: false };
+const ROOT: Inherited = { dx: 0, dy: 0, sx: 1, sy: 1, alpha: 1, blocked: false, fading: false, visible: null };
 
 export function fitAuthoredText(spec: unknown): TextFitResult {
   if (!isObject(spec)) return { spec, repairs: [] };
