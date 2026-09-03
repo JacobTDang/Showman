@@ -9,10 +9,11 @@
  * dot rides down the curve at the same instant; the counters read |T| and ∠T live. At
  * ω0 = 1/RC the lesson stops to name what it just showed: −3 dB, −45°, the corner.
  */
-import type { Node, SceneSpec, Track } from "../../spec/types.js";
+import type { Node, SceneSpec } from "../../spec/types.js";
 import { getTheme } from "../../theme/themes.js";
 import { LABEL_FONT, LAYOUT, bodePane, eeLesson, equationPane, logSweep, rcLowpass, scopePane, type Beat } from "./kit.js";
 import { rcSchematic } from "./schematics.js";
+import { fade, fmtC, fmtOmega, fmtR, valueTrack, withTracks } from "./util.js";
 
 export interface TheoremOneOptions {
   /** Resistance, ohms. Default 1 kΩ. */
@@ -29,46 +30,6 @@ const T_THEOREM = 8;
 const T_SWEEP = 12;
 const SWEEP_DUR = 10;
 const T_CORNER = T_SWEEP + SWEEP_DUR + 1;
-
-/** Sample a function into a `value` track, so a counter can read a swept quantity live. */
-function valueTrack(fn: (t: number) => number, start: number, duration: number, steps = 40): Track {
-  const keyframes = [];
-  for (let i = 0; i <= steps; i++) {
-    const u = (i / steps) * duration;
-    keyframes.push({ t: Number((start + u).toFixed(3)), value: Number(fn(u).toFixed(3)) });
-  }
-  return { property: "value", keyframes };
-}
-
-function fade(at: number, dur = 0.5): Track[] {
-  return [
-    {
-      property: "opacity",
-      keyframes: [
-        { t: at, value: 0 },
-        { t: at + dur, value: 1 },
-      ],
-    },
-  ];
-}
-
-function withTracks(node: Node, tracks: Track[]): Node {
-  return { ...node, tracks: [...((node as { tracks?: Track[] }).tracks ?? []), ...tracks] };
-}
-
-function fmtR(R: number): string {
-  return R >= 1e6 ? `${R / 1e6} MΩ` : R >= 1e3 ? `${R / 1e3} kΩ` : `${R} Ω`;
-}
-function fmtC(C: number): string {
-  return C >= 1e-6
-    ? `${(C * 1e6).toFixed(C * 1e6 < 10 ? 1 : 0)} µF`
-    : C >= 1e-9
-      ? `${(C * 1e9).toFixed(0)} nF`
-      : `${(C * 1e12).toFixed(0)} pF`;
-}
-function fmtOmega(w: number): string {
-  return w >= 1e6 ? `${(w / 1e6).toFixed(2)} Mrad/s` : w >= 1e3 ? `${(w / 1e3).toFixed(1)} krad/s` : `${w.toFixed(0)} rad/s`;
-}
 
 export function buildTheoremOne(o: TheoremOneOptions = {}): SceneSpec {
   const R = o.R ?? 1000;

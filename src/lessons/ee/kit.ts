@@ -170,18 +170,20 @@ export function makePlane(spec: PlaneSpec): Plane {
       strokeWidth: 1,
       opacity: 0.5,
     });
-    children.push({
-      id: `${id}-lx-${gx}`,
-      type: "text",
-      x: lx,
-      y: height + 14,
-      text: spec.xTickLabel ? spec.xTickLabel(gx) : String(gx),
-      fontFamily: LABEL_FONT,
-      fontSize: 12,
-      fill: ink,
-      align: "center",
-      baseline: "middle",
-    });
+    const lxText = spec.xTickLabel ? spec.xTickLabel(gx) : String(gx);
+    if (lxText !== "")
+      children.push({
+        id: `${id}-lx-${gx}`,
+        type: "text",
+        x: lx,
+        y: height + 14,
+        text: lxText,
+        fontFamily: LABEL_FONT,
+        fontSize: 12,
+        fill: ink,
+        align: "center",
+        baseline: "middle",
+      });
   }
   for (const gy of spec.yTicks) {
     if (gy < yMin || gy > yMax) continue;
@@ -199,18 +201,20 @@ export function makePlane(spec: PlaneSpec): Plane {
       strokeWidth: 1,
       opacity: 0.5,
     });
-    children.push({
-      id: `${id}-ly-${gy}`,
-      type: "text",
-      x: -8,
-      y: ly,
-      text: spec.yTickLabel ? spec.yTickLabel(gy) : String(gy),
-      fontFamily: LABEL_FONT,
-      fontSize: 12,
-      fill: ink,
-      align: "right",
-      baseline: "middle",
-    });
+    const lyText = spec.yTickLabel ? spec.yTickLabel(gy) : String(gy);
+    if (lyText !== "")
+      children.push({
+        id: `${id}-ly-${gy}`,
+        type: "text",
+        x: -8,
+        y: ly,
+        text: lyText,
+        fontFamily: LABEL_FONT,
+        fontSize: 12,
+        fill: ink,
+        align: "right",
+        baseline: "middle",
+      });
   }
   children.push({ id: `${id}-frame`, type: "rect", x: 0, y: 0, width, height, fill: "none", stroke: ink, strokeWidth: 1.5 });
   if (spec.xLabel) {
