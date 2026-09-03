@@ -3,7 +3,17 @@
  * wires only to the terminals they report, so connectivity holds by construction — the
  * same discipline as the catalog's physics builders.
  */
-import { acSource, capacitor, resistor, wire, type CircuitSymbol, type Point, type SymbolOptions } from "../../physics/circuit.js";
+import {
+  acSource,
+  battery,
+  capacitor,
+  inductor,
+  resistor,
+  wire,
+  type CircuitSymbol,
+  type Point,
+  type SymbolOptions,
+} from "../../physics/circuit.js";
 import { getTheme } from "../../theme/themes.js";
 import { LABEL_FONT } from "./kit.js";
 import type { GroupNode, Node } from "../../spec/types.js";
@@ -112,4 +122,126 @@ export function rcSchematic(o: RcSchematicOptions): RcSchematic {
   children.push(caption(`${o.id}-vout`, outA.x, outA.y - 16, "v_out", "center", theme.palette.accent, font));
 
   return { node: { id: o.id, type: "group", x: o.x, y: o.y, children }, bbox: { w: 320, h: 210 } };
+}
+
+/* ---------------------------------------------------------- Tier 0 loops */
+
+export interface SingleLoopOptions {
+  id: string;
+  x: number;
+  y: number;
+  element: "capacitor" | "inductor" | "resistor";
+  label?: string;
+  current?: boolean;
+  theme?: string;
+}
+
+/** One source, one element, one loop: the simplest circuit that shows an i–v relationship. */
+export function singleElementLoop(o: SingleLoopOptions): RcSchematic {
+  const theme = getTheme(o.theme);
+  const ink = theme.palette.text;
+  const cur = o.current === true;
+  const w = (id: string, points: Point[]) => wire({ id, points, current: cur, color: cur ? theme.palette.accent : ink });
+  const make = o.element === "capacitor" ? capacitor : o.element === "inductor" ? inductor : resistor;
+  const RIGHT_X = 200;
+  const children: Node[] = [];
+  const src = vertical(acSource, { id: `${o.id}-src`, x: 0, y: TOP_Y + LEAD, color: ink });
+  const el = vertical(make, { id: `${o.id}-el`, x: RIGHT_X, y: TOP_Y + LEAD, color: ink });
+  children.push(src.node, el.node);
+  children.push(w(`${o.id}-w-src-top`, [{ x: 0, y: TOP_Y }, src.a]), w(`${o.id}-w-src-bot`, [src.b, { x: 0, y: BOT_Y }]));
+  children.push(
+    w(`${o.id}-w-top`, [
+      { x: 0, y: TOP_Y },
+      { x: RIGHT_X, y: TOP_Y },
+    ]),
+    w(`${o.id}-w-el-top`, [{ x: RIGHT_X, y: TOP_Y }, el.a]),
+  );
+  children.push(
+    w(`${o.id}-w-el-bot`, [el.b, { x: RIGHT_X, y: BOT_Y }]),
+    w(`${o.id}-w-bot`, [
+      { x: RIGHT_X, y: BOT_Y },
+      { x: 0, y: BOT_Y },
+    ]),
+  );
+  children.push(caption(`${o.id}-vin`, src.a.x - 26, (src.a.y + src.b.y) / 2, "v", "right", ink, LABEL_FONT));
+  if (o.label) children.push(caption(`${o.id}-el-lbl`, RIGHT_X + 22, (el.a.y + el.b.y) / 2, o.label, "left", ink, LABEL_FONT));
+  // The current arrow: which way i is taken positive, so "i leads v" has a meaning.
+  children.push(caption(`${o.id}-i`, RIGHT_X / 2, TOP_Y - 16, "i →", "center", theme.palette.accent, LABEL_FONT));
+  return { node: { id: o.id, type: "group", x: o.x, y: o.y, children }, bbox: { w: 240, h: 210 } };
+}
+
+export interface SeriesParallelOptions {
+  id: string;
+  x: number;
+  y: number;
+  r1Label: string;
+  r2Label: string;
+  r3Label: string;
+  /** Lesson time the third resistor's branch appears. Omit to show it from the start. */
+  branchAt?: number;
+  current?: boolean;
+  theme?: string;
+}
+
+/**
+ * A battery, R1 in series, then R2 and R3 in parallel across the output. Drawn so KVL
+ * around the left loop and KCL at the junction are both visible: the current arrives at
+ * one node and leaves down two branches.
+ */
+export function seriesParallelLoop(o: SeriesParallelOptions): RcSchematic & { junction: Point } {
+  const theme = getTheme(o.theme);
+  const ink = theme.palette.text;
+  const cur = o.current === true;
+  const w = (id: string, points: Point[]) => wire({ id, points, current: cur, color: cur ? theme.palette.accent : ink });
+  const J = { x: JUNCTION_X, y: TOP_Y };
+  const R3_X = 300;
+  const children: Node[] = [];
+  const bat = vertical(battery, { id: `${o.id}-bat`, x: 0, y: TOP_Y + LEAD, color: ink });
+  children.push(bat.node, w(`${o.id}-w-bat-top`, [{ x: 0, y: TOP_Y }, bat.a]), w(`${o.id}-w-bat-bot`, [bat.b, { x: 0, y: BOT_Y }]));
+  const r1 = resistor({ id: `${o.id}-r1`, x: SERIES_X, y: TOP_Y, size: EL, color: ink, label: o.r1Label });
+  children.push(r1.node, w(`${o.id}-w-top-1`, [{ x: 0, y: TOP_Y }, r1.a]), w(`${o.id}-w-top-2`, [r1.b, J]));
+  const r2 = vertical(resistor, { id: `${o.id}-r2`, x: JUNCTION_X, y: TOP_Y + LEAD, color: ink });
+  children.push(r2.node, w(`${o.id}-w-r2-top`, [J, r2.a]), w(`${o.id}-w-r2-bot`, [r2.b, { x: JUNCTION_X, y: BOT_Y }]));
+  children.push(caption(`${o.id}-r2-lbl`, JUNCTION_X - 22, (r2.a.y + r2.b.y) / 2, o.r2Label, "right", ink, LABEL_FONT));
+  children.push(
+    w(`${o.id}-w-bot-1`, [
+      { x: 0, y: BOT_Y },
+      { x: JUNCTION_X, y: BOT_Y },
+    ]),
+  );
+  children.push(dot(`${o.id}-j`, J, theme.palette.accent));
+
+  const r3 = vertical(resistor, { id: `${o.id}-r3`, x: R3_X, y: TOP_Y + LEAD, color: ink });
+  const branch: Node = {
+    id: `${o.id}-branch`,
+    type: "group",
+    x: 0,
+    y: 0,
+    ...(o.branchAt !== undefined
+      ? {
+          tracks: [
+            {
+              property: "opacity",
+              keyframes: [
+                { t: o.branchAt, value: 0 },
+                { t: o.branchAt + 0.5, value: 1 },
+              ],
+            },
+          ],
+        }
+      : {}),
+    children: [
+      w(`${o.id}-w-top-3`, [J, { x: R3_X, y: TOP_Y }]),
+      w(`${o.id}-w-r3-top`, [{ x: R3_X, y: TOP_Y }, r3.a]),
+      r3.node,
+      w(`${o.id}-w-r3-bot`, [r3.b, { x: R3_X, y: BOT_Y }]),
+      w(`${o.id}-w-bot-2`, [
+        { x: JUNCTION_X, y: BOT_Y },
+        { x: R3_X, y: BOT_Y },
+      ]),
+      caption(`${o.id}-r3-lbl`, R3_X + 22, (r3.a.y + r3.b.y) / 2, o.r3Label, "left", ink, LABEL_FONT),
+    ],
+  };
+  children.push(branch);
+  return { node: { id: o.id, type: "group", x: o.x, y: o.y, children }, bbox: { w: 360, h: 210 }, junction: J };
 }
