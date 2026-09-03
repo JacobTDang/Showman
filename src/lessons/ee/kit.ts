@@ -18,6 +18,13 @@ import { getTheme, type Theme } from "../../theme/themes.js";
 import { movingMarker, plotFunction, type Plane } from "../../math/builders.js";
 import { texToNodes } from "../../math/tex.js";
 
+/**
+ * Plain-text labels carry ω, θ and subscripts. The theme body font (Nunito) has none of them
+ * and draws tofu; Inter has all of them, and is what the circuit symbols already use. No
+ * pinned font has ∠, so plain text writes "arg T" and leaves ∠ to KaTeX.
+ */
+export const LABEL_FONT = "Inter";
+
 /* ------------------------------------------------------------------ layout */
 
 /** The fixed 1280×720 layout every lesson uses, so a reader learns to read it once. */
@@ -169,7 +176,7 @@ export function makePlane(spec: PlaneSpec): Plane {
       x: lx,
       y: height + 14,
       text: spec.xTickLabel ? spec.xTickLabel(gx) : String(gx),
-      fontFamily: theme.bodyFont,
+      fontFamily: LABEL_FONT,
       fontSize: 12,
       fill: ink,
       align: "center",
@@ -198,7 +205,7 @@ export function makePlane(spec: PlaneSpec): Plane {
       x: -8,
       y: ly,
       text: spec.yTickLabel ? spec.yTickLabel(gy) : String(gy),
-      fontFamily: theme.bodyFont,
+      fontFamily: LABEL_FONT,
       fontSize: 12,
       fill: ink,
       align: "right",
@@ -213,7 +220,7 @@ export function makePlane(spec: PlaneSpec): Plane {
       x: width / 2,
       y: height + 32,
       text: spec.xLabel,
-      fontFamily: theme.bodyFont,
+      fontFamily: LABEL_FONT,
       fontSize: 13,
       fill: ink,
       align: "center",
@@ -227,7 +234,7 @@ export function makePlane(spec: PlaneSpec): Plane {
       x: 0,
       y: -14,
       text: spec.yLabel,
-      fontFamily: theme.bodyFont,
+      fontFamily: LABEL_FONT,
       fontSize: 13,
       fill: ink,
       align: "left",
@@ -323,7 +330,7 @@ export function scopePane(opts: ScopeOptions): ScopePane {
   const yPad = A * 1.15;
   const ticks = [-A, 0, A];
   const fmt = (v: number) => `${v.toFixed(A < 1 ? 2 : 1)} V`;
-  const mkPlane = (id: string, py: number, label: string) =>
+  const mkPlane = (id: string, py: number, label: string, xLabel?: string) =>
     makePlane({
       id,
       x: 0,
@@ -338,10 +345,11 @@ export function scopePane(opts: ScopeOptions): ScopePane {
       yTicks: ticks,
       yTickLabel: fmt,
       yLabel: label,
+      ...(xLabel ? { xLabel } : {}),
       theme,
     });
   const inPlane = mkPlane(`${opts.id}-in`, 0, "v_in(t)");
-  const outPlane = mkPlane(`${opts.id}-out`, planeH + gap, "v_out(t)");
+  const outPlane = mkPlane(`${opts.id}-out`, planeH + gap, "v_out(t)", "time");
 
   const inCurve = drawOn(
     plotFunction(inPlane, (t) => A * input(t), { samples }, { id: `${opts.id}-in-trace`, stroke: theme.palette.primary, strokeWidth: 2 }),
@@ -437,7 +445,7 @@ export function bodePane(opts: BodeOptions): BodePane {
     yMin: dBMin,
     yMax: 5,
     xTicks: decades,
-    yTicks: [0, -3, -20, -40].filter((v) => v >= dBMin),
+    yTicks: [0, -20, -40].filter((v) => v >= dBMin),
     xTickLabel: decadeLabel,
     yTickLabel: (v) => `${v} dB`,
     yLabel: "|T(jω)|",
@@ -461,7 +469,7 @@ export function bodePane(opts: BodeOptions): BodePane {
     yTicks: phTicks,
     xTickLabel: decadeLabel,
     yTickLabel: (v) => `${v}°`,
-    yLabel: "∠T(jω)",
+    yLabel: "arg T(jω)",
     xLabel: "frequency (log scale)",
     theme,
   });
@@ -511,6 +519,18 @@ export function bodePane(opts: BodeOptions): BodePane {
     },
   ];
 
+  marks.push({
+    id: `${opts.id}-m3-lbl`,
+    type: "text",
+    x: magPlane.originX + opts.width - 6,
+    y: m3Y - 9,
+    text: "-3 dB",
+    fontFamily: LABEL_FONT,
+    fontSize: 12,
+    fill: theme.palette.muted,
+    align: "right",
+    baseline: "middle",
+  });
   const magDot = movingMarker(magPlane, (t) => ({ x: sweep.decadeAt(t), y: T.dB(sweep.omega(t)) }), {
     id: `${opts.id}-mag-dot`,
     tMin: 0,

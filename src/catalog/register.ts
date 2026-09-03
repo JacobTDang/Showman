@@ -31,6 +31,7 @@ import { circuitTool } from "./physics/circuit.tool.js";
 import { voltageDividerTool } from "./physics/voltageDivider.tool.js";
 import { opAmpStageTool } from "./physics/opAmpStage.tool.js";
 import { rcChargingTool } from "./physics/rcCharging.tool.js";
+import { eeLessonTools } from "./ee/lessons.tool.js";
 import { motionGraphTool } from "./physics/motionGraph.tool.js";
 import { vectorFieldTool } from "./physics/vectorField.tool.js";
 import { moleculeTool } from "./chem/molecule.tool.js";
@@ -83,6 +84,7 @@ const PHYSICS_NODE_TOOLS: BuilderTool[] = [
   voltageDividerTool,
   opAmpStageTool,
   rcChargingTool,
+  ...eeLessonTools,
   motionGraphTool,
   vectorFieldTool,
 ];
