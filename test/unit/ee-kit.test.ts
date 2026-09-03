@@ -133,3 +133,115 @@ describe("eeLesson", () => {
     expect(a.duration).toBeGreaterThanOrEqual(5);
   });
 });
+
+describe("scopePaneRaw", () => {
+  it("draws any traces on stacked planes sharing one time axis", async () => {
+    const { scopePaneRaw } = await import("../../src/lessons/ee/kit.js");
+    const pane = scopePaneRaw({
+      id: "r",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 200,
+      tMax: 4,
+      planes: [
+        {
+          label: "v",
+          yMin: -1,
+          yMax: 1,
+          yTicks: [-1, 0, 1],
+          traces: [{ id: "sin", fn: (t) => Math.sin(t), start: 1, duration: 2, marker: true }],
+        },
+        { label: "i", yMin: -1, yMax: 1, yTicks: [-1, 0, 1], traces: [{ id: "cos", fn: (t) => Math.cos(t) }] },
+      ],
+    });
+    expect(pane.planes).toHaveLength(2);
+    const ids = JSON.stringify(pane.node).match(/"id":"r-[a-z-]+"/g)!;
+    expect(ids.some((s) => s.includes("r-sin-dot"))).toBe(true);
+    expect(ids.some((s) => s.includes("r-cos"))).toBe(true);
+  });
+});
+
+describe("bodePaneMulti", () => {
+  it("overlays a lowpass and a highpass that meet at -3 dB at the corner", async () => {
+    const { bodePaneMulti, rcHighpass } = await import("../../src/lessons/ee/kit.js");
+    const lp = rcLowpass(1000, 100e-9);
+    const hp = rcHighpass(1000, 100e-9);
+    const sweep = logSweep({ omega0: lp.omega0, fromDecade: -1, toDecade: 1, duration: 6 });
+    const pane = bodePaneMulti({
+      id: "m",
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 260,
+      transfers: [
+        { transfer: lp, label: "lowpass" },
+        { transfer: hp, label: "highpass" },
+      ],
+      sweep,
+      start: 0,
+      duration: 6,
+    });
+    expect(pane.dotAt(0, 3).dB).toBeCloseTo(-3.0103, 3);
+    expect(pane.dotAt(1, 3).dB).toBeCloseTo(-3.0103, 3);
+    expect(pane.dotAt(0, 3).phaseDeg).toBeCloseTo(-45, 6);
+    expect(pane.dotAt(1, 3).phaseDeg).toBeCloseTo(45, 6);
+  });
+});
+
+describe("transferCurvePane", () => {
+  it("tracks the operating point through a clipping characteristic", async () => {
+    const { transferCurvePane } = await import("../../src/lessons/ee/kit.js");
+    const clip = (v: number) => Math.max(-1, Math.min(1, 3 * v));
+    const pane = transferCurvePane({
+      id: "tc",
+      x: 0,
+      y: 0,
+      width: 240,
+      height: 240,
+      fn: clip,
+      vMax: 1.2,
+      drive: (t) => Math.sin(t),
+      tMax: Math.PI,
+      start: 2,
+      duration: 3,
+    });
+    expect(pane.at(2).vout).toBeCloseTo(0, 9);
+    expect(pane.at(2 + Math.PI / 2).vout).toBe(1); // clipped at the rail
+    expect(pane.at(2 + Math.PI / 2).vin).toBeCloseTo(1, 9);
+  });
+});
+
+describe("sPlanePane", () => {
+  it("draws a pole as a cross and slides it left when asked", async () => {
+    const { sPlanePane } = await import("../../src/lessons/ee/kit.js");
+    const pane = sPlanePane({
+      id: "sp",
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      sigmaMin: -10,
+      poles: [{ id: "p1", sigma: -2, omega: 0, label: "-1/τ", moveTo: { sigma: -6, at: 3, dur: 1.5 } }],
+    });
+    const pole: any = (pane.node.children as any[]).find((n) => n.id === "sp-p1");
+    expect(pole).toBeDefined();
+    const track = pole.tracks.find((t: any) => t.property === "x");
+    expect(track.keyframes[0].t).toBe(3);
+    expect(track.keyframes[1].t).toBe(4.5);
+    // Further left on the plane is a smaller x.
+    expect(track.keyframes[1].value).toBeLessThan(track.keyframes[0].value);
+    expect(pane.poleX(-6)).toBeLessThan(pane.poleX(-2));
+  });
+});
+
+describe("phasorPane", () => {
+  it("rotates counter-clockwise by ω·t, which is a negative canvas rotation", async () => {
+    const { phasorPane } = await import("../../src/lessons/ee/kit.js");
+    const pane = phasorPane({ id: "ph", cx: 100, cy: 100, radius: 60, omega: Math.PI, start: 1, duration: 2 });
+    const arrow: any = (pane.node.children as any[]).find((n) => n.id === "ph-arrow");
+    const rot = arrow.tracks.find((t: any) => t.property === "rotation");
+    expect(rot.keyframes[1].value).toBeCloseTo(-360, 6);
+    expect(pane.angleAt(2)).toBeCloseTo(Math.PI, 9);
+  });
+});
