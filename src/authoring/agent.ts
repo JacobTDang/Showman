@@ -22,6 +22,7 @@ import { routeSchematicToBuilder, selectSchematicBuilder } from "./schematicRout
 import { fitAuthoredText } from "./textFit.js";
 import { checkConductorConnectivity, strandedFeedback, type ConnectivityCheck } from "./connectivity.js";
 import { auditScene, type A11yReport } from "../a11y/audit.js";
+import { selectEeLesson } from "./lessonRouting.js";
 import { defaultRegistry } from "../catalog/index.js";
 
 // Re-exported for back-compat: callers and tests import `extractJson` from here.
@@ -72,6 +73,11 @@ export interface AuthoringAttempt {
    * does not make. Attached only to the attempt that publishes.
    */
   a11y?: A11yReport;
+  /**
+   * Set when the brief named a curated catalog lesson, which was used verbatim. No model
+   * was called: the lesson is the answer, and it is already tested.
+   */
+  lesson?: string;
   failure?: "truncated_response" | "malformed_response" | "author_error" | "builder_error";
   message?: string;
 }
@@ -109,6 +115,31 @@ export class AuthoringAgent {
     input: string | PedagogyRequest,
   ): Promise<{ ok: boolean; spec?: SceneSpec; attempts: number; history: AuthoringAttempt[]; error?: string }> {
     const request: PedagogyRequest = typeof input === "string" ? { brief: input } : input;
+
+    // A brief that names one of the curated EE lessons gets that lesson, verbatim, before
+    // the model is asked anything. It is a complete, tested, narrated scene built around
+    // the views the course teaches; a freehand attempt at the same topic is strictly worse.
+    const lesson = selectEeLesson(request);
+    if (lesson) {
+      const spec = defaultRegistry().invokeScene(lesson.name, {});
+      const validation = await this.client.validate(spec);
+      if (!validation.valid) {
+        // A curated lesson that fails validation is a bug in the lesson, not in the brief.
+        throw new Error(`lesson ${lesson.name} produced an invalid scene: ${validation.errors.map((e) => e.message).join("; ")}`);
+      }
+      const history: AuthoringAttempt[] = [
+        {
+          attempt: 1,
+          valid: true,
+          errorCount: 0,
+          lesson: lesson.name,
+          connectivity: checkConductorConnectivity(spec),
+          a11y: auditScene(spec),
+        },
+      ];
+      return { ok: true, spec, attempts: 1, history };
+    }
+
     const brief = authorBrief(request);
     const maxAttempts = Math.max(1, this.options.maxAttempts ?? 3);
     const schema = await this.client.getSchema();
