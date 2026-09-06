@@ -36,8 +36,11 @@ answered a brief in `provenance.validation.lesson`.
 | 2 | `ee.invertingAmp` | gain −R_f/R_in read live; R_f doubles and the transfer line tips while the output grows, both on one voltage scale |
 | 2 | `ee.nonInvertingSumming` | gain 1 + R_f/R_g in phase; then two inputs on their own planes and their weighted sum on a third |
 | 2 | `ee.integrator` | the brief that started this: square in, triangle out, slope −V_in/(RC) read live; then the swap to the differentiator |
+| 5 | `ee.diodeIV` | the i–v curve swept live on a log current axis, nanoamps to milliamps, with the 0.7 V model drawn over the exponential |
+| 5 | `ee.halfWaveRectifier` | the brief that opened #121, done right: the loop lit only while forward biased, the missing half visible, the dot on the i–v curve |
+| 5 | `ee.fullWaveAndSmoothing` | the bridge delivering both halves at twice the line frequency; then C across the load, ripple read live against I_L/(fC) |
 
-Tiers 3 to 5 (real op-amps, comparators and waveform generation, diodes)
+Tiers 3 and 4 (real op-amps; comparators and waveform generation)
 are specified in `superpowers/specs/2026-09-05-ee230-tiers-2-5-design.md` and appear here
 as they land.
 
@@ -101,3 +104,39 @@ Honest limits of what exists. Each tier's build appends its own.
   guaranteed only by wiring to reported terminals.
 - **No test asserts that labels do not overlap parts.** Every layout defect in this tier was
   found by rendering and looking; a future edit could reintroduce one silently.
+
+**Tier 5 — diodes and rectifiers**
+
+- **Diode model: I_S = 0.30 nA, n = 1.8, V_T = 25.9 mV.** n = 1.8 is a large-junction power
+  rectifier like the lab's 1N4006; I_S was then solved so the knee sits at ~1 mA at 0.7 V. The
+  constants are shown on screen.
+- **The ripple formula disagrees with the drawn ripple by about 22 %** (1.18 V measured vs
+  1.52 V from I_L/(fC) at 47 µF). That is correct physics — the textbook formula assumes
+  discharge over the whole half-cycle when it lasts ~7.0 ms of 8.33 — and the lesson shows
+  both numbers and says why. The test tolerance on that comparison is a loose 30 %; the tight
+  assertion is that the decay is exactly exponential in R_L·C.
+- **The smoothing model is ideal**: zero source resistance, zero diode resistance, instant
+  recharge. Real recharge bursts are wider and lower. The bridge's conduction angle uses
+  |v_in| > 1.4 V rather than the exponential the half-wave lesson solves exactly.
+- **Time is scaled.** The physics runs at a real 60 Hz (τ, ripple frequency); the drawing is
+  slowed, the axis says "N cycles of a 60 Hz input" and draws no time ticks, so nothing false
+  is drawn — but a viewer who times the animation gets the wrong frequency.
+- **Ripple is about 13 px tall** on the output plane. Legible with the dashed rules and the
+  live counter, but small; a larger C would make it invisible.
+- **The capacitor branch is not lit during recharge bursts**, only the bridge legs and the
+  load. The equation v_out = |v_in| − 1.4 stays on screen through the smoothing beat, where
+  it no longer describes the output.
+- **`ee.diodeIV` sweeps v_D directly, as a curve tracer does**; the series R is drawn as the
+  current limiter it is but the sweep is not computed through it.
+- **Routing: bare "rectifier" is unclaimed.** "ripple on a rectifier with a filter capacitor"
+  would match two lessons and select nothing, so a vague "animate a rectifier" brief authors
+  freehand. "the diode during the positive half-cycle" routes to `ee.diodeIV`, not the
+  half-wave lesson, and claiming half-cycle phrases for both would cancel both.
+- **A lesson phrase can silently break another test's fixture.** Tier 5's phrases made the
+  brief in `test/unit/textFit.test.ts` route to a lesson before the author ran, so that
+  fixture never reached the pass it tested. Its brief was changed. Any new phrase that
+  matches an existing test fixture's brief will do the same.
+- **`\begin{cases}` and `\dfrac` render as empty groups** in this KaTeX path: an equation
+  laid out, timed, narrated and invisible. Found by rendering; use `\frac` and stacked lines.
+- **Pane nodes must be built inside their pane's group.** A `movingMarker` or rule created
+  outside lands at the scene's top-left corner. Found by rendering.
