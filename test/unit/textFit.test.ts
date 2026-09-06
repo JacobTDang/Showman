@@ -527,7 +527,10 @@ describe("authoring loop reports text fixes", () => {
   it("fits authored text and records the repair", async () => {
     const spec = base([{ id: "n", type: "text", text: NARRATION, x: 300, y: 600, fontSize: 28, align: "center" }]);
     const agent = new AuthoringAgent(stubClient(), new ScriptedAuthor([spec]));
-    const result = await agent.authorSpec("the diode during the positive half-cycle");
+    // The brief must not name a curated EE lesson -- those are routed before the author
+    // runs, so the scripted spec, and the text-fit pass this test is about, never happen --
+    // while still using words the narration above carries, for the semantic gate.
+    const result = await agent.authorSpec("current flow during the positive half-cycle");
 
     expect(result.ok).toBe(true);
     expect(result.history.at(-1)?.repaired?.join(" ")).toMatch(/wrapped|moved/);
