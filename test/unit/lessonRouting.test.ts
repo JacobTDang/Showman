@@ -57,6 +57,25 @@ describe("selectEeLesson", () => {
     expect(selectEeLesson({ brief: "Help me", objectives: ["understand the step response"] })?.name).toBe("ee.polesStepResponse");
   });
 
+  it("never lets two lessons claim the same phrase, which would cancel both", async () => {
+    const tiers = await Promise.all([
+      import("../../src/lessons/ee/phrases.tier2.js").then((m) => m.TIER2_PHRASES),
+      import("../../src/lessons/ee/phrases.tier3.js").then((m) => m.TIER3_PHRASES),
+      import("../../src/lessons/ee/phrases.tier4.js").then((m) => m.TIER4_PHRASES),
+      import("../../src/lessons/ee/phrases.tier5.js").then((m) => m.TIER5_PHRASES),
+    ]);
+    const owner = new Map<string, string>();
+    const clashes: string[] = [];
+    for (const table of tiers)
+      for (const { name, phrases } of table)
+        for (const phrase of phrases) {
+          const prev = owner.get(phrase);
+          if (prev && prev !== name) clashes.push(`"${phrase}": ${prev} and ${name}`);
+          owner.set(phrase, name);
+        }
+    expect(clashes, clashes.join("; ")).toEqual([]);
+  });
+
   it("only ever selects lessons that exist in the catalog", () => {
     const reg = createDefaultRegistry();
     for (const name of ROUTABLE_LESSONS) expect(reg.get(name)?.level, name).toBe("scene");
