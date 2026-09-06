@@ -1503,3 +1503,160 @@ export function xyCurvePane(opts: XyPaneOptions): { node: GroupNode; plane: Plan
 
   return { node: { id: opts.id, type: "group", x: opts.x, y: opts.y, children }, plane };
 }
+
+/* -------------------------------------------------- device characteristic */
+
+/** One curve on a characteristic pane: a function of x, or an explicit run of data points. */
+export interface CharacteristicCurve {
+  id: string;
+  /** i(v), sampled across the x range. */
+  fn?: (x: number) => number;
+  /** An explicit polyline in data space — the only way to draw a vertical segment. */
+  points?: Array<{ x: number; y: number }>;
+  color?: string;
+  dash?: number[];
+  strokeWidth?: number;
+  samples?: number;
+  /** Lesson time the curve fades in. Omit to show it from the start. */
+  at?: number;
+}
+
+export interface CharacteristicPaneOptions {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+  xTicks: number[];
+  yTicks: number[];
+  xTickLabel?: (v: number) => string;
+  yTickLabel?: (v: number) => string;
+  xLabel?: string;
+  yLabel?: string;
+  curves: CharacteristicCurve[];
+  /**
+   * Operating-point dots, each on its own window of the lesson clock. They belong to the
+   * pane rather than to the lesson because the plane's origin is local to the pane's
+   * group: a marker built outside it and added to the scene lands in the top-left corner.
+   */
+  dots?: CharacteristicDot[];
+  theme?: string;
+}
+
+export interface CharacteristicDot {
+  id: string;
+  traj: (t: number) => { x: number; y: number };
+  tMax: number;
+  start: number;
+  duration: number;
+  color?: string;
+  radius?: number;
+  /** Lesson time the dot fades in. Omit to show it from the start of the scene. */
+  at?: number;
+}
+
+/**
+ * A device characteristic on independent axes: current against voltage, or an output
+ * voltage against an input voltage that is not centred on zero.
+ *
+ * `transferCurvePane` draws V_out against V_in on one shared symmetric scale, which is
+ * right for an amplifier and wrong for a diode: volts on one axis, milliamps on the
+ * other, and the interesting part of the voltage axis is nowhere near the middle. This
+ * pane takes both ranges, any number of curves — so the exponential and the
+ * constant-voltage-drop model that approximates it can be drawn over one another — an
+ * operating-point dot on the same clock as the scope, and its plane, so a lesson can add
+ * a second dot for a second operating point.
+ */
+export function characteristicPane(opts: CharacteristicPaneOptions): { node: GroupNode; plane: Plane } {
+  const theme = getTheme(opts.theme);
+  const plane = makePlane({
+    id: `${opts.id}-plane`,
+    x: 0,
+    y: 0,
+    width: opts.width,
+    height: opts.height,
+    xMin: opts.xMin,
+    xMax: opts.xMax,
+    yMin: opts.yMin,
+    yMax: opts.yMax,
+    xTicks: opts.xTicks,
+    yTicks: opts.yTicks,
+    ...(opts.xTickLabel ? { xTickLabel: opts.xTickLabel } : {}),
+    ...(opts.yTickLabel ? { yTickLabel: opts.yTickLabel } : {}),
+    ...(opts.xLabel ? { xLabel: opts.xLabel } : {}),
+    ...(opts.yLabel ? { yLabel: opts.yLabel } : {}),
+    theme,
+  });
+  const children: Node[] = [plane.node];
+  const clampX = (v: number) => Math.max(opts.xMin, Math.min(opts.xMax, v));
+  const clampY = (v: number) => Math.max(opts.yMin, Math.min(opts.yMax, v));
+
+  for (const c of opts.curves) {
+    const color = c.color ?? theme.palette.primary;
+    let node: Node;
+    if (c.points) {
+      node = {
+        id: `${opts.id}-${c.id}`,
+        type: "polyline",
+        x: plane.originX,
+        y: plane.originY,
+        points: c.points.map((p) => plane.toLocal(clampX(p.x), clampY(p.y))),
+        stroke: color,
+        strokeWidth: c.strokeWidth ?? 2.5,
+        ...(c.dash ? { dash: c.dash } : {}),
+      };
+    } else {
+      const fn = c.fn ?? (() => 0);
+      node = plotFunction(
+        plane,
+        (v) => clampY(fn(v)),
+        { samples: c.samples ?? 400 },
+        { id: `${opts.id}-${c.id}`, stroke: color, strokeWidth: c.strokeWidth ?? 2.5 },
+      );
+      if (c.dash) (node as Node & { dash?: number[] }).dash = c.dash;
+    }
+    if (c.at !== undefined) {
+      (node as Node & { tracks?: Track[] }).tracks = [
+        {
+          property: "opacity",
+          keyframes: [
+            { t: c.at, value: 0 },
+            { t: c.at + 0.5, value: 1 },
+          ],
+        },
+      ];
+    }
+    children.push(node);
+  }
+
+  for (const d of opts.dots ?? []) {
+    const marker = movingMarker(plane, d.traj, {
+      id: d.id,
+      tMin: 0,
+      tMax: d.tMax,
+      start: d.start,
+      duration: d.duration,
+      samples: 360,
+      radius: d.radius ?? 6,
+      fill: d.color ?? theme.palette.accent,
+    }) as Node & { tracks?: Track[] };
+    if (d.at !== undefined) {
+      marker.tracks = [
+        ...(marker.tracks ?? []),
+        {
+          property: "opacity",
+          keyframes: [
+            { t: d.at, value: 0 },
+            { t: d.at + 0.4, value: 1 },
+          ],
+        },
+      ];
+    }
+    children.push(marker);
+  }
+  return { node: { id: opts.id, type: "group", x: opts.x, y: opts.y, children }, plane };
+}
