@@ -3,6 +3,7 @@ import {
   selectSchematicBuilder,
   routeSchematicToBuilder,
   SCHEMATIC_PHRASES,
+  ROUTABLE_BUILDERS,
   type SchematicSelection,
 } from "../../src/authoring/schematicRouting.js";
 import { expandBuilderPlacements } from "../../src/authoring/builderPlacements.js";
@@ -102,6 +103,24 @@ describe("schematic selection", () => {
       const sel = selectSchematicBuilder({ brief: `Explain the ${phrase} built from a battery, a resistor and a switch` });
       expect(sel, `phrase "${phrase}" selected nothing`).not.toBeNull();
       expect(() => registry.invokeNode(sel!.builder, sel!.params), `phrase "${phrase}"`).not.toThrow();
+    }
+  });
+
+  it("routes only to catalog builders that exist as node-level builders", () => {
+    const registry = defaultRegistry();
+    expect(ROUTABLE_BUILDERS.length).toBeGreaterThan(0);
+    for (const b of ROUTABLE_BUILDERS) {
+      const tool = registry.get(b);
+      expect(tool, `builder "${b}" not in registry`).toBeDefined();
+      expect(tool?.level, `builder "${b}" must be a node-level builder`).toBe("node");
+    }
+  });
+
+  it("has no duplicate phrases across topologies", () => {
+    const seen = new Set<string>();
+    for (const phrase of SCHEMATIC_PHRASES) {
+      expect(seen.has(phrase), `duplicate phrase "${phrase}" across topologies`).toBe(false);
+      seen.add(phrase);
     }
   });
 });

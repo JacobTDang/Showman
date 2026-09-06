@@ -133,7 +133,7 @@ export class AuthoringAgent {
           valid: true,
           errorCount: 0,
           lesson: lesson.name,
-          connectivity: checkConductorConnectivity(spec),
+          connectivity: checkConductorConnectivity(spec, request),
           a11y: auditScene(spec),
         },
       ];
@@ -262,7 +262,7 @@ export class AuthoringAgent {
       // them stopping short of the components. Unlike a text measurement the model can act
       // on this: it wrote those coordinates and can move them, so a wrong answer costs a
       // retry rather than rejecting good output.
-      const connectivity = checkConductorConnectivity(spec);
+      const connectivity = checkConductorConnectivity(spec, request);
       if (connectivity.status === "failed") {
         retainBestCandidate(spec, connectivity.stranded.length);
         history.push({ attempt, valid: true, errorCount: connectivity.stranded.length, previewed, semantic, connectivity });

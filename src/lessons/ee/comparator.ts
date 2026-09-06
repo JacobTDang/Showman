@@ -81,11 +81,6 @@ export function noisyInput(t: number): number {
   return v;
 }
 
-/** The open-loop comparator: above the reference is one rail, below it is the other. */
-export function comparatorOut(t: number): number {
-  return noisyInput(t) > COMPARATOR.vRef ? COMPARATOR.vSat : -COMPARATOR.vSat;
-}
-
 /**
  * How many edges the DRAWN output carries. The trace is `samples + 1` points sampled
  * uniformly across the window, so counting sign changes here counts exactly what a reader

@@ -41,9 +41,12 @@
  */
 
 import { flattenPath } from "../engine/svgPath.js";
+import type { PedagogyRequest } from "./semantic.js";
 
 /** px of slack allowed at a joint. Symbol leads meet wires exactly; the reported holes were 50px. */
 const MAX_GAP = 12;
+/** px of tolerance for detecting wires that stop short of components without touching. */
+const MAX_DETACHED_GAP = 60;
 /**
  * px below which a run is a glyph stroke rather than wiring. The longest axis-aligned
  * stroke in the symbol set is the ground symbol's top rung at 28px.
@@ -85,6 +88,10 @@ const ELECTRICAL_NOTATION: RegExp[] = [
   // The components and the subject itself.
   /\b(?:resistors?|resistance|capacitors?|capacitance|inductors?|inductance|diodes?|transistors?|batter(?:y|ies)|voltmeter|ammeter|op-?amps?|operational amplifier|kirchhoff|thevenin|norton|schematic|circuits?)\b/,
 ];
+
+/** Component/circuit words in node or group IDs, for detecting unlabelled schematics. */
+const CIRCUIT_ID =
+  /\b(?:circuit|schematic|wiring|wires?|resistors?|capacitors?|inductors?|diodes?|transistors?|batter(?:y|ies)|voltmeter|ammeter|op-?amps?|voltage-?divider|thevenin|norton)\b/i;
 
 export interface StrandedEndpoint {
   /** Id of the conductor whose end is stranded. */
@@ -192,6 +199,8 @@ interface Drawing {
   regions: Region[];
   /** Visible text, lowercased — the corpus the schematic gate reads. */
   words: string[];
+  /** Node and group ids — helps detect circuit intent when text labels are omitted. */
+  ids: string[];
 }
 
 function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
@@ -202,6 +211,7 @@ function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
     const here = multiply(m, localMatrix(node));
     const stillMoving = moving || hasGeometricTrack(node);
     const id = typeof node["id"] === "string" ? node["id"] : "";
+    if (id) out.ids.push(id);
 
     switch (node["type"]) {
       case "group":
@@ -353,6 +363,38 @@ function endsOf(segment: Segment): Pt[] {
   return [segment.points[0]!, segment.points[segment.points.length - 1]!];
 }
 
+/** Check if a line segment crosses across a bounding box (extends on both sides of the box). */
+function crossesRegion(s: Segment, quad: Region): boolean {
+  const minX = Math.min(...quad.map((p) => p.x));
+  const maxX = Math.max(...quad.map((p) => p.x));
+  const minY = Math.min(...quad.map((p) => p.y));
+  const maxY = Math.max(...quad.map((p) => p.y));
+
+  for (let i = 1; i < s.points.length; i++) {
+    const a = s.points[i - 1]!;
+    const b = s.points[i]!;
+    // Horizontal segment
+    if (Math.abs(a.y - b.y) <= AXIS_EPS) {
+      const y = (a.y + b.y) / 2;
+      if (y >= minY - 1 && y <= maxY + 1) {
+        const segMinX = Math.min(a.x, b.x);
+        const segMaxX = Math.max(a.x, b.x);
+        if (segMinX < minX && segMaxX > maxX) return true;
+      }
+    }
+    // Vertical segment
+    if (Math.abs(a.x - b.x) <= AXIS_EPS) {
+      const x = (a.x + b.x) / 2;
+      if (x >= minX - 1 && x <= maxX + 1) {
+        const segMinY = Math.min(a.y, b.y);
+        const segMaxY = Math.max(a.y, b.y);
+        if (segMinY < minY && segMaxY > maxY) return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * The runs that are wired into the component network: a run with an endpoint on a
  * component body, then anything joined to those, to a fixed point.
@@ -364,22 +406,51 @@ function endsOf(segment: Segment): Pt[] {
  */
 function attachedRuns(drawing: Drawing): Set<Segment> {
   const bodies = drawing.segments.filter((s) => s.closed);
-  const nearBody = (p: Pt, own: Segment): boolean =>
-    drawing.regions.some((r) => distanceToRegion(p, r) <= MAX_GAP) ||
-    bodies.some((b) => b !== own && distanceToRun(p, b.points) <= MAX_GAP);
+  const hasShapes = drawing.regions.length > 0 || bodies.length > 0;
 
-  const attached = new Set(drawing.segments.filter((s) => endsOf(s).some((p) => nearBody(p, s))));
+  // Filter out any segments that cross through a shape (e.g. chart gridlines/axes crossing bars)
+  const candidateSegments = drawing.segments.filter((s) => !drawing.regions.some((r) => crossesRegion(s, r)));
+
+  // If there are NO shape nodes in the scene at all, any axis-aligned run is candidate wiring.
+  if (!hasShapes) {
+    return new Set(drawing.segments.filter((s) => s.judgeable && isAxisAligned(s.points) && runLength(s.points) >= MIN_CONDUCTOR_LENGTH));
+  }
+
+  const nearBody = (p: Pt, own: Segment, maxGap: number): boolean =>
+    drawing.regions.some((r) => distanceToRegion(p, r) <= maxGap && !crossesRegion(own, r)) ||
+    bodies.some((b) => b !== own && distanceToRun(p, b.points) <= maxGap);
+
+  // 1. Normal joint tolerance (MAX_GAP = 12)
+  let attached = new Set(candidateSegments.filter((s) => endsOf(s).some((p) => nearBody(p, s, MAX_GAP))));
+
+  // 2. If no wire met a shape within 12px, check if wires stop short within MAX_DETACHED_GAP (60px)
+  if (attached.size === 0) {
+    attached = new Set(candidateSegments.filter((s) => endsOf(s).some((p) => nearBody(p, s, MAX_DETACHED_GAP))));
+  }
+
+  // 3. Grow attached runs through joints (within MAX_GAP) or stopped-short leads near a body
   for (let grew = true; grew;) {
     grew = false;
-    for (const s of drawing.segments) {
+    for (const s of candidateSegments) {
       if (attached.has(s)) continue;
-      const joins = endsOf(s).some((p) => [...attached].some((a) => distanceToRun(p, a.points) <= MAX_GAP));
+      const joins = endsOf(s).some(
+        (p) => [...attached].some((a) => distanceToRun(p, a.points) <= MAX_GAP) || nearBody(p, s, MAX_DETACHED_GAP),
+      );
       if (joins) {
         attached.add(s);
         grew = true;
       }
     }
   }
+
+  // 4. Wiring that touches no shape node anywhere:
+  if (attached.size === 0) {
+    const wireLike = candidateSegments.filter((s) => s.judgeable && isAxisAligned(s.points) && runLength(s.points) >= MIN_CONDUCTOR_LENGTH);
+    if (wireLike.length >= MIN_CONDUCTORS) {
+      attached = new Set(wireLike);
+    }
+  }
+
   return attached;
 }
 
@@ -387,15 +458,36 @@ function round2(n: number): number {
   return Number(n.toFixed(2));
 }
 
-export function checkConductorConnectivity(spec: unknown): ConnectivityCheck {
+function extractContextText(ctx: unknown): string {
+  if (typeof ctx === "string") return ctx.toLowerCase();
+  if (ctx && typeof ctx === "object") {
+    const obj = ctx as Record<string, unknown>;
+    if (typeof obj["brief"] === "string") {
+      return (obj["brief"] + " " + (typeof obj["topic"] === "string" ? obj["topic"] : "")).toLowerCase();
+    }
+    if (obj["request"]) return extractContextText(obj["request"]);
+  }
+  return "";
+}
+
+export function checkConductorConnectivity(
+  spec: unknown,
+  context?: PedagogyRequest | string | { request?: PedagogyRequest | string; brief?: string; topic?: string },
+): ConnectivityCheck {
   const unchecked: ConnectivityCheck = { status: "unchecked", passed: false, conductors: 0, stranded: [] };
   if (!isObject(spec)) return unchecked;
 
-  const drawing: Drawing = { segments: [], regions: [], words: [] };
+  const drawing: Drawing = { segments: [], regions: [], words: [], ids: [] };
   collect(spec["nodes"], IDENTITY, false, drawing);
 
   const corpus = drawing.words.join(" ").toLowerCase();
-  if (!ELECTRICAL_NOTATION.some((pattern) => pattern.test(corpus))) return unchecked;
+  const contextStr = extractContextText(context);
+  const isElectrical =
+    ELECTRICAL_NOTATION.some((pattern) => pattern.test(corpus)) ||
+    (contextStr.length > 0 && ELECTRICAL_NOTATION.some((pattern) => pattern.test(contextStr))) ||
+    drawing.ids.some((id) => CIRCUIT_ID.test(id));
+
+  if (!isElectrical) return unchecked;
 
   const attached = attachedRuns(drawing);
   const conductors = drawing.segments.filter(

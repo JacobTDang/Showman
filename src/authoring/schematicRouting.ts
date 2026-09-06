@@ -113,6 +113,9 @@ const TOPOLOGIES: Topology[] = [
 /** Every routable phrase, so a test can round-trip each one through the registry. */
 export const SCHEMATIC_PHRASES: string[] = TOPOLOGIES.flatMap((t) => t.phrases);
 
+/** Unique catalog builders targeted by the topologies. */
+export const ROUTABLE_BUILDERS: readonly string[] = [...new Set(TOPOLOGIES.map((t) => t.builder))];
+
 /**
  * Lower-case, hyphen-free, single-spaced. Hyphens fold to spaces so "op-amp" and "op amp"
  * are one phrase rather than two spellings to keep in sync, and the unit spellings that

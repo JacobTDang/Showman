@@ -108,7 +108,7 @@ function plainWire(id: string, points: Point[], color: string): Node {
  * An opacity track that is 1 inside each window and 0 outside it, switching in a millisecond
  * so the transition reads as the diode turning on rather than as a fade.
  */
-export function gateTrack(windows: Window[], invert = false): Track {
+function gateTrack(windows: Window[], invert = false): Track {
   const lo = invert ? 1 : 0;
   const hi = invert ? 0 : 1;
   const keyframes: Array<{ t: number; value: number }> = [{ t: 0, value: lo }];

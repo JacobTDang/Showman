@@ -698,3 +698,218 @@ describe("checkConductorConnectivity — arc-drawn components", () => {
     expect(checkConductorConnectivity(spec).status).toBe("passed");
   });
 });
+
+describe("checkConductorConnectivity — unlabelled schematics and wiring without shape nodes", () => {
+  it("fails an unlabelled schematic where wires stop short", () => {
+    // Unlabelled schematic (no text elements at all) with id 'circuit'
+    const spec = scene([
+      {
+        id: "circuit",
+        type: "group",
+        x: 400,
+        y: 225,
+        children: [
+          box("source", -200, -100, 40, 80),
+          box("r1", -50, -140, 100, 40),
+          box("r2", 150, -140, 100, 40),
+          wire("w1", [
+            { x: -180, y: -140 },
+            { x: -100, y: -140 },
+          ]),
+          wire("w2", [
+            { x: -180, y: -60 },
+            { x: -100, y: -60 },
+          ]),
+          wire("w3", [
+            { x: 50, y: -140 },
+            { x: 100, y: -140 },
+          ]),
+          wire("w4", [
+            { x: 50, y: -60 },
+            { x: 100, y: -60 },
+          ]),
+        ],
+      },
+    ]);
+    const check = checkConductorConnectivity(spec);
+    expect(check.status).toBe("failed");
+    expect(check.stranded.length).toBeGreaterThan(0);
+  });
+
+  it("fails an unlabelled schematic with generic IDs when pedagogy request is electrical", () => {
+    const spec = scene([
+      {
+        id: "root",
+        type: "group",
+        x: 400,
+        y: 225,
+        children: [
+          box("b1", -200, -100, 40, 80),
+          box("b2", -50, -140, 100, 40),
+          box("b3", 150, -140, 100, 40),
+          wire("w1", [
+            { x: -180, y: -140 },
+            { x: -100, y: -140 },
+          ]),
+          wire("w2", [
+            { x: -180, y: -60 },
+            { x: -100, y: -60 },
+          ]),
+          wire("w3", [
+            { x: 50, y: -140 },
+            { x: 100, y: -140 },
+          ]),
+          wire("w4", [
+            { x: 50, y: -60 },
+            { x: 100, y: -60 },
+          ]),
+        ],
+      },
+    ]);
+    const check = checkConductorConnectivity(spec, { brief: "Explain a voltage divider circuit" });
+    expect(check.status).toBe("failed");
+    expect(check.conductors).toBe(4);
+    expect(check.stranded.length).toBeGreaterThan(0);
+  });
+
+  it("passes an unlabelled schematic once wires actually meet components", () => {
+    const spec = scene([
+      {
+        id: "circuit",
+        type: "group",
+        x: 400,
+        y: 225,
+        children: [
+          box("source", -200, -100, 40, 80),
+          box("r1", -50, -140, 100, 40),
+          box("r2", 150, -140, 100, 40),
+          wire("w1", [
+            { x: -180, y: -100 },
+            { x: -180, y: -140 },
+            { x: -50, y: -140 },
+          ]),
+          wire("w2", [
+            { x: 50, y: -140 },
+            { x: 150, y: -140 },
+          ]),
+          wire("w3", [
+            { x: 250, y: -140 },
+            { x: 300, y: -140 },
+            { x: 300, y: -20 },
+            { x: -180, y: -20 },
+          ]),
+        ],
+      },
+    ]);
+    const check = checkConductorConnectivity(spec);
+    expect(check.status).toBe("passed");
+    expect(check.conductors).toBe(3);
+    expect(check.stranded).toEqual([]);
+  });
+
+  it("fails completely detached wiring that touches no shape node anywhere", () => {
+    // Wires stop 40-50px short of all boxes, with no terminal dots anywhere.
+    // The previous gate bypassed this as unchecked because attached was empty.
+    const spec = scene([
+      {
+        id: "circuit",
+        type: "group",
+        x: 400,
+        y: 225,
+        children: [
+          box("source", -200, -100, 40, 80),
+          box("r1", -50, -140, 100, 40),
+          box("r2", 150, -140, 100, 40),
+          wire("w1", [
+            { x: -180, y: -160 },
+            { x: -80, y: -160 },
+          ]),
+          wire("w2", [
+            { x: 60, y: -160 },
+            { x: 140, y: -160 },
+          ]),
+          wire("w3", [
+            { x: 260, y: -160 },
+            { x: 320, y: -160 },
+          ]),
+          wire("w4", [
+            { x: -180, y: 0 },
+            { x: 320, y: 0 },
+          ]),
+          label("l1", 0, 0, "R1 = 10 ohm, R2 = 20 ohm"),
+        ],
+      },
+    ]);
+    const check = checkConductorConnectivity(spec);
+    expect(check.status).toBe("failed");
+    expect(check.conductors).toBe(4);
+    expect(check.stranded.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("judges wiring when a schematic has no shape nodes at all", () => {
+    // Pure line art / polylines with no rect, ellipse or polygon nodes.
+    const disconnected = scene([
+      {
+        id: "circuit",
+        type: "group",
+        x: 400,
+        y: 225,
+        children: [
+          wire("w1", [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+          ]),
+          wire("w2", [
+            { x: 150, y: 0 },
+            { x: 250, y: 0 },
+          ]),
+          wire("w3", [
+            { x: 0, y: 100 },
+            { x: 100, y: 100 },
+          ]),
+          wire("w4", [
+            { x: 150, y: 100 },
+            { x: 250, y: 100 },
+          ]),
+          label("l1", 0, -20, "Circuit with R1 = 10 ohm"),
+        ],
+      },
+    ]);
+    const failCheck = checkConductorConnectivity(disconnected);
+    expect(failCheck.status).toBe("failed");
+    expect(failCheck.conductors).toBe(4);
+    expect(failCheck.stranded.length).toBeGreaterThan(0);
+
+    const connected = scene([
+      {
+        id: "circuit",
+        type: "group",
+        x: 400,
+        y: 225,
+        children: [
+          wire("w1", [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+          ]),
+          wire("w2", [
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+          ]),
+          wire("w3", [
+            { x: 100, y: 100 },
+            { x: 0, y: 100 },
+          ]),
+          wire("w4", [
+            { x: 0, y: 100 },
+            { x: 0, y: 0 },
+          ]),
+          label("l1", 0, -20, "Circuit with R1 = 10 ohm"),
+        ],
+      },
+    ]);
+    const passCheck = checkConductorConnectivity(connected);
+    expect(passCheck.status).toBe("passed");
+    expect(passCheck.conductors).toBe(4);
+    expect(passCheck.stranded).toEqual([]);
+  });
+});

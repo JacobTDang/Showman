@@ -60,10 +60,6 @@ export function seriesDiode(vSource: number, R: number): { v: number; i: number 
   return { v, i: diodeCurrent(v) };
 }
 
-export function seriesDiodeCurrent(vSource: number, R: number): number {
-  return seriesDiode(vSource, R).i;
-}
-
 export interface DiodeIVOptions {
   /** Series resistance in the test circuit, ohms. Default 1 kΩ. */
   R?: number;
