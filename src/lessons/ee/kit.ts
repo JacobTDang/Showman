@@ -1316,3 +1316,138 @@ export function phasorPane(opts: PhasorOptions): { node: GroupNode; angleAt(t: n
     angleAt: (t) => opts.omega * Math.min(opts.duration, Math.max(0, t - opts.start)),
   };
 }
+
+/* ------------------------------------------------------ parametric x-y pane */
+
+export interface XyTrace {
+  id: string;
+  /** The locus, as a function of the shared parameter u over [0, uMax]. */
+  at: (u: number) => { x: number; y: number };
+  color?: string;
+  dash?: number[];
+  strokeWidth?: number;
+  /** Draw-on window in lesson time. Omit to show the whole locus from the start. */
+  start?: number;
+  duration?: number;
+  /** A dot riding the drawn tip. */
+  marker?: boolean;
+  /** A name for the legend at the top-left of the box. */
+  label?: string;
+}
+
+export interface XyPaneOptions {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+  xTicks: number[];
+  yTicks: number[];
+  xTickLabel?: (v: number) => string;
+  yTickLabel?: (v: number) => string;
+  xLabel?: string;
+  yLabel?: string;
+  /** The parameter range every trace is drawn over. */
+  uMax: number;
+  traces: XyTrace[];
+  /** Points per locus. Default 400. */
+  samples?: number;
+  theme?: string;
+}
+
+/**
+ * The transfer view in its general form: one box, independent x and y units, and any number
+ * of loci drawn parametrically.
+ *
+ * `transferCurvePane` covers the memoryless case — a square box, ±V on both axes, one
+ * single-valued v_out = f(v_in). That is not enough for three things the course needs. An
+ * op-amp's v_out against (v+ − v−) has volts up and microvolts across. Two summed inputs
+ * have two different weights, so two lines on one box. And an integrator has no transfer
+ * characteristic at all: its locus is a loop, because the output depends on the past, and a
+ * loop is not the graph of any function. All three are parametric loci with a dot on them,
+ * which is what this draws.
+ */
+export function xyCurvePane(opts: XyPaneOptions): { node: GroupNode; plane: Plane } {
+  const theme = getTheme(opts.theme);
+  const samples = Math.max(2, opts.samples ?? 400);
+  const plane = makePlane({
+    id: `${opts.id}-plane`,
+    x: 0,
+    y: 0,
+    width: opts.width,
+    height: opts.height,
+    xMin: opts.xMin,
+    xMax: opts.xMax,
+    yMin: opts.yMin,
+    yMax: opts.yMax,
+    xTicks: opts.xTicks,
+    yTicks: opts.yTicks,
+    ...(opts.xTickLabel ? { xTickLabel: opts.xTickLabel } : {}),
+    ...(opts.yTickLabel ? { yTickLabel: opts.yTickLabel } : {}),
+    ...(opts.xLabel ? { xLabel: opts.xLabel } : {}),
+    ...(opts.yLabel ? { yLabel: opts.yLabel } : {}),
+    theme,
+  });
+  const clampX = (v: number) => Math.min(opts.xMax, Math.max(opts.xMin, v));
+  const clampY = (v: number) => Math.min(opts.yMax, Math.max(opts.yMin, v));
+  const children: Node[] = [plane.node];
+  const palette = [theme.palette.primary, theme.palette.accent, theme.palette.secondary];
+
+  opts.traces.forEach((tr, i) => {
+    const color = tr.color ?? palette[i % palette.length]!;
+    const points: Array<{ x: number; y: number }> = [];
+    for (let k = 0; k <= samples; k++) {
+      const p = tr.at((opts.uMax * k) / samples);
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      points.push(plane.toLocal(clampX(p.x), clampY(p.y)));
+    }
+    if (points.length < 2) return;
+    const curve: Node = {
+      id: `${opts.id}-${tr.id}`,
+      type: "polyline",
+      x: plane.originX,
+      y: plane.originY,
+      points,
+      stroke: color,
+      strokeWidth: tr.strokeWidth ?? 3,
+      lineJoin: "round",
+      ...(tr.dash ? { dash: tr.dash } : {}),
+    };
+    children.push(tr.start !== undefined ? drawOn(curve, tr.start, tr.duration ?? 1) : curve);
+    if (tr.marker && tr.start !== undefined) {
+      children.push(
+        movingMarker(plane, (u) => tr.at(u), {
+          id: `${opts.id}-${tr.id}-dot`,
+          tMin: 0,
+          tMax: opts.uMax,
+          start: tr.start,
+          duration: tr.duration ?? 1,
+          samples: 300,
+          radius: 6,
+          fill: color,
+        }),
+      );
+    }
+    if (tr.label) {
+      children.push({
+        id: `${opts.id}-${tr.id}-lbl`,
+        type: "text",
+        x: plane.originX + 10,
+        y: plane.originY + 14 + i * 18,
+        text: tr.label,
+        fontFamily: LABEL_FONT,
+        fontWeight: 600,
+        fontSize: 13,
+        fill: color,
+        align: "left",
+        baseline: "middle",
+      });
+    }
+  });
+
+  return { node: { id: opts.id, type: "group", x: opts.x, y: opts.y, children }, plane };
+}
