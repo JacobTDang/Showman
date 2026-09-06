@@ -20,7 +20,7 @@
  * The three real frequencies differ by fifty times, so they cannot share a real time axis
  * and still be drawn. Each is drawn over the same number of cycles of its own input, which
  * makes the three shapes directly comparable and makes the time axis a lesson clock; the
- * real frequency, the demanded slope and the achieved slope are in counters beside it.
+ * real frequency and the two mean slopes go in counters beside it.
  */
 import type { Node, SceneSpec } from "../../spec/types.js";
 import { getTheme, swatch } from "../../theme/themes.js";
@@ -61,9 +61,9 @@ export interface SlewCase {
   out(tau: number): number;
   /** Peak-to-peak the output actually reaches, volts. */
   pp: number;
-  /** dv/dt the input demands of the output, V/s. */
+  /** MEAN dv/dt the square wave asks of the output over a half period, 2V_p/(T/2), in V/s. */
   needed: number;
-  /** dv/dt the output achieves, V/s. */
+  /** Mean dv/dt the output achieves over a half period: `needed` or SR, whichever is smaller. */
   actual: number;
 }
 
@@ -284,7 +284,16 @@ export function buildSlewRate(o: SlewRateOptions = {}): SceneSpec {
     ],
   };
 
-  /* ------------------------------------------------------------------ counters */
+  /*
+   * ------------------------------------------------------------------ counters
+   *
+   * MEAN slopes, over a half period, not the slope of an edge. A rate-limited output on an
+   * edge always runs at exactly SR — that is the equation above, and it is the same 0.5 V/µs
+   * at every frequency, so a counter of it would say nothing. What changes with frequency is
+   * whether the half period is long enough for that ramp to arrive: 2V_p/(T/2) is the mean
+   * rate the square wave asks for, and the output's mean rate is that or SR, whichever is
+   * smaller. They part company exactly when the shape does.
+   */
   const counterY = eqY + 136;
   const counter = (id: string, y: number, prefix: string, suffix: string, values: number[], decimals: number, fill: string): Node => ({
     id,
@@ -316,7 +325,7 @@ export function buildSlewRate(o: SlewRateOptions = {}): SceneSpec {
     counter(
       "sr-ctr-need",
       counterY + 42,
-      "needed dv/dt = ",
+      "mean dv/dt needed = ",
       " V/µs",
       cases.map((c) => c.needed / 1e6),
       2,
@@ -325,7 +334,7 @@ export function buildSlewRate(o: SlewRateOptions = {}): SceneSpec {
     counter(
       "sr-ctr-act",
       counterY + 84,
-      "actual dv/dt = ",
+      "mean dv/dt delivered = ",
       " V/µs",
       cases.map((c) => c.actual / 1e6),
       2,
@@ -422,7 +431,7 @@ export function buildSlewRate(o: SlewRateOptions = {}): SceneSpec {
       {
         id: "sr-capped",
         type: "text",
-        x: eqX + 320,
+        x: eqX + 400,
         y: counterY + 84,
         text: "capped by SR",
         fontFamily: LABEL_FONT,
