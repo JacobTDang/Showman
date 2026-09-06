@@ -32,8 +32,12 @@ answered a brief in `provenance.validation.lesson`.
 | 1 | `ee.theoremOne` | RC lowpass, two-decade sweep: output shrinks and lags while a dot rides the Bode plot to −3 dB and −45° |
 | 1 | `ee.rcFilters` | lowpass and highpass side by side; outputs trade places; both Bode dots meet at the corner |
 | 1 | `ee.polesStepResponse` | one pole, a step, 63% at exactly τ; the pole slides left and the step is answered faster |
+| 2 | `ee.opAmpRules` | the bare op-amp's gain climbing to 200 000 and slamming the rails; the loop closes and drags v− onto v+; the characteristic on a ±10 mV axis |
+| 2 | `ee.invertingAmp` | gain −R_f/R_in read live; R_f doubles and the transfer line tips while the output grows, both on one voltage scale |
+| 2 | `ee.nonInvertingSumming` | gain 1 + R_f/R_g in phase; then two inputs on their own planes and their weighted sum on a third |
+| 2 | `ee.integrator` | the brief that started this: square in, triangle out, slope −V_in/(RC) read live; then the swap to the differentiator |
 
-Tiers 2 to 5 (ideal op-amps, real op-amps, comparators and waveform generation, diodes)
+Tiers 3 to 5 (real op-amps, comparators and waveform generation, diodes)
 are specified in `superpowers/specs/2026-09-05-ee230-tiers-2-5-design.md` and appear here
 as they land.
 
@@ -70,3 +74,30 @@ Honest limits of what exists. Each tier's build appends its own.
   scope of constants odd until the narration says why.
 - `ee.polesStepResponse` plots time in units of τ₁ so both responses share an axis; the
   counter gives τ in microseconds.
+
+**Tier 2 — ideal op-amps**
+
+- **The op-amp is a pure DC gain with hard clipping**: v_out = clip(A·(v+ − v−), ±13 V). No
+  pole, no slew limit, no offset. Tier 3 is where each of those breaks, by design.
+- **Closed-loop traces come from the ideal-rule formula, not a solved loop.** Self-consistent
+  and numerically right, but not a circuit simulation.
+- **`ee.opAmpRules` drives the bare op-amp with a 5 V differential input**, beyond most
+  devices' rating. A deliberate exaggeration so the rail-slamming is legible.
+- **The integrator has no DC-blocking resistor across C**; a real one drifts into a rail on
+  offset alone. The differentiator's edges are drawn analytically vertical; a real one rings.
+- **Only `ee.integrator` carries real time units** (ms), because only there must a real number
+  (1 V/ms) be readable. The other three time axes are unitless, like Tiers 0–1.
+- **`nonInvertingStage` has one wire crossing without a dot** — standard drafting, but a
+  beginner may misread it. The symbol set has no mirrored op-amp to avoid it.
+- **`opAmpStage.bbox` is advisory**: content extends about 32 px above the group origin (the
+  feedback element's label). Place a stage about 30 px below the top of its slot.
+- **Routing deliberately does not claim "op amp", "operational amplifier", or "negative
+  feedback."** A second lesson matching an unrelated phrase cancels selection, and those
+  words appear in almost every Tier 3–4 brief. Consequence: a bare "explain an op amp" routes
+  to no lesson. "voltage follower" and "unity gain buffer" are also unclaimed, since the
+  non-inverting lesson shows a gain of 2, not 1.
+- **The connectivity gate is geometric, not electrical.** It proves no conductor is stranded;
+  it cannot tell a feedback resistor wired to the wrong node from a right one. Topology is
+  guaranteed only by wiring to reported terminals.
+- **No test asserts that labels do not overlap parts.** Every layout defect in this tier was
+  found by rendering and looking; a future edit could reintroduce one silently.
