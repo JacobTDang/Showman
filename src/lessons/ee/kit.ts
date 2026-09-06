@@ -1329,10 +1329,25 @@ export interface XyTrace {
   /** Draw-on window in lesson time. Omit to show the whole locus from the start. */
   start?: number;
   duration?: number;
-  /** A dot riding the drawn tip. */
-  marker?: boolean;
   /** A name for the legend at the top-left of the box. */
   label?: string;
+}
+
+/**
+ * An operating point riding its own path, with nothing drawn behind it. The path a dot
+ * takes is rarely the curve: the input sweeping a straight line takes the dot back and
+ * forth over it, and drawing that would only retrace the line — or, when the input jumps
+ * from rail to rail, cut a false diagonal across the box between two samples.
+ */
+export interface XyDot {
+  id: string;
+  at: (u: number) => { x: number; y: number };
+  color?: string;
+  start: number;
+  duration: number;
+  /** Lesson time the dot leaves. Omit and it stays, frozen where its run ended. */
+  until?: number;
+  radius?: number;
 }
 
 export interface XyPaneOptions {
@@ -1351,9 +1366,13 @@ export interface XyPaneOptions {
   yTickLabel?: (v: number) => string;
   xLabel?: string;
   yLabel?: string;
-  /** The parameter range every trace is drawn over. */
+  /** The parameter range every trace and dot is driven over. */
   uMax: number;
   traces: XyTrace[];
+  /** Operating points, each on its own path. */
+  dots?: XyDot[];
+  /** Where the trace names sit inside the box. Default the top-left corner. */
+  legendAt?: "top" | "bottom";
   /** Points per locus. Default 400. */
   samples?: number;
   theme?: string;
@@ -1418,26 +1437,13 @@ export function xyCurvePane(opts: XyPaneOptions): { node: GroupNode; plane: Plan
       ...(tr.dash ? { dash: tr.dash } : {}),
     };
     children.push(tr.start !== undefined ? drawOn(curve, tr.start, tr.duration ?? 1) : curve);
-    if (tr.marker && tr.start !== undefined) {
-      children.push(
-        movingMarker(plane, (u) => tr.at(u), {
-          id: `${opts.id}-${tr.id}-dot`,
-          tMin: 0,
-          tMax: opts.uMax,
-          start: tr.start,
-          duration: tr.duration ?? 1,
-          samples: 300,
-          radius: 6,
-          fill: color,
-        }),
-      );
-    }
     if (tr.label) {
+      const rows = opts.traces.filter((t) => t.label).length;
       children.push({
         id: `${opts.id}-${tr.id}-lbl`,
         type: "text",
         x: plane.originX + 10,
-        y: plane.originY + 14 + i * 18,
+        y: opts.legendAt === "bottom" ? plane.originY + opts.height - 14 - (rows - 1 - i) * 18 : plane.originY + 14 + i * 18,
         text: tr.label,
         fontFamily: LABEL_FONT,
         fontWeight: 600,
@@ -1445,9 +1451,55 @@ export function xyCurvePane(opts: XyPaneOptions): { node: GroupNode; plane: Plan
         fill: color,
         align: "left",
         baseline: "middle",
+        // A name arrives with the locus it names, not before it.
+        ...(tr.start !== undefined
+          ? {
+              tracks: [
+                {
+                  property: "opacity",
+                  keyframes: [
+                    { t: tr.start, value: 0 },
+                    { t: tr.start + 0.4, value: 1 },
+                  ],
+                },
+              ] as Track[],
+            }
+          : {}),
       });
     }
   });
+
+  for (const d of opts.dots ?? []) {
+    const dot = movingMarker(plane, (u) => d.at(u), {
+      id: `${opts.id}-${d.id}`,
+      tMin: 0,
+      tMax: opts.uMax,
+      start: d.start,
+      duration: d.duration,
+      samples: 300,
+      radius: d.radius ?? 6,
+      fill: d.color ?? theme.palette.accent,
+    }) as Node & { tracks?: Track[] };
+    // A marker's position track holds its first keyframe, so without this it sits on the
+    // plot from the first frame, at a value nothing has happened to yet.
+    dot.tracks = [
+      ...(dot.tracks ?? []),
+      {
+        property: "opacity",
+        keyframes: [
+          { t: Math.max(0, d.start - 0.3), value: 0 },
+          { t: d.start, value: 1 },
+          ...(d.until !== undefined
+            ? [
+                { t: d.until, value: 1 },
+                { t: d.until + 0.3, value: 0 },
+              ]
+            : []),
+        ],
+      },
+    ];
+    children.push(dot);
+  }
 
   return { node: { id: opts.id, type: "group", x: opts.x, y: opts.y, children }, plane };
 }
