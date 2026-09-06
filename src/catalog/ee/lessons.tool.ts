@@ -1,5 +1,10 @@
 import { z } from "zod";
 import type { BuilderTool } from "../types.js";
+import { lesson } from "./define.js";
+import { tier2Tools } from "./tier2.tool.js";
+import { tier3Tools } from "./tier3.tool.js";
+import { tier4Tools } from "./tier4.tool.js";
+import { tier5Tools } from "./tier5.tool.js";
 import { buildTheoremOne } from "../../lessons/ee/theoremOne.js";
 import { buildRcFilters } from "../../lessons/ee/rcFilters.js";
 import { buildTransferCharacteristic } from "../../lessons/ee/transferCharacteristic.js";
@@ -22,11 +27,7 @@ const rcParams = z.object({
 });
 type RcParams = z.infer<typeof rcParams>;
 
-function lesson<P>(tool: Omit<BuilderTool<P>, "domain" | "level">): BuilderTool {
-  return { domain: "physics", level: "scene", ...tool } as BuilderTool;
-}
-
-export const eeLessonTools: BuilderTool[] = [
+const tier01Tools: BuilderTool[] = [
   lesson<RcParams>({
     name: "ee.theoremOne",
     description:
@@ -170,3 +171,6 @@ export const eeLessonTools: BuilderTool[] = [
     buildScene: (p) => buildOhmKvlKcl(p),
   }),
 ];
+
+/** Every EE lesson, all tiers. Each tier registers in its own file so they build in parallel. */
+export const eeLessonTools: BuilderTool[] = [...tier01Tools, ...tier2Tools, ...tier3Tools, ...tier4Tools, ...tier5Tools];

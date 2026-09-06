@@ -14,6 +14,11 @@
  * would select it.
  */
 import type { PedagogyRequest } from "./semantic.js";
+import type { LessonPhrases } from "../lessons/ee/phrases.js";
+import { TIER2_PHRASES } from "../lessons/ee/phrases.tier2.js";
+import { TIER3_PHRASES } from "../lessons/ee/phrases.tier3.js";
+import { TIER4_PHRASES } from "../lessons/ee/phrases.tier4.js";
+import { TIER5_PHRASES } from "../lessons/ee/phrases.tier5.js";
 
 export interface LessonSelection {
   /** The catalog tool, e.g. "ee.rcFilters". */
@@ -23,7 +28,7 @@ export interface LessonSelection {
 }
 
 /** Each lesson and the topic phrases that name it. Phrases are lower case, hyphens as spaces. */
-const LESSONS: ReadonlyArray<{ name: string; phrases: string[] }> = [
+const TIER01_PHRASES: LessonPhrases[] = [
   { name: "ee.theoremOne", phrases: ["theorem 1", "theorem one", "sinusoidal steady state"] },
   {
     name: "ee.rcFilters",
@@ -82,6 +87,9 @@ const LESSONS: ReadonlyArray<{ name: string; phrases: string[] }> = [
   },
   { name: "ee.ohmKvlKcl", phrases: ["ohm's law", "ohms law", "ohm law", "kvl", "kcl", "kirchhoff", "voltage law", "current law"] },
 ];
+
+/** Every tier's table, concatenated; each tier owns its own file. */
+const LESSONS: ReadonlyArray<LessonPhrases> = [...TIER01_PHRASES, ...TIER2_PHRASES, ...TIER3_PHRASES, ...TIER4_PHRASES, ...TIER5_PHRASES];
 
 /** The names every phrase can select -- exported so a test can prove each is registered. */
 export const ROUTABLE_LESSONS: readonly string[] = LESSONS.map((l) => l.name);
