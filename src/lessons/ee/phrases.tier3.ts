@@ -13,9 +13,11 @@ import type { LessonPhrases } from "./phrases.js";
 export const TIER3_PHRASES: LessonPhrases[] = [
   {
     name: "ee.saturation",
+    // Not bare "saturation": measured, "increase the colour saturation of this photo" selected
+    // this lesson. The qualified phrases below cover every way an EE brief asks for it.
     phrases: [
-      "saturation",
       "op amp saturation",
+      "amplifier saturation",
       "output saturation",
       "saturation voltage",
       "clipping at the rails",

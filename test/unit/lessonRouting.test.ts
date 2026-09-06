@@ -32,6 +32,13 @@ describe("selectEeLesson", () => {
     expect(selectEeLesson({ brief: "Explain a monopole antenna" })).toBeNull();
   });
 
+  it("does not claim a word another field uses", () => {
+    // "saturation" is also a photo adjustment; only the qualified EE phrases route.
+    expect(selectEeLesson({ brief: "increase the colour saturation of this photo" })).toBeNull();
+    expect(selectEeLesson({ brief: "explain op amp saturation" })?.name).toBe("ee.saturation");
+    expect(selectEeLesson({ brief: "why does the output clip at the rails" })?.name).toBe("ee.saturation");
+  });
+
   it("declines a brief about two different lessons", () => {
     expect(selectEeLesson({ brief: "Compare Ohm's law with phasors" })).toBeNull();
   });
