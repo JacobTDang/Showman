@@ -39,10 +39,15 @@ answered a brief in `provenance.validation.lesson`.
 | 5 | `ee.diodeIV` | the i–v curve swept live on a log current axis, nanoamps to milliamps, with the 0.7 V model drawn over the exponential |
 | 5 | `ee.halfWaveRectifier` | the brief that opened #121, done right: the loop lit only while forward biased, the missing half visible, the dot on the i–v curve |
 | 5 | `ee.fullWaveAndSmoothing` | the bridge delivering both halves at twice the line frequency; then C across the load, ripple read live against I_L/(fC) |
+| 3 | `ee.saturation` | the input climbs while the output follows at −R_f/R_in until it hits ±V_sat; the two peak counters part company at V_in = 3.25 V |
+| 3 | `ee.slewRate` | a 741 at 0.5 V/µs: one square wave, three outputs — still square, trapezoid, triangle — and the peak-to-peak curve cornering at SR/4V_p |
+| 3 | `ee.gainBandwidth` | the open-loop line and three closed-loop shelves; the counter reads G × bandwidth holding 1.000 MHz while the two trade |
+| 4 | `ee.comparator` | no feedback: a noisy input crossing V_ref makes the output chatter, 14 edges for two crossings, the step drawn vertical |
+| 4 | `ee.schmittTrigger` | positive feedback gives two thresholds at ±βV_sat; the same input now gives two clean edges; the hysteresis loop traced live |
+| 4 | `ee.relaxationOscillator` | the Schmitt charging its own capacitor: the sawtooth between the thresholds, the square out, T = 2RC ln((1+β)/(1−β)) read off the scope |
 
-Tiers 3 and 4 (real op-amps; comparators and waveform generation)
-are specified in `superpowers/specs/2026-09-05-ee230-tiers-2-5-design.md` and appear here
-as they land.
+All five tiers are built. The design is in `superpowers/specs/2026-09-03-ee230-lessons-design.md` and
+`superpowers/specs/2026-09-05-ee230-tiers-2-5-design.md`.
 
 ## Known caveats
 
@@ -140,3 +145,69 @@ Honest limits of what exists. Each tier's build appends its own.
   laid out, timed, narrated and invisible. Found by rendering; use `\frac` and stacked lines.
 - **Pane nodes must be built inside their pane's group.** A `movingMarker` or rule created
   outside lands at the scene's top-left corner. Found by rendering.
+
+**Tier 3 — real op-amps**
+
+- **The three limits are modelled one at a time, never together.** Saturation has no slew
+  limit and no pole; the slew lesson has no clipping and no roll-off; gain-bandwidth is purely
+  linear. A real 741 does all three at once.
+- **The slew model is a pure rate limiter**, not a two-pole op-amp: no overshoot, no
+  asymmetry between rising and falling slew, and its initial condition is chosen as the
+  symmetric steady state rather than converged to. The slew counters read the *mean* slope
+  over a half period; the instantaneous edge slope is always exactly SR and is in the equation.
+- **The slew transfer view mixes a square-wave result with a sine-wave name.** The curve is
+  the square wave's achieved peak-to-peak, cornering at SR/4V_p = 25 kHz; the full-power
+  bandwidth (15.9 kHz) is the sinusoidal limit and appears only as text. Both carry their
+  formula; a hurried reader could conflate them.
+- **The gain-bandwidth closed loop assumes an ideal feedback network** — no loading, no input
+  capacitance, no second pole, so no peaking and no stability discussion. Phase is not plotted.
+- **V_sat is a flat 13 V** regardless of load or supply. The supply pins are stubs, not
+  busbars to the drawing's edge.
+- **Two of three time axes are lesson clocks.** The slew scope draws four cycles of each
+  frequency on one axis, so the drawn frequencies are equal while the real ones differ by 50×;
+  the gain-bandwidth scope holds the drawn frequency fixed and shrinks the envelope while the
+  real frequency sweeps seven decades. Both are stated on the axis and in the narration.
+- **The gain-bandwidth scope is blank for the first 24 s** — the Bode plot has to be built
+  first.
+- **Only the default theme was rendered.** Two lessons index the theme's swatches for a
+  third and fourth colour; contrast in the other themes is untested.
+- **Bare "saturation" was a live false positive** — "increase the colour saturation of this
+  photo" selected the lesson — and was removed at integration; only the qualified phrases
+  route. Two-topic briefs still cancel by design: "op amp saturation and clipping" selects
+  nothing, since `clipping` belongs to Tier 1.
+
+**Tier 4 — comparators, hysteresis, waveform generation**
+
+- **The op-amp is Tier 2's model unchanged**: pure gain, hard clip at ±13 V, no propagation
+  delay. A real comparator's delay would smear the chatter edges; here they are vertical. The
+  comparator's step is drawn exactly vertical and its 65 µV width is stated, never drawn.
+- **The Schmitt is the inverting configuration** (v_in on −, feedback to + through R_2, R_1 to
+  ground): V_TH = +βV_sat, V_TL = −βV_sat, β = R_1/(R_1+R_2). R_2 = 16 kΩ was chosen so V_TH
+  lands on exactly the 5 V the comparator was asked about. The output is therefore inverted
+  relative to the comparator lesson; the caption and narration say so.
+- **The "noise" is three fixed sinusoids, not a random process** (the spec is
+  byte-deterministic), totalling 11.7 % of the signal — more than "a few percent" — and its
+  largest component is its fastest, unlike real broadband noise. That was needed for a legible
+  chatter burst; with realistic weighting the input crosses once and no chatter shows.
+- **The Schmitt and oscillator are the ideal two-state rule integrated on a grid**, not a
+  solved loop: an edge can be up to one grid step late and the oscillator overshoots each
+  threshold by ~0.5 mV, biasing the period +0.03 %. Both below one pixel.
+- **Parameters are not validated.** A `vRef` ≥ 6.5 V or thresholds above ~5.7 V never trip
+  and show a flat rail; an oscillator R, C far from 10 kΩ / 10 nF puts the period outside the
+  fixed 480 µs window. R_1/R_2 are fixed in the oscillator's drawing.
+- **Tier 4 draws a 78 px op-amp against Tier 2's 90 px.** Safe only because no lesson shows both.
+- **Narration over-runs its beat** by roughly 30 % and `eeLesson` clips the caption duration,
+  as in Tier 2. This affects captions, not the spoken narration.
+- **Compound phrases are claimed by the lesson that teaches them** ("comparator with
+  hysteresis" → Schmitt; "schmitt trigger oscillator" → oscillator), because the
+  longest-match-then-cancel rule would otherwise route them to nothing. Interleaved phrasings
+  still cancel: "relaxation oscillator using a schmitt trigger" selects nothing. "positive
+  feedback" is unclaimed, so "explain positive feedback" routes nowhere.
+
+**Across all tiers, from integration**
+
+- **A phrase claimed by two lessons cancels both, silently.** Every tier that built in
+  parallel worried about it; a test now checks the four tier tables against each other.
+- **Two tiers appending to `kit.ts` conflict textually at the tail.** Concatenating the
+  conflict hunks interleaves the two functions' bodies; the correct resolution is `main`'s
+  file plus the other tier's appended lines verbatim. The typecheck catches a wrong merge.
