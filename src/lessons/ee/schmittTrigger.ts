@@ -23,7 +23,7 @@ import type { Node, SceneSpec } from "../../spec/types.js";
 import { getTheme } from "../../theme/themes.js";
 import { LABEL_FONT, LAYOUT, eeLesson, equationPane, scopePaneRaw, xyCurvePane, type Beat } from "./kit.js";
 import { schmittStage } from "./comparatorSchematics.js";
-import { COMPARATOR, cleanInput, drawnEdges, fadeTo, noisyInput } from "./comparator.js";
+import { COMPARATOR, NOISE_BOUND, cleanInput, drawnEdges, fadeTo, noisyInput } from "./comparator.js";
 import { fade, fmtR, withTracks } from "./util.js";
 
 const R1 = 10e3;
@@ -397,7 +397,7 @@ export function buildSchmittTrigger(o: SchmittTriggerOptions = {}): SceneSpec {
         type: "text",
         x: eqX,
         y: eqY + 284,
-        text: `noise margin: ${(vTh - vTl).toFixed(1)} V of hysteresis against 0.8 V of noise`,
+        text: `noise margin: ${(vTh - vTl).toFixed(1)} V of hysteresis against ${NOISE_BOUND.toFixed(2)} V of noise`,
         fontFamily: LABEL_FONT,
         fontWeight: 700,
         fontSize: 18,
