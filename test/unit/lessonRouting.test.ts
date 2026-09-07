@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultRegistry, validateScene } from "../../src/index.js";
 import { ROUTABLE_LESSONS, selectEeLesson } from "../../src/authoring/lessonRouting.js";
+import { checkConductorConnectivity } from "../../src/authoring/connectivity.js";
 import { AuthoringAgent, ScriptedAuthor, type SpecAuthor } from "../../src/authoring/agent.js";
 
 describe("selectEeLesson", () => {
@@ -74,6 +75,18 @@ describe("selectEeLesson", () => {
           owner.set(phrase, name);
         }
     expect(clashes, clashes.join("; ")).toEqual([]);
+  });
+
+  it("never hands over a routable lesson the gate reports as disconnected", () => {
+    // The lesson hook records the connectivity verdict beside the lesson. A curated lesson
+    // reported as disconnected is a defect in the lesson, not a judgement call. "unchecked"
+    // is allowed: a lesson built around one symbol is a fragment, and the gate declines to
+    // judge a fragment.
+    const reg = createDefaultRegistry();
+    const failing = ROUTABLE_LESSONS.map((name) => [name, checkConductorConnectivity(reg.invokeScene(name, {}))] as const)
+      .filter(([, check]) => check.status === "failed")
+      .map(([name, check]) => `${name}: ${check.stranded.map((s) => `${s.id} ${Math.round(s.gap)}px`).join(", ")}`);
+    expect(failing, failing.join("; ")).toEqual([]);
   });
 
   it("only ever selects lessons that exist in the catalog", () => {

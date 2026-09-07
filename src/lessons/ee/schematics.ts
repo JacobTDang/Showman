@@ -45,7 +45,7 @@ function vertical(
 }
 
 function dot(id: string, p: Point, fill: string): Node {
-  return { id, type: "ellipse", x: p.x, y: p.y, width: 9, height: 9, fill };
+  return { id, type: "ellipse", x: p.x - 4.5, y: p.y - 4.5, width: 9, height: 9, fill };
 }
 
 function caption(id: string, x: number, y: number, text: string, align: "left" | "center" | "right", fill: string, font: string): Node {

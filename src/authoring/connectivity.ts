@@ -45,8 +45,19 @@ import type { PedagogyRequest } from "./semantic.js";
 
 /** px of slack allowed at a joint. Symbol leads meet wires exactly; the reported holes were 50px. */
 const MAX_GAP = 12;
-/** px of tolerance for detecting wires that stop short of components without touching. */
-const MAX_DETACHED_GAP = 60;
+/**
+ * How far past its end a run is taken to be aimed at a body, and how far off its line that
+ * body may sit. A wire that stops short of its component points at it: issue #121's holes
+ * were 50px along the wire. Chart furniture runs beside its shapes, never at them.
+ */
+const REACH = 60;
+const SPREAD = 30;
+/**
+ * px of extent above which an open, non-axis-aligned run is plotted data rather than a
+ * symbol stroke. The widest such stroke in the symbol set, an inductor's coil, spans about
+ * 0.6× the symbol's size; a curve on a chart spans the chart.
+ */
+const PLOT_EXTENT = 150;
 /**
  * px below which a run is a glyph stroke rather than wiring. The longest axis-aligned
  * stroke in the symbol set is the ground symbol's top rung at 28px.
@@ -71,10 +82,11 @@ const MAX_REPORTED = 6;
  * component designators, resistance/capacitance/inductance magnitudes, or the component
  * names themselves.
  *
- * Only what the scene actually shows counts. Node ids were tried too and are worse than
- * useless: "c1" and "d1" are ordinary names for a flowchart's connectors, and a flowchart
- * is boxes joined by orthogonal runs — the one non-electrical scene this check would
- * otherwise misread as wiring.
+ * The scene's own text is the primary trigger. Two more cover a schematic drawn without a
+ * single label: the brief that asked for it, and node ids that spell out a component or
+ * the word circuit. Designators in ids ("c1", "d1") are deliberately NOT read: they are
+ * ordinary names for a flowchart's connectors, and a flowchart is boxes joined by
+ * orthogonal runs — the one non-electrical scene this check would otherwise misread.
  */
 const ELECTRICAL_NOTATION: RegExp[] = [
   // Component designators: R1, C2, L3, D1, Q1, U1.
@@ -201,6 +213,8 @@ interface Drawing {
   words: string[];
   /** Node and group ids — helps detect circuit intent when text labels are omitted. */
   ids: string[];
+  /** Whether any shape node was drawn at all, moving or not. */
+  hasShapes: boolean;
 }
 
 function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
@@ -248,6 +262,11 @@ function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
         break;
       }
       case "arc": {
+        // A body that moves is not something wiring is attached to: a trace dot sits on the
+        // axis origin at frame zero and somewhere else at every other frame. It is still a
+        // shape, so the scene is not line art.
+        out.hasShapes = true;
+        if (stillMoving) break;
         // The renderer centres an arc at (radius, radius) from its origin, so the body it
         // draws lies inside the full circle's box -- taken as a region, like an ellipse.
         const r = num(node["radius"], 50);
@@ -264,6 +283,8 @@ function collect(nodes: unknown, m: Mat, moving: boolean, out: Drawing): void {
       }
       case "rect":
       case "ellipse": {
+        out.hasShapes = true;
+        if (stillMoving) break;
         const w = num(node["width"], 0);
         const h = num(node["height"], 0);
         if (!(w > 0) || !(h > 0)) break;
@@ -363,94 +384,120 @@ function endsOf(segment: Segment): Pt[] {
   return [segment.points[0]!, segment.points[segment.points.length - 1]!];
 }
 
-/** Check if a line segment crosses across a bounding box (extends on both sides of the box). */
-function crossesRegion(s: Segment, quad: Region): boolean {
-  const minX = Math.min(...quad.map((p) => p.x));
-  const maxX = Math.max(...quad.map((p) => p.x));
-  const minY = Math.min(...quad.map((p) => p.y));
-  const maxY = Math.max(...quad.map((p) => p.y));
+/** The axis-aligned box around a run or a region. */
+function bounds(points: Pt[]): { minX: number; maxX: number; minY: number; maxY: number } {
+  return {
+    minX: Math.min(...points.map((p) => p.x)),
+    maxX: Math.max(...points.map((p) => p.x)),
+    minY: Math.min(...points.map((p) => p.y)),
+    maxY: Math.max(...points.map((p) => p.y)),
+  };
+}
 
+/** A region no bigger than a joint's slack is a terminal or junction dot: a mark ON a wire, not a body. */
+function isMarker(quad: Region): boolean {
+  const b = bounds(quad);
+  return b.maxX - b.minX <= MAX_GAP && b.maxY - b.minY <= MAX_GAP;
+}
+
+/** Plotted data: an open run that is not drafting-straight and spans more than any symbol stroke. */
+function isPlottedCurve(s: Segment): boolean {
+  if (s.closed || isAxisAligned(s.points)) return false;
+  const b = bounds(s.points);
+  return Math.max(b.maxX - b.minX, b.maxY - b.minY) >= PLOT_EXTENT;
+}
+
+/**
+ * Whether a run passes through or along a body rather than ending on it: an axis-aligned
+ * segment that enters one side of the body's box and leaves the other, or whose middle
+ * lies on or inside that box. A gridline across a bar chart, or over or along the edge of a
+ * filled area, does; a lead ending on a component does not. Such a run is neither attached
+ * to that body nor aimed at it, whatever else it touches.
+ */
+function passesThrough(s: Segment, body: Pt[]): boolean {
+  const { minX, maxX, minY, maxY } = bounds(body);
   for (let i = 1; i < s.points.length; i++) {
     const a = s.points[i - 1]!;
     const b = s.points[i]!;
-    // Horizontal segment
-    if (Math.abs(a.y - b.y) <= AXIS_EPS) {
-      const y = (a.y + b.y) / 2;
-      if (y >= minY - 1 && y <= maxY + 1) {
-        const segMinX = Math.min(a.x, b.x);
-        const segMaxX = Math.max(a.x, b.x);
-        if (segMinX < minX && segMaxX > maxX) return true;
-      }
-    }
-    // Vertical segment
-    if (Math.abs(a.x - b.x) <= AXIS_EPS) {
-      const x = (a.x + b.x) / 2;
-      if (x >= minX - 1 && x <= maxX + 1) {
-        const segMinY = Math.min(a.y, b.y);
-        const segMaxY = Math.max(a.y, b.y);
-        if (segMinY < minY && segMaxY > maxY) return true;
-      }
-    }
+    if (Math.abs(a.x - b.x) > AXIS_EPS && Math.abs(a.y - b.y) > AXIS_EPS) continue;
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    if (mid.x >= minX && mid.x <= maxX && mid.y >= minY && mid.y <= maxY) return true;
+    if (Math.abs(a.y - b.y) <= AXIS_EPS && a.y >= minY - 1 && a.y <= maxY + 1 && Math.min(a.x, b.x) < minX && Math.max(a.x, b.x) > maxX)
+      return true;
+    if (Math.abs(a.x - b.x) <= AXIS_EPS && a.x >= minX - 1 && a.x <= maxX + 1 && Math.min(a.y, b.y) < minY && Math.max(a.y, b.y) > maxY)
+      return true;
   }
   return false;
 }
 
 /**
- * The runs that are wired into the component network: a run with an endpoint on a
- * component body, then anything joined to those, to a fixed point.
+ * Whether the run, carried on past one of its ends along its own last segment, reaches a
+ * body within REACH px, allowing SPREAD px of misalignment. That is what a wire stopping
+ * short of its component looks like, and what an axis or gridline beside a swatch does not.
+ */
+function stopsShortOf(s: Segment, targets: Pt[][]): boolean {
+  const n = s.points.length;
+  const ends: Array<[Pt, Pt]> = [
+    [s.points[0]!, s.points[1]!],
+    [s.points[n - 1]!, s.points[n - 2]!],
+  ];
+  return ends.some(([end, prev]) => {
+    const dx = end.x - prev.x;
+    const dy = end.y - prev.y;
+    const horizontal = Math.abs(dy) <= AXIS_EPS && Math.abs(dx) > AXIS_EPS;
+    const vertical = Math.abs(dx) <= AXIS_EPS && Math.abs(dy) > AXIS_EPS;
+    if (!horizontal && !vertical) return false;
+    const ahead = horizontal
+      ? { minX: dx > 0 ? end.x : end.x - REACH, maxX: dx > 0 ? end.x + REACH : end.x, minY: end.y - SPREAD, maxY: end.y + SPREAD }
+      : { minX: end.x - SPREAD, maxX: end.x + SPREAD, minY: dy > 0 ? end.y : end.y - REACH, maxY: dy > 0 ? end.y + REACH : end.y };
+    return targets.some((t) => {
+      const b = bounds(t);
+      return b.minX <= ahead.maxX && b.maxX >= ahead.minX && b.minY <= ahead.maxY && b.maxY >= ahead.minY;
+    });
+  });
+}
+
+/**
+ * The runs that are wired into the component network: a run with an end on a component
+ * body or aimed at one, then anything joined to those, to a fixed point. Bodies anchor the
+ * network and never carry it, and plotted data carries nothing: a chart's line touches its
+ * own filled area at both ends, and following it would drag every gridline in.
  *
- * This is what separates a circuit's wiring from a chart's furniture. Axes and gridlines
- * are long straight runs that meet each other and end in mid-air by design; they are
- * crossed by the bars they carry rather than terminating on them, so they never enter the
- * network. A wire, by contrast, exists to run between components.
+ * A run that meets nothing is not judged — a chart's axis, a flowchart's connector — with
+ * one exception. A scene with no component body at all is line art, and its straight runs
+ * are its wiring unless one of them is a plotted curve, in which case it is a chart.
  */
 function attachedRuns(drawing: Drawing): Set<Segment> {
   const bodies = drawing.segments.filter((s) => s.closed);
-  const hasShapes = drawing.regions.length > 0 || bodies.length > 0;
-
-  // Filter out any segments that cross through a shape (e.g. chart gridlines/axes crossing bars)
-  const candidateSegments = drawing.segments.filter((s) => !drawing.regions.some((r) => crossesRegion(s, r)));
-
-  // If there are NO shape nodes in the scene at all, any axis-aligned run is candidate wiring.
-  if (!hasShapes) {
-    return new Set(drawing.segments.filter((s) => s.judgeable && isAxisAligned(s.points) && runLength(s.points) >= MIN_CONDUCTOR_LENGTH));
+  const runs = drawing.segments.filter((s) => !s.closed && !isPlottedCurve(s));
+  if (!drawing.hasShapes && bodies.length === 0) {
+    if (drawing.segments.some(isPlottedCurve)) return new Set();
+    return new Set(runs.filter((s) => s.judgeable && isAxisAligned(s.points) && runLength(s.points) >= MIN_CONDUCTOR_LENGTH));
   }
 
-  const nearBody = (p: Pt, own: Segment, maxGap: number): boolean =>
-    drawing.regions.some((r) => distanceToRegion(p, r) <= maxGap && !crossesRegion(own, r)) ||
-    bodies.some((b) => b !== own && distanceToRun(p, b.points) <= maxGap);
+  const touchesBody = (p: Pt, own: Segment): boolean =>
+    drawing.regions.some((r) => distanceToRegion(p, r) <= MAX_GAP && (isMarker(r) || !passesThrough(own, r))) ||
+    bodies.some((b) => b !== own && distanceToRun(p, b.points) <= MAX_GAP && !passesThrough(own, b.points));
+  // Aimed at a shape node only. A closed run is also the outline of a KaTeX glyph, and an
+  // axis drawn above an equation is not a wire that stopped short of its letters.
+  const aimedAtBody = (s: Segment): boolean =>
+    stopsShortOf(
+      s,
+      drawing.regions.filter((r) => !passesThrough(s, r)),
+    );
 
-  // 1. Normal joint tolerance (MAX_GAP = 12)
-  let attached = new Set(candidateSegments.filter((s) => endsOf(s).some((p) => nearBody(p, s, MAX_GAP))));
-
-  // 2. If no wire met a shape within 12px, check if wires stop short within MAX_DETACHED_GAP (60px)
-  if (attached.size === 0) {
-    attached = new Set(candidateSegments.filter((s) => endsOf(s).some((p) => nearBody(p, s, MAX_DETACHED_GAP))));
-  }
-
-  // 3. Grow attached runs through joints (within MAX_GAP) or stopped-short leads near a body
+  const attached = new Set(runs.filter((s) => endsOf(s).some((p) => touchesBody(p, s)) || aimedAtBody(s)));
   for (let grew = true; grew;) {
     grew = false;
-    for (const s of candidateSegments) {
+    for (const s of runs) {
       if (attached.has(s)) continue;
-      const joins = endsOf(s).some(
-        (p) => [...attached].some((a) => distanceToRun(p, a.points) <= MAX_GAP) || nearBody(p, s, MAX_DETACHED_GAP),
-      );
+      const joins = endsOf(s).some((p) => [...attached].some((a) => distanceToRun(p, a.points) <= MAX_GAP));
       if (joins) {
         attached.add(s);
         grew = true;
       }
     }
   }
-
-  // 4. Wiring that touches no shape node anywhere:
-  if (attached.size === 0) {
-    const wireLike = candidateSegments.filter((s) => s.judgeable && isAxisAligned(s.points) && runLength(s.points) >= MIN_CONDUCTOR_LENGTH);
-    if (wireLike.length >= MIN_CONDUCTORS) {
-      attached = new Set(wireLike);
-    }
-  }
-
   return attached;
 }
 
@@ -458,35 +505,23 @@ function round2(n: number): number {
   return Number(n.toFixed(2));
 }
 
-function extractContextText(ctx: unknown): string {
-  if (typeof ctx === "string") return ctx.toLowerCase();
-  if (ctx && typeof ctx === "object") {
-    const obj = ctx as Record<string, unknown>;
-    if (typeof obj["brief"] === "string") {
-      return (obj["brief"] + " " + (typeof obj["topic"] === "string" ? obj["topic"] : "")).toLowerCase();
-    }
-    if (obj["request"]) return extractContextText(obj["request"]);
-  }
-  return "";
+/** The words of the request that asked for this scene, lowercased; "" when there is none. */
+function requestText(context: PedagogyRequest | string | undefined): string {
+  if (context === undefined) return "";
+  if (typeof context === "string") return context.toLowerCase();
+  return `${context.brief} ${context.topic ?? ""}`.toLowerCase();
 }
 
-export function checkConductorConnectivity(
-  spec: unknown,
-  context?: PedagogyRequest | string | { request?: PedagogyRequest | string; brief?: string; topic?: string },
-): ConnectivityCheck {
+export function checkConductorConnectivity(spec: unknown, context?: PedagogyRequest | string): ConnectivityCheck {
   const unchecked: ConnectivityCheck = { status: "unchecked", passed: false, conductors: 0, stranded: [] };
   if (!isObject(spec)) return unchecked;
 
-  const drawing: Drawing = { segments: [], regions: [], words: [], ids: [] };
+  const drawing: Drawing = { segments: [], regions: [], words: [], ids: [], hasShapes: false };
   collect(spec["nodes"], IDENTITY, false, drawing);
 
-  const corpus = drawing.words.join(" ").toLowerCase();
-  const contextStr = extractContextText(context);
+  const evidence = [drawing.words.join(" ").toLowerCase(), requestText(context)];
   const isElectrical =
-    ELECTRICAL_NOTATION.some((pattern) => pattern.test(corpus)) ||
-    (contextStr.length > 0 && ELECTRICAL_NOTATION.some((pattern) => pattern.test(contextStr))) ||
-    drawing.ids.some((id) => CIRCUIT_ID.test(id));
-
+    evidence.some((text) => ELECTRICAL_NOTATION.some((pattern) => pattern.test(text))) || drawing.ids.some((id) => CIRCUIT_ID.test(id));
   if (!isElectrical) return unchecked;
 
   const attached = attachedRuns(drawing);

@@ -61,6 +61,9 @@ export function buildTransferCharacteristic(o: TransferCharacteristicOptions = {
         stroke: ink,
         strokeWidth: 3,
       },
+      // The signal enters from an open node, marked so the arrow's tail is not read as a
+      // wire that stopped short.
+      { id: "tc-in-dot", type: "ellipse", x: bx - 120 - 4.5, y: by + 55 - 4.5, width: 9, height: 9, fill: ink },
       {
         id: "tc-in-h",
         type: "polyline",

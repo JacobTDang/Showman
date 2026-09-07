@@ -73,6 +73,16 @@ Honest limits of what exists. Each tier's build appends its own.
 - **Text-fit and connectivity passes do not run on lessons.** A lesson is returned
   verbatim from the catalog with its connectivity and accessibility audit attached; the
   freehand repairs are not applied, on the grounds that a lesson is placed deliberately.
+- **An open lead must be marked with a dot.** The connectivity gate reads an unmarked open
+  end as a wire that stopped short, and its verdict is recorded beside every lesson. The
+  block diagram's input arrow in `ee.transferCharacteristic` was reported stranded until it
+  got one; the lone generator in `ee.sinusoids` carries them by the same convention. A test
+  now sweeps every routable lesson and every catalog builder through the gate, so a new
+  open lead fails CI.
+- **The gate judges a scene on its text, its brief, or its node ids.** A schematic drawn
+  without a single label is still judged when the brief asked for a circuit. Chart axes and
+  gridlines are exempt by geometry, not by name: a run that passes through or along a shape
+  is never wired to it, and a run is "aimed at" a shape only along its own axis.
 
 **Tier 0–1 specifics**
 

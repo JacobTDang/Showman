@@ -44,6 +44,10 @@ export function buildSinusoids(o: SinusoidsOptions = {}): SceneSpec {
     tracks: fade(T_REF),
     children: [
       gen.node,
+      // Open terminals, marked as such: this generator drives nothing, and an unmarked
+      // open lead reads as a wire that stopped short.
+      { id: "sn-gen-ta", type: "ellipse", x: gen.a.x - 3, y: gen.a.y - 3, width: 6, height: 6, fill: theme.palette.text },
+      { id: "sn-gen-tb", type: "ellipse", x: gen.b.x - 3, y: gen.b.y - 3, width: 6, height: 6, fill: theme.palette.text },
       {
         id: "sn-gen-lbl",
         type: "text",

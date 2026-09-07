@@ -768,7 +768,9 @@ describe("checkConductorConnectivity — unlabelled schematics and wiring withou
     ]);
     const check = checkConductorConnectivity(spec, { brief: "Explain a voltage divider circuit" });
     expect(check.status).toBe("failed");
-    expect(check.conductors).toBe(4);
+    // The bottom-right stub floats 40px below R1 and 50px left of R2, aimed at neither; it
+    // is line art, and the verdict is carried by the three runs that reach a component.
+    expect(check.conductors).toBeGreaterThanOrEqual(3);
     expect(check.stranded.length).toBeGreaterThan(0);
   });
 
@@ -911,5 +913,97 @@ describe("checkConductorConnectivity — unlabelled schematics and wiring withou
     expect(passCheck.status).toBe("passed");
     expect(passCheck.conductors).toBe(4);
     expect(passCheck.stranded).toEqual([]);
+  });
+});
+
+describe("checkConductorConnectivity — chart furniture beside shapes", () => {
+  const axes = () => [
+    wire("axis-x", [
+      { x: 60, y: 380 },
+      { x: 760, y: 380 },
+    ]),
+    wire("axis-y", [
+      { x: 60, y: 40 },
+      { x: 60, y: 380 },
+    ]),
+    ...[125, 210, 295].map((y, i) =>
+      wire(`grid-${i}`, [
+        { x: 60, y },
+        { x: 760, y },
+      ]),
+    ),
+    wire(
+      "curve",
+      Array.from({ length: 40 }, (_, i) => ({ x: 60 + i * 18, y: 380 - 300 * (1 - Math.exp(-i / 10)) })),
+    ),
+    label("title", 400, 20, "Capacitor voltage, 5 V"),
+  ];
+
+  it("leaves a line chart alone when a legend swatch sits near its gridlines", () => {
+    // A gridline ends 36px from the swatch, which is beside it, not ahead of it. Wiring that
+    // stops short of a component is aimed at that component.
+    const check = checkConductorConnectivity(scene([...axes(), box("swatch-a", 700, 100, 24, 12), box("swatch-b", 700, 118, 24, 12)]));
+    expect(check.stranded).toEqual([]);
+    expect(check.status).not.toBe("failed");
+  });
+
+  it("leaves a plotted curve with gridlines and no shapes at all alone", () => {
+    const check = checkConductorConnectivity(scene(axes()));
+    expect(check.stranded).toEqual([]);
+    expect(check.status).not.toBe("failed");
+  });
+
+  it("still judges a wire that runs through a junction dot", () => {
+    // A dot on a through-wire marks a node; it is not a body the wire passes through.
+    const check = checkConductorConnectivity(
+      scene([
+        box("source", 200, 150, 40, 80),
+        box("r1", 350, 110, 100, 40),
+        wire("wA", [
+          { x: 220, y: 150 },
+          { x: 220, y: 110 },
+          { x: 350, y: 110 },
+        ]),
+        wire("wB", [
+          { x: 450, y: 130 },
+          { x: 550, y: 130 },
+          { x: 550, y: 190 },
+        ]),
+        wire("wC", [
+          { x: 240, y: 190 },
+          { x: 500, y: 190 },
+        ]),
+        dot("j", 400, 190),
+        label("l", 300, 60, "R1 = 1 kΩ"),
+      ]),
+    );
+    expect(check.status).toBe("failed");
+    expect(check.stranded.map((s) => s.id)).toContain("wC");
+  });
+
+  it("never reports a catalog builder's own example as disconnected, whatever the brief says", () => {
+    // Builders wire their schematics by construction, and a chart is not a schematic. The
+    // brief is the strongest trigger the gate has, so it is the one to sweep with.
+    const registry = createDefaultRegistry();
+    const wrap = (node: unknown) => ({
+      specVersion: 1,
+      width: 1280,
+      height: 720,
+      fps: 30,
+      duration: 5,
+      background: "#ffffff",
+      nodes: [node],
+    });
+    const failing: string[] = [];
+    for (const tool of registry.list()) {
+      const spec =
+        tool.level === "scene"
+          ? registry.invokeScene(tool.name, tool.example ?? {})
+          : wrap(registry.invokeNode(tool.name, tool.example ?? {}).node);
+      const check = checkConductorConnectivity(spec, { brief: "Explain this circuit" });
+      if (check.status === "failed")
+        failing.push(`${tool.name}: ${check.stranded.map((s) => `${s.id} ${Math.round(s.gap)}px`).join(", ")}`);
+    }
+    expect(failing, failing.join("\n")).toEqual([]);
   });
 });
